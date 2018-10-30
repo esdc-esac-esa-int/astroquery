@@ -209,7 +209,7 @@ class JwstClass(object):
         """
         return self.__jwsttap.list_async_jobs(verbose)
 
-    def __query_object(self, coordinate, radius=None, width=None, height=None,
+    def __query_region(self, coordinate, radius=None, width=None, height=None,
                        async_job=False, verbose=False):
         """Launches a job
         TAP & TAP+
@@ -267,7 +267,7 @@ class JwstClass(object):
                 job = self.__jwsttap.launch_job(query, verbose=verbose)
         return job.get_results()
 
-    def query_object(self, coordinate, radius=None, width=None, height=None,
+    def query_region(self, coordinate, radius=None, width=None, height=None,
                      verbose=False):
         """Launches a job
         TAP & TAP+
@@ -289,10 +289,10 @@ class JwstClass(object):
         -------
         The job results (astropy.table).
         """
-        return self.__query_object(coordinate, radius, width, height,
+        return self.__query_region(coordinate, radius, width, height,
                                    async_job=False, verbose=verbose)
 
-    def query_object_async(self, coordinate, radius=None, width=None,
+    def query_region_async(self, coordinate, radius=None, width=None,
                            height=None, verbose=False):
         """Launches a job (async)
         TAP & TAP+
@@ -317,7 +317,7 @@ class JwstClass(object):
         -------
         The job results (astropy.table).
         """
-        return self.__query_object(coordinate, radius, width, height,
+        return self.__query_region(coordinate, radius, width, height,
                                    async_job=True, verbose=verbose)
 
     def __cone_search(self, coordinate, radius, async_job=False,
