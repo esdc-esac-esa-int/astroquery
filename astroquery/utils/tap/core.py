@@ -315,7 +315,7 @@ class Tap(object):
         job.set_response_status(response.status, response.reason)
         job.parameters['format'] = output_format
         if isError:
-            job.set_failed(True)
+            job.failed=True
             if dump_to_file:
                 self.__connHandler.dump_to_file(suitableOutputFile, response)
             raise requests.exceptions.HTTPError(response.reason)
@@ -440,7 +440,7 @@ class Tap(object):
         verbose : bool, optional, default 'False'
             flag to display information about the process
         """
-        job.save_results()
+        job.save_results(verbose=verbose)
 
     def __getJobId(self, location):
         pos = location.rfind('/')+1
