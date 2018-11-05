@@ -21,6 +21,7 @@ from astropy import units
 from astropy.units import Quantity
 
 from . import conf
+from builtins import isinstance
 
 __all__ = ['Jwst', 'JwstClass']
 
@@ -30,6 +31,7 @@ class JwstClass(object):
     """
     Proxy class to default TapPlus object (pointing to JWST Archive)
     """
+    JWST_MAIN_TABLE = conf.JWST_MAIN_TABLE
     JWST_OBSERVATION_TABLE = conf.JWST_OBSERVATION_TABLE
     JWST_OBSERVATION_TABLE_RA = conf.JWST_OBSERVATION_TABLE_RA
     JWST_OBSERVATION_TABLE_DEC = conf.JWST_OBSERVATION_TABLE_DEC
@@ -37,7 +39,7 @@ class JwstClass(object):
 
     def __init__(self, tap_plus_handler=None):
         if tap_plus_handler is None:
-            self.__jwsttap = TapPlus(url="http://localhost:8080/server/tap")
+            self.__jwsttap = TapPlus(url="http://jwstdev.n1data.lan:8080/server/tap")
         else:
             self.__jwsttap = tap_plus_handler
 
@@ -210,6 +212,7 @@ class JwstClass(object):
         return self.__jwsttap.list_async_jobs(verbose)
 
     def __query_region(self, coordinate, radius=None, width=None, height=None,
+                       only_public=False, cal_level="Top",
                        async_job=False, verbose=False):
         """Launches a job
         TAP & TAP+
@@ -224,6 +227,12 @@ class JwstClass(object):
             box width
         height : astropy.units, required if no 'radius' is provided
             box height
+        only_public : bool, optional, default 'False'
+            flag to show only metadata corresponding to public observations
+        cal_level : object, optional, default 'Top'
+            get the planes with the given calibration level. Options are:
+            'Top': str, only the planes with the highest calibration level
+            1,2,3: int, the given calibration level 
         async_job : bool, optional, default 'False'
             executes the query (job) in asynchronous/synchronous mode (default
             synchronous)
@@ -237,7 +246,9 @@ class JwstClass(object):
         coord = self.__getCoordInput(coordinate, "coordinate")
         job = None
         if radius is not None:
-            job = self.__cone_search(coord, radius,
+            job = self.__cone_search(coord, radius, 
+                                     only_public=only_public,
+                                     cal_level=cal_level,
                                      async_job=async_job, verbose=verbose)
         else:
             raHours, dec = commons.coord_to_radec(coord)
@@ -246,21 +257,25 @@ class JwstClass(object):
             heightQuantity = self.__getQuantityInput(height, "height")
             widthDeg = widthQuantity.to(units.deg)
             heightDeg = heightQuantity.to(units.deg)
-            query = "SELECT DISTANCE(POINT('ICRS',"\
-                +str(self.JWST_OBSERVATION_TABLE_RA)+","\
-                +str(self.JWST_OBSERVATION_TABLE_DEC)+"), \
-                POINT('ICRS',"+str(ra)+","+str(dec)+")) AS dist, \
-                obs.*, plane.* \
-                FROM "+str(self.JWST_OBSERVATION_TABLE)+" AS obs, "\
-                +str(self.JWST_PLANE_TABLE)+" AS plane \
-                WHERE obs.obsid=plane.obsid \
-                AND CONTAINS(\
-                POINT('ICRS',"\
-                +str(self.JWST_OBSERVATION_TABLE_RA)+","\
-                + str(self.JWST_OBSERVATION_TABLE_DEC)+"),\
-                BOX('ICRS',"+str(ra)+","+str(dec)+", "+str(widthDeg.value)+", "\
-                + str(heightDeg.value)+"))=1 \
-                ORDER BY dist ASC"
+            
+            cal_level_condition = self.__getCalLevelCondition(cal_level) 
+            public_condition = self.__getPublicCondition(only_public)
+            
+            query = "SELECT DISTANCE(POINT('ICRS'," +\
+                str(self.JWST_OBSERVATION_TABLE_RA) + "," +\
+                str(self.JWST_OBSERVATION_TABLE_DEC) +"), \
+                POINT('ICRS'," + str(ra) + "," + str(dec) +")) AS dist, * \
+                FROM jwst.main \
+                WHERE CONTAINS(\
+                POINT('ICRS'," +\
+                str(self.JWST_OBSERVATION_TABLE_RA)+"," +\
+                str(self.JWST_OBSERVATION_TABLE_DEC)+"),\
+                BOX('ICRS'," + str(ra) + "," + str(dec)+", " +\
+                str(widthDeg.value)+", " +\
+                str(heightDeg.value)+"))=1 " +\
+                cal_level_condition +\
+                public_condition +\
+                "ORDER BY dist ASC"
             if async_job:
                 job = self.__jwsttap.launch_job_async(query, verbose=verbose)
             else:
@@ -268,7 +283,7 @@ class JwstClass(object):
         return job.get_results()
 
     def query_region(self, coordinate, radius=None, width=None, height=None,
-                     verbose=False):
+                     only_public=False, cal_level="Top", verbose=False):
         """Launches a job
         TAP & TAP+
 
@@ -282,6 +297,8 @@ class JwstClass(object):
             box width
         height : astropy.units, required if no 'radius' is provided
             box height
+        only_public : bool, optional, default 'False'
+            flag to show only metadata corresponding to public observations
         verbose : bool, optional, default 'False'
             flag to display information about the process
 
@@ -290,10 +307,15 @@ class JwstClass(object):
         The job results (astropy.table).
         """
         return self.__query_region(coordinate, radius, width, height,
+                                   only_public=only_public,
+                                   cal_level=cal_level,
                                    async_job=False, verbose=verbose)
 
-    def query_region_async(self, coordinate, radius=None, width=None,
-                           height=None, verbose=False):
+    def query_region_async(self, coordinate, radius=None, 
+                           width=None, height=None, 
+                           only_public=False,
+                           cal_level="Top",
+                           verbose=False):
         """Launches a job (async)
         TAP & TAP+
 
@@ -307,6 +329,8 @@ class JwstClass(object):
             box width
         height : astropy.units, required if no 'radius' is provided
             box height
+        only_public : bool, optional, default 'False'
+            flag to show only metadata corresponding to public observations
         async_job : bool, optional, default 'False'
             executes the query (job) in asynchronous/synchronous mode (default 
             synchronous)
@@ -318,11 +342,19 @@ class JwstClass(object):
         The job results (astropy.table).
         """
         return self.__query_region(coordinate, radius, width, height,
-                                   async_job=True, verbose=verbose)
+                                   only_public=only_public,
+                                   cal_level=cal_level,
+                                   async_job=True,
+                                   verbose=verbose)
 
-    def __cone_search(self, coordinate, radius, async_job=False,
+    def __cone_search(self, coordinate, radius, 
+                      cal_level="Top", 
+                      only_public=False,
+                      async_job=False,
                       background=False,
-                      output_file=None, output_format="votable", verbose=False,
+                      output_file=None,
+                      output_format="votable",
+                      verbose=False,
                       dump_to_file=False):
         """Cone search sorted by distance
         TAP & TAP+
@@ -333,6 +365,12 @@ class JwstClass(object):
             coordinates center point
         radius : astropy.units, mandatory
             radius
+        cal_level : str, optional, default 'Top'
+            get only the planes with the given calibration level. Options are:
+                Top: the planes with the highest calibration level
+                1,2,3: the given calibration level
+        only_public : bool, optional, default 'False'
+            flag to show only metadata corresponding to public observations
         async_job : bool, optional, default 'False'
             executes the job in asynchronous/synchronous mode (default
             synchronous)
@@ -356,18 +394,25 @@ class JwstClass(object):
         coord = self.__getCoordInput(coordinate, "coordinate")
         raHours, dec = commons.coord_to_radec(coord)
         ra = raHours * 15.0  # Converts to degrees
+        
+        cal_level_condition = self.__getCalLevelCondition(cal_level) 
+        public_condition = self.__getPublicCondition(only_public)
+            
         if radius is not None:
             radiusQuantity = self.__getQuantityInput(radius, "radius")
             radiusDeg = commons.radius_to_unit(radiusQuantity, unit='deg')
-        query = "SELECT DISTANCE(POINT('ICRS',"\
-            +str(self.JWST_OBSERVATION_TABLE_RA)+","\
-            + str(self.JWST_OBSERVATION_TABLE_DEC)+"), \
-            POINT('ICRS',"+str(ra)+","+str(dec)+")) AS dist, * \
-            FROM "+str(self.JWST_OBSERVATION_TABLE)+" WHERE CONTAINS(\
-            POINT('ICRS',"+str(self.JWST_OBSERVATION_TABLE_RA)+","\
-            +str(self.JWST_OBSERVATION_TABLE_DEC)+"),\
-            CIRCLE('ICRS',"+str(ra)+","+str(dec)+", "+str(radiusDeg)+"))=1 \
-            ORDER BY dist ASC"
+        query = "SELECT DISTANCE(POINT('ICRS'," +\
+            str(self.JWST_OBSERVATION_TABLE_RA) + "," +\
+            str(self.JWST_OBSERVATION_TABLE_DEC) + "), \
+            POINT('ICRS'," + str(ra)+"," + str(dec) + ")) AS dist, * \
+            FROM " + str(self.JWST_MAIN_TABLE) + " WHERE CONTAINS(\
+            POINT('ICRS'," + str(self.JWST_OBSERVATION_TABLE_RA) + "," +\
+            str(self.JWST_OBSERVATION_TABLE_DEC)+"),\
+            CIRCLE('ICRS'," + str(ra)+"," + str(dec) + ", " +\
+            str(radiusDeg)+"))=1" +\
+            cal_level_condition +\
+            public_condition +\
+            "ORDER BY dist ASC"
         if async_job:
             return self.__jwsttap.launch_job_async(query=query,
                                                    output_file=output_file,
@@ -382,7 +427,10 @@ class JwstClass(object):
                                              verbose=verbose,
                                              dump_to_file=dump_to_file)
 
-    def cone_search(self, coordinate, radius=None, output_file=None,
+    def cone_search(self, coordinate, radius=None, 
+                    only_public=False,
+                    cal_level="Top",
+                    output_file=None,
                     output_format="votable", verbose=False,
                     dump_to_file=False):
         """Cone search sorted by distance (sync.)
@@ -410,6 +458,8 @@ class JwstClass(object):
         """
         return self.__cone_search(coordinate,
                                   radius=radius,
+                                  only_public=only_public,
+                                  cal_level=cal_level,
                                   async_job=False,
                                   background=False,
                                   output_file=output_file,
@@ -417,7 +467,10 @@ class JwstClass(object):
                                   verbose=verbose,
                                   dump_to_file=dump_to_file)
 
-    def cone_search_async(self, coordinate, radius=None, background=False,
+    def cone_search_async(self, coordinate, radius=None, 
+                          only_public=False,
+                          cal_level="Top",
+                          background=False,
                           output_file=None, output_format="votable",
                           verbose=False, dump_to_file=False):
         """Cone search sorted by distance (async)
@@ -448,6 +501,8 @@ class JwstClass(object):
         """
         return self.__cone_search(coordinate,
                                   radius=radius,
+                                  only_public=only_public,
+                                  cal_level=cal_level,
                                   async_job=True,
                                   background=background,
                                   output_file=output_file,
@@ -467,7 +522,7 @@ class JwstClass(object):
             flag to display information about the process
 
         """
-        return self.__jwsttap.remove_jobs(jobs_list)
+        return self.__jwsttap.remove_jobs(jobs_list, verbose=verbose)
 
     def save_results(self, job, verbose=False):
         """Saves job results
@@ -527,12 +582,7 @@ class JwstClass(object):
             flag to display information about the process
         """
         return self.__jwsttap.logout(verbose)
-
-    def __checkQuantityInput(self, value, msg):
-        if not (isinstance(value, str) or isinstance(value, units.Quantity)):
-            raise ValueError(
-                str(msg) + " must be either a string or astropy.coordinates")
-
+    
     def __getQuantityInput(self, value, msg):
         if value is None:
             raise ValueError("Missing required argument: '"+str(msg)+"'")
@@ -545,11 +595,6 @@ class JwstClass(object):
         else:
             return value
 
-    def __checkCoordInput(self, value, msg):
-        if not (isinstance(value, str) or isinstance(value, commons.CoordClasses)):
-            raise ValueError(
-                str(msg) + " must be either a string or astropy.coordinates")
-
     def __getCoordInput(self, value, msg):
         if not (isinstance(value, str) or isinstance(value, commons.CoordClasses)):
             raise ValueError(
@@ -559,6 +604,27 @@ class JwstClass(object):
             return c
         else:
             return value
+        
+    def __getCalLevelCondition(self, cal_level):
+        cal_level_condition = ""
+        if(cal_level is not None):
+            if(isinstance(cal_level, str) and cal_level is 'Top'):
+                cal_level_condition = " AND max_cal_level=calibrationlevel "
+            elif(isinstance(cal_level, int)):
+                cal_level_condition = " AND max_cal_level="+\
+                                        str(cal_level)+" "
+            else:
+                raise ValueError("cal_level must be either 'Top' or \
+                                an integer. ")
+        return cal_level_condition
+    
+    def __getPublicCondition(self, only_public):
+        public_condition = ""
+        if(not isinstance(only_public, bool)):
+            raise ValueError("only_public must be boolean")
+        elif(only_public is True):
+            public_condition = " AND public='true' "
+        return public_condition
 
 
 Jwst = JwstClass()
