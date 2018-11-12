@@ -18,8 +18,9 @@ import unittest
 import os
 import pytest
 
-from astroquery.jwst.core import JwstClass
+from astroquery.jwst import JwstClass
 from astroquery.jwst.tests.DummyTapHandler import DummyTapHandler
+from astroquery.jwst.tests.DummyDataHandler import DummyDataHandler
 from astroquery.utils.tap.conn.tests.DummyConnHandler import DummyConnHandler
 from astroquery.utils.tap.conn.tests.DummyResponse import DummyResponse
 import astropy.units as u
@@ -478,7 +479,25 @@ class TestTap(unittest.TestCase):
                                     'table1_oid',
                                     None,
                                     np.int32)
-
+    def test_get_product(self):
+        dummyTapHandler = DummyTapHandler()
+        dummyDataHandler = DummyDataHandler()
+        jwst = JwstClass(dummyTapHandler, dummyDataHandler)
+        # default parameters
+        with pytest.raises(ValueError) as err:
+            jwst.get_product();
+        assert "Missing required argument: 'artifact_id'" in err.value.args[0]
+        
+        # test with parameters
+        dummyDataHandler.reset()
+        parameters = {}
+        parameters['url'] = dummyDataHandler.base_url +\
+                    "RETRIEVAL_TYPE=PRODUCT" +\
+                    "&DATA_RETRIEVAL_ORIGIN=ASTROQUERY" +\
+                    "&ARTIFACTID=my_artifact_id"
+        jwst.get_product('my_artifact_id');
+        dummyDataHandler.check_call('download_file', parameters)
+        
     def __check_results_column(self, results, columnName, description, unit,
                                dataType):
         c = results[columnName]
