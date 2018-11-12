@@ -15,47 +15,19 @@ Created on 02 nov. 2018
 
 """
 
-from astropy.utils.data import download_file
+from astropy.utils import data
 
-__all__ = ['JwstData', 'JwstDataClass']
+__all__ = ['JwstData', 'JwstDataHandler']
 
-
-class JwstDataClass(object):
-
-    """
-    JWST Data manager object
-    """
-
-    def __init__(self, url=None):
-        if url is None:
-            self.__ddurl = "http://jwstdev.n1data.lan:8080/server/data?"
+class JwstDataHandler(object):
+    def __init__(self, base_url=None):
+        if base_url is None:
+            self.base_url = "http://jwstdev.n1data.lan:8080/server/data?"
         else:
-            self.__ddurl = url
-
-    def get_product(self, artifact_id=None):
-        """Get a JWST product given its Artifact ID.
-
-        Parameters
-        ----------
-        artifact_id : str, mandatory
-            Artifact ID of the product.
-
-        Returns
-        -------
-        local_path : str
-            Returns the local path that the file was download to.
-        """
-        
-        if artifact_id is None:
-            raise ValueError("Missing required argument: 'artifact_id'")
-        
-        url=self.__ddurl+"RETRIEVAL_TYPE=PRODUCT&DATA_RETRIEVAL_ORIGIN=ASTROQUERY" +\
-                    "&ARTIFACTID=" + artifact_id
-        
-        try:
-            file = download_file(url, cache=True )
-        except:
-            raise ValueError('Product ' + artifact_id + ' not available')
-        return file
-
-JwstData = JwstDataClass()
+            self.base_url = base_url
+            
+    def download_file(self, url):
+        return data.download_file(url, cache=True )
+    
+    def clear_download_cache(self):
+        data.clear_download_cache()

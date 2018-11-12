@@ -40,6 +40,6 @@ class Conf(_config.ConfigNamespace):
 conf = Conf()
 
 from .core import Jwst, JwstClass
-from .data_access import JwstData, JwstDataClass
+from .data_access import JwstDataHandler
 
-__all__ = ['Jwst', 'JwstClass', 'JwstData', 'JwstDataClass', 'Conf', 'conf']
+__all__ = ['Jwst', 'JwstClass', 'JwstDataHandler', 'Conf', 'conf']

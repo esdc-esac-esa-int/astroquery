@@ -14,18 +14,18 @@ Created on 23 oct. 2018
 
 
 """
-
 from astroquery.utils.tap import TapPlus
 from astroquery.utils import commons
 from astropy import units
 from astropy.units import Quantity
 
 from . import conf
+from .data_access import JwstDataHandler
+
 from builtins import isinstance
 
 __all__ = ['Jwst', 'JwstClass']
-
-
+    
 class JwstClass(object):
 
     """
@@ -37,11 +37,16 @@ class JwstClass(object):
     JWST_OBSERVATION_TABLE_DEC = conf.JWST_OBSERVATION_TABLE_DEC
     JWST_PLANE_TABLE = conf.JWST_PLANE_TABLE
 
-    def __init__(self, tap_plus_handler=None):
+    def __init__(self, tap_plus_handler=None, data_handler=None):
         if tap_plus_handler is None:
             self.__jwsttap = TapPlus(url="http://jwstdev.n1data.lan:8080/server/tap")
         else:
             self.__jwsttap = tap_plus_handler
+            
+        if data_handler is None:
+            self.__jwstdata = JwstDataHandler(base_url="http://jwstdev.n1data.lan:8080/server/data?");
+        else:
+            self.__jwstdata = data_handler;
 
     def load_tables(self, only_names=False, include_shared_tables=False,
                     verbose=False):
@@ -582,6 +587,32 @@ class JwstClass(object):
             flag to display information about the process
         """
         return self.__jwsttap.logout(verbose)
+    
+    def get_product(self, artifact_id=None):
+        """Get a JWST product given its Artifact ID.
+
+        Parameters
+        ----------
+        artifact_id : str, mandatory
+            Artifact ID of the product.
+
+        Returns
+        -------
+        local_path : str
+            Returns the local path that the file was download to.
+        """
+        
+        if artifact_id is None:
+            raise ValueError("Missing required argument: 'artifact_id'")
+        
+        url=self.__jwstdata.base_url+"RETRIEVAL_TYPE=PRODUCT&DATA_RETRIEVAL_ORIGIN=ASTROQUERY" +\
+                    "&ARTIFACTID=" + artifact_id
+        
+        try:
+            file = self.__jwstdata.download_file(url)
+        except:
+            raise ValueError('Product ' + artifact_id + ' not available')
+        return file
     
     def __getQuantityInput(self, value, msg):
         if value is None:
