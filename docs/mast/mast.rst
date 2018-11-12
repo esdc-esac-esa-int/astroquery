@@ -503,6 +503,79 @@ Individual or ranges of spectra can be downloaded using the `~astroquery.mast.Ca
                 ./mastDownload/HSC/HAG_J072704.73+691808.0_J8HPAOZMQ_V01.SPEC1D.fits ... None
                 
 
+TESSCut
+=======
+
+TESSCut is MAST's tool to provide full-frame image (FFI) cutouts from the Transiting
+Exoplanet Survey Satellite (TESS). The cutouts are returned in the form of target pixel
+files that follow the same format as TESS pipeline target pixel files. This tool can
+be accessed in Astroquery by using the Tesscut class.
+
+Cutouts
+-------
+
+The `~astroquery.mast.TesscutClass.get_cutouts` function takes a coordinate and
+cutout size (in pixels or an angular quantity) and returns the cutout target pixel
+file(s) as a list of `~astropy.io.fits.HDUList` objects.
+
+If a given coordinate appears in more than one TESS sector a target pixel file will be
+produced for each sector.  If the cutout area overlaps more than one camera or ccd
+a target pixel file will be produced for each one.
+
+.. code-block:: python
+
+                >>> from astroquery.mast import Tesscut
+                >>> from astropy.coordinates import SkyCoord
+                >>> cutout_coord = SkyCoord(107.18696, -70.50919, unit="deg")
+                >>> hdulist = Tesscut.get_cutouts(cutout_coord, 5)
+                >>> hdulist[0].info()
+                Filename: tess-s0001-4-3_107.18696_-70.50919_5x5_astrocut.fits
+                No.    Name      Ver    Type      Cards   Dimensions   Format
+                0  PRIMARY       1 PrimaryHDU      45   ()      
+                1  PIXELS        1 BinTableHDU    225   1282R x 12C   [D, E, J, 25J, 25E, 25E, 25E, 25E, J, E, E, 38A]   
+                2  APERTURE      1 ImageHDU       134   (5, 5)   float64
+
+
+The `~astroquery.mast.TesscutClass.download_cutouts` function takes a coordinate
+and cutout size (in pixels or an angular quantity) and downloads the cutout target
+pixel file(s).
+
+If a given coordinate appears in more than one TESS sector a target pixel file will be
+produced for each sector.  If the cutout area overlaps more than one camera or ccd
+a target pixel file will be produced for each one.
+
+.. code-block:: python
+
+                >>> from astroquery.mast import Tesscut
+                >>> from astropy.coordinates import SkyCoord
+                >>> import astropy.units as u
+                >>> 
+                >>> cutout_coord = SkyCoord(107.18696, -70.50919, unit="deg")
+                >>> manifest = Tesscut.download_cutouts(cutout_coord, [5, 7]*u.arcmin)
+                Downloading URL https://mast.stsci.edu/tesscut/api/v0.1/astrocut?ra=107.18696&dec=-70.50919&y=0.08333333333333333&x=0.11666666666666667&units=d&sector=1 to ./tesscut_20181102104719.zip ... [Done]
+                Inflating...
+
+                >>> print(manifest)
+                                      local_file                      
+                ------------------------------------------------------
+                ./tess-s0001-4-3_107.18696_-70.50919_14x21_astrocut.fits
+
+Sector information
+------------------
+
+To access sector information at a particular location there is  `~astroquery.mast.TesscutClass.get_sectors`.
+
+.. code-block:: python
+
+                >>> from astroquery.mast import Tesscut
+                >>> from astropy.coordinates import SkyCoord
+                >>> coord = SkyCoord(324.24368, -27.01029,unit="deg")
+                >>> sector_table = Tesscut.get_sectors(coord)
+                >>> print(sector_table)
+                sectorName   sector camera ccd
+                -------------- ------ ------ ---
+                tess-s0001-1-3      1      1   3
+           
 
 Accessing Proprietary Data
 ==========================
@@ -510,7 +583,65 @@ Accessing Proprietary Data
 To access data that is not publicly available users may log into their
 `MyST Account <https://archive.stsci.edu/registration/index.html>`_.
 This can be done by using the `~astroquery.mast.MastClass.login` function,
-or by initializing a class instance with a username/password.
+or by initializing a class instance with credentials.
+
+MAST is in the process of upgrading our Auth infrastructure to a token based system.
+This will be deployed early November 2018, at which point the credentials will
+switch from accepting a username/password and instead accept an auth token.
+
+
+Accessing Proprietary Data (Token Method)
+-----------------------------------------
+
+This will be enabled in early November 2018.
+
+If a token is not supplied, the user will be prompted to enter one.
+
+To view tokens accessible through your account, visit https://auth.mast.stsci.edu
+
+.. code-block:: python
+
+                >>> from astroquery.mast import Observations
+                >>> Observations.login(token="12348r9w0sa2392ff94as841")
+
+                INFO: MAST API token accepted, welcome User Name [astroquery.mast.core]
+
+                >>> sessionInfo = Observations.session_info()
+
+                eppn: user_name@stsci.edu
+                ezid: uname
+                ...
+              
+.. code-block:: python
+
+                >>> from astroquery.mast import Observations
+                >>> mySession = Observations(token="12348r9w0sa2392ff94as841")
+
+                INFO: MAST API token accepted, welcome User Name [astroquery.mast.core]
+
+                >>> sessionInfo = Observations.session_info()
+
+                eppn: user_name@stsci.edu
+                ezid: uname
+                ...
+
+\* For security tokens should not be typed into a terminal or Jupyter notebook
+but instead input using a more secure method such as `~getpass.getpass`.
+
+
+MAST tokens expire after 10 days of inactivity, at which point the user must generate a new token.  If
+the key is used within that time, the token's expiration pushed back to 10 days.  A token's max
+age is 60 days, afterward the user must generate a token.
+The ``store_token`` argument can be used to store the token securely in the user's keyring.
+This token can be overwritten using the ``reenter_token`` argument.
+To logout before a session expires, the `~astroquery.mast.MastClass.logout` method may be used.
+
+
+Accessing Proprietary Data (Password Method)
+--------------------------------------------
+
+This will be disabled in early November 2018.
+
 If a password is not supplied, the user will be prompted to enter one.
 
 .. code-block:: python

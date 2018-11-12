@@ -1,6 +1,9 @@
 0.3.9 (unreleased)
 ------------------
 
+- General: re-enable sandboxing / preventing internet access during non-remote
+  tests, which has been unintentionally disabled for a potentially long time.
+  [#1274]
 - WFAU: Added QSL constraints parameter [#1259]
 - ATOMIC: fix several bugs for using Quantited for the range parameters. [#1187]
 - ESASKY: get_maps() accepts dict or list of (name, Table) pairs as input
@@ -9,9 +12,12 @@
   [#1198]
 - ESO: Add option to retrieve calibrations associated to data. [#1184]
 - HITRAN: use class-based API [#824]
-- JPL Horizons: Fix for missing total absolute magnitude or phase coefficient for comets [#1151]
+- JPL Horizons: Fix for missing total absolute magnitude or phase coefficient
+  for comets [#1151]
 - MAST: Enable converting list of products into S3 uris [#1126]
-- New tool: MPC module can now request comet and asteroid ephemerides from the Minor Planet Ephemeris Service, and return a table of observatory codes and coordinates. [#1177]
+- New tool: MPC module can now request comet and asteroid ephemerides from the
+  Minor Planet Ephemeris Service, and return a table of observatory codes and
+  coordinates. [#1177]
 - NASA_ADS: Use new API [#1162]
 - VO_CONESEARCH: Service validator now uses new STScI VAO TAP registry. [#1114]
 - Nasa Exoplanet Arhive: Add option to return all columns. [#1183]
@@ -32,6 +38,10 @@
 - utils: fix bug in ``parse_coordinates``, now strings that can be
   interpreted as coordinates are not sent through Sesame. When unit is not
   provided, degrees is now explicitely assumed. [#1252]
+- MAST: Adding Tesscut interface for accessing TESS cutouts. [#1264]
+- MAST: Add functionality for switching to auth.mast when it goes live [#1256]
+- MAST: Support downloading data from multiple missions from the cloud [#1275]
+- JPLHorizons: Fix queries for major solar system bodies when
 
 
 0.3.8 (2018-04-27)

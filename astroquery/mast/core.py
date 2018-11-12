@@ -17,7 +17,7 @@ import os
 import re
 import keyring
 import threading
-import datetime
+import requests
 
 import numpy as np
 
@@ -27,6 +27,7 @@ from base64 import b64encode
 
 import astropy.units as u
 import astropy.coordinates as coord
+from astropy.utils import deprecated
 
 from astropy.table import Table, Row, vstack, MaskedColumn
 from astropy.extern.six.moves.urllib.parse import quote as urlencode
@@ -42,6 +43,8 @@ from ..exceptions import (TimeoutError, InvalidQueryError, RemoteServiceError,
                           LoginError, ResolverError, MaxResultsWarning,
                           NoResultsWarning, InputWarning, AuthenticationWarning)
 from . import conf
+from . import fpl
+
 
 __all__ = ['Observations', 'ObservationsClass',
            'Mast', 'MastClass']
@@ -145,13 +148,7 @@ class MastClass(QueryWithLogin):
         super(MastClass, self).__init__()
 
         self._MAST_REQUEST_URL = conf.server + "/api/v0/invoke"
-        self._MAST_DOWNLOAD_URL = conf.server + "/api/v0/download/file"
         self._COLUMNS_CONFIG_URL = conf.server + "/portal/Mashup/Mashup.asmx/columnsconfig"
-
-        # shibbolith urls
-        self._SP_TARGET = conf.server + "/api/v0/Mashup/Login/login.html"
-        self._IDP_ENDPOINT = conf.ssoserver + "/idp/profile/SAML2/SOAP/ECP"
-        self._SESSION_INFO_URL = conf.server + "/Shibboleth.sso/Session"
 
         self.TIMEOUT = conf.timeout
         self.PAGESIZE = conf.pagesize
@@ -159,10 +156,85 @@ class MastClass(QueryWithLogin):
         self._column_configs = dict()
         self._current_service = None
 
+        try:
+            self._auth_mode = self._get_auth_mode()
+        except (requests.exceptions.ConnectionError, IOError):
+            # this is fine, we're in test mode
+            self._auth_mode = 'SHIB-ECP'
+
+        if "SHIB-ECP" == self._auth_mode:
+            log.debug("Using Legacy Shibboleth login")
+            self._SESSION_INFO_URL = conf.server + "/Shibboleth.sso/Session"
+            self._SP_TARGET = conf.server + "/api/v0/Mashup/Login/login.html"
+            self._IDP_ENDPOINT = conf.ssoserver + "/idp/profile/SAML2/SOAP/ECP"
+            self._MAST_DOWNLOAD_URL = conf.server + "/api/v0/Download/file"
+        elif "MAST-AUTH" == self._auth_mode:
+            log.debug("Using Auth.MAST login")
+            self._SESSION_INFO_URL = conf.server + "/whoami"
+            self._MAST_DOWNLOAD_URL = conf.server + "/api/v0.1/Download/file"
+            self._MAST_BUNDLE_URL = conf.server + "/api/v0.1/Download/bundle"
+        else:
+            raise Exception("Unknown MAST Auth mode %s" % self._auth_mode)
+
         if username or session_token:
             self.login(username, password, session_token)
 
-    def _attach_cookie(self, session_token):  # pragma: no cover
+    def _get_auth_mode(self):
+        _auth_mode = "SHIB-ECP"
+
+        # Detect auth mode from auth_type endpoint
+        resp = self._session.get(conf.server + '/auth_type')
+        if resp.status_code == 200:
+            _auth_mode = resp.text.strip()
+        else:
+            log.warning("Unknown MAST auth mode, defaulting to Legacy Shibboleth login")
+        return _auth_mode
+
+    def _login(self, *args, **kwargs):
+        if "SHIB-ECP" == self._auth_mode:
+            return self._shib_legacy_login(*args, **kwargs)
+        elif "MAST-AUTH" == self._auth_mode:
+            return self._authorize(*args, **kwargs)
+        else:
+            raise Exception("Unknown MAST Auth mode %s" % self._auth_mode)
+
+    def get_token(self, *args, **kwargs):
+        """
+        Returns MAST token cookie.
+
+        Returns
+        -------
+        response : `~http.cookiejar.Cookie`
+        """
+        if "SHIB-ECP" == self._auth_mode:
+            return self._shib_get_token(*args, **kwargs)
+        elif "MAST-AUTH" == self._auth_mode:
+            return self._get_token(*args, **kwargs)
+        else:
+            raise Exception("Unknown MAST Auth mode %s" % self._auth_mode)
+
+    def session_info(self, *args, **kwargs):
+        """
+        Displays information about current MAST user, and returns user info dictionary.
+
+        Parameters
+        ----------
+        silent : bool, optional
+            Default False.
+            Suppresses output to stdout.
+
+        Returns
+        -------
+        response : dict
+        """
+        if "SHIB-ECP" == self._auth_mode:
+            return self._shib_session_info(*args, **kwargs)
+        elif "MAST-AUTH" == self._auth_mode:
+            return self._session_info(*args, **kwargs)
+        else:
+            raise Exception("Unknown MAST Auth mode %s" % self._auth_mode)
+
+    def _shib_attach_cookie(self, session_token):  # pragma: no cover
         """
         Attaches a valid shibboleth session cookie to the current session.
 
@@ -481,8 +553,53 @@ class MastClass(QueryWithLogin):
             warnings.warn("Query returned no results.", NoResultsWarning)
         return allResults
 
-    def _login(self, username=None, password=None, session_token=None,
-               store_password=False, reenter_password=False):  # pragma: no cover
+    def _authorize(self, token=None, store_token=False, reenter_token=False):  # pragma: no cover
+        """
+        Log into the MAST portal.
+
+        Parameters
+        ----------
+        token : string, optional
+            Default is None.
+            The token to authenticate the user.
+            This can be generated at
+                https://auth.mast.stsci.edu/token?suggested_name=Astroquery&suggested_scope=mast:exclusive_access.
+            If not supplied, it will be prompted for if not in the keyring or set via $MAST_API_TOKEN
+        store_token : bool, optional
+            Default False.
+            If true, username and password will be stored securely in your keyring.
+        """
+
+        if token is None and "MAST_API_TOKEN" in os.environ:
+            token = os.environ["MAST_API_TOKEN"]
+
+        if token is None:
+            token = keyring.get_password("astroquery:mast.stsci.edu.token", "masttoken")
+
+        if token is None or reenter_token:
+            auth_server = conf.server.replace("mast", "auth.mast")
+            auth_link = auth_server + "/token?suggested_name=Astroquery&suggested_scope=mast:exclusive_access"
+            info_msg = "If you do not have an API token already, visit the following link to create one: "
+            log.info(info_msg + auth_link)
+            token = getpass("Enter MAST API Token: ")
+
+        # store password if desired
+        if store_token:
+            keyring.set_password("astroquery:mast.stsci.edu.token", "masttoken", token)
+
+        self._session.headers["Accept"] = "application/json"
+        self._session.cookies["mast_token"] = token
+        info = self.session_info(silent=True)
+
+        if not info["anon"]:
+            log.info("MAST API token accepted, welcome %s" % info["attrib"].get("display_name"))
+        else:
+            log.warn("MAST API token invalid!")
+
+        return not info["anon"]
+
+    def _shib_legacy_login(self, username=None, password=None, session_token=None,
+                           store_password=False, reenter_password=False):  # pragma: no cover
         """
         Log into the MAST portal.
 
@@ -522,7 +639,7 @@ class MastClass(QueryWithLogin):
                           InputWarning)
 
         if session_token:
-            return self._attach_cookie(session_token)
+            return self._shib_attach_cookie(session_token)
         else:
             # get username if not supplied
             if not username:
@@ -549,7 +666,57 @@ class MastClass(QueryWithLogin):
         self._session.cookies.clear_session_cookies()
         self._authenticated = False
 
-    def get_token(self):  # pragma: no cover
+    def _get_token(self):  # pragma: no cover
+        """
+        Returns MAST token cookie.
+
+        Returns
+        -------
+        response : `~http.cookiejar.Cookie`
+        """
+
+        tokenCookie = None
+        for cookie in self._session.cookies:
+            if "mast_token" in cookie.name:
+                tokenCookie = cookie
+                break
+
+        if not tokenCookie:
+            warnings.warn("No auth token found.", AuthenticationWarning)
+
+        return tokenCookie
+
+    def _session_info(self, silent=False):  # pragma: no cover
+        """
+        Displays information about current MAST user, and returns user info dictionary.
+
+        Parameters
+        ----------
+        silent : bool, optional
+            Default False.
+            Suppresses output to stdout.
+
+        Returns
+        -------
+        response : dict
+        """
+
+        # get user information
+        response = self._session.request("GET", self._SESSION_INFO_URL)
+
+        infoDict = json.loads(response.text)
+
+        if not silent:
+            for key, value in infoDict.items():
+                if isinstance(value, dict):
+                    for subkey, subval in value.items():
+                        print("%s.%s: %s" % (key, subkey, subval))
+                else:
+                    print("%s: %s" % (key, value))
+
+        return infoDict
+
+    def _shib_get_token(self):  # pragma: no cover
         """
         Returns MAST session cookie.
 
@@ -569,7 +736,7 @@ class MastClass(QueryWithLogin):
 
         return shibCookie
 
-    def session_info(self, silent=False):
+    def _shib_session_info(self, silent=False):  # pragma: no cover
         """
         Displays information about current MAST session, and returns session info dictionary.
 
@@ -814,7 +981,7 @@ class ObservationsClass(MastClass):
 
         self._boto3 = None
         self._botocore = None
-        self._hst_bucket = "stpubdata"
+        self._pubdata_bucket = "stpubdata"
 
     def list_missions(self):
         """
@@ -1252,11 +1419,45 @@ class ObservationsClass(MastClass):
         response : `astropy.table.Table`
         """
 
+        urlList = [("uri", url) for url in products['dataURI']]
+        downloadFile = "mastDownload_" + time.strftime("%Y%m%d%H%M%S")
+        localPath = os.path.join(out_dir.rstrip('/'), downloadFile + ".sh")
+
+        response = self._download_file(self._MAST_BUNDLE_URL + ".sh", localPath, data=urlList, method="POST")
+
+        status = "COMPLETE"
+        msg = None
+
+        if not os.path.isfile(localPath):
+            status = "ERROR"
+            msg = "Curl could not be downloaded"
+
+        manifest = Table({'Local Path': [localPath],
+                          'Status': [status],
+                          'Message': [msg]})
+        return manifest
+
+    def _shib_download_curl_script(self, products, out_dir):
+        """
+        Takes an `astropy.table.Table` of data products and downloads a curl script to pull the datafiles.
+
+        Parameters
+        ----------
+        products : `astropy.table.Table`
+            Table containing products to be included in the curl script.
+        out_dir : str
+            Directory in which the curl script will be saved.
+
+        Returns
+        -------
+        response : `astropy.table.Table`
+        """
+
         urlList = products['dataURI']
+        downloadFile = "mastDownload_" + time.strftime("%Y%m%d%H%M%S")
         descriptionList = products['description']
         productTypeList = products['dataproduct_type']
 
-        downloadFile = "mastDownload_" + time.strftime("%Y%m%d%H%M%S")
         pathList = [downloadFile+"/"+x['obs_collection']+'/'+x['obs_id']+'/'+x['productFilename'] for x in products]
 
         service = "Mast.Bundle.Request"
@@ -1295,85 +1496,73 @@ class ObservationsClass(MastClass):
                           "URL": [url]})
         return manifest
 
+    @deprecated(since="v0.3.9", alternative="enable_cloud_dataset")
     def enable_s3_hst_dataset(self):
+        return self.enable_cloud_dataset()
+
+    def enable_cloud_dataset(self, provider="AWS", profile=None):
         """
-        Attempts to enable downloading HST public files from S3 instead of MAST.
+        Attempts to enable downloading public files from S3 instead of MAST.
         Requires the boto3 library to function.
         """
         import boto3
         import botocore
-        self._boto3 = boto3
+        if profile is not None:
+            self._boto3 = boto3.Session(profile_name=profile)
+        else:
+            self._boto3 = boto3
         self._botocore = botocore
 
-        log.info("Using the S3 HST public dataset")
+        log.info("Using the S3 STScI public dataset")
         log.warning("Your AWS account will be charged for access to the S3 bucket")
         log.info("See Request Pricing in https://aws.amazon.com/s3/pricing/ for details")
         log.info("If you have not configured boto3, follow the instructions here: "
                  "https://boto3.readthedocs.io/en/latest/guide/configuration.html")
 
+    @deprecated(since="v0.3.9", alternative="disable_cloud_dataset")
     def disable_s3_hst_dataset(self):
+        return self.disable_cloud_dataset()
+
+    def disable_cloud_dataset(self):
         """
-        Disables downloading HST public files from S3 instead of MAST
+        Disables downloading public files from S3 instead of MAST
         """
         self._boto3 = None
         self._botocore = None
 
+    @deprecated(since="v0.3.9", alternative="get_cloud_uris")
     def get_hst_s3_uris(self, dataProducts, includeBucket=True, fullUrl=False):
+        return self.get_cloud_uris(self, dataproducts, includeBucket, fullUrl)
+
+    def get_cloud_uris(self, dataProducts, includeBucket=True, fullUrl=False):
         """ Takes an `astropy.table.Table` of data products and turns them into s3 uris. """
 
-        return [self.get_hst_s3_uri(dataProduct, includeBucket, fullUrl) for dataProduct in dataProducts]
+        return [self.get_cloud_uri(dataProduct, includeBucket, fullUrl) for dataProduct in dataProducts]
 
+    @deprecated(since="v0.3.9", alternative="get_cloud_uri")
     def get_hst_s3_uri(self, dataProduct, includeBucket=True, fullUrl=False):
+        return self.get_cloud_uri(self, dataProduct, includeBucket, fullUrl)
+
+    def get_cloud_uri(self, dataProduct, includeBucket=True, fullUrl=False):
         """ Turns a dataProduct into a S3 URI """
 
         if self._boto3 is None:
-            raise AtrributeError("Must enable s3 hst dataset before attempting to query the s3 information")
+            raise AtrributeError("Must enable s3 dataset before attempting to query the s3 information")
 
         # This is a cheap operation and does not perform any actual work yet
         s3_client = self._boto3.client('s3')
 
-        dataUri = dataProduct['dataURI']
-        filename = dataUri.split("/")[-1]
-        obs_id = dataProduct['obs_id']
-
-        obs_id = obs_id.lower()
-
-        # This next part is a bit funky.  Let me explain why:
-        # We have 2 different possible URI schemes for HST:
-        #   mast:HST/product/obs_id_filename.type (old style)
-        #   mast:HST/product/obs_id/obs_id_filename.type (new style)
-        # The first scheme was developed thinking that the obs_id in the filename
-        # would *always* match the actual obs_id folder the file was placed in.
-        # Unfortunately this assumption was false.
-        # We have been trying to switch to the new uri scheme as it specifies the
-        # obs_id used in the folder path correctly.
-        # The cherry on top is that the obs_id in the new style URI is not always correct either!
-        # When we are looking up files we have some code which iterates through all of
-        # the possible permutations of the obs_id's last char which can be *ANYTHING*
-        #
-        # So in conclusion we can't trust the last char obs_id from the file or from the database
-        # So with that in mind, hold your nose when reading the following:
-
-        paths = []
-
-        sane_path = os.path.join("hst", "public", obs_id[:4], obs_id, filename)
-        paths += [sane_path]
-
-        # Unfortunately our file placement logic is anything but sane
-        # We put files in folders that don't make sense
-        for ch in (string.digits + string.ascii_lowercase):
-            # The last char of the obs_folder (observation id) can be any lowercase or numeric char
-            insane_obs = obs_id[:-1] + ch
-            insane_path = os.path.join("hst", "public", insane_obs[:4], insane_obs, filename)
-            paths += [insane_path]
+        paths = fpl.paths(dataProduct)
+        if paths is None:
+            raise Exception("Unsupported mission")
 
         for path in paths:
             try:
-                s3_client.head_object(Bucket=self._hst_bucket, Key=path, RequestPayer='requester')
+                s3_client.head_object(Bucket=self._pubdata_bucket, Key=path, RequestPayer='requester')
                 if includeBucket:
-                    path = "s3://%s/%s" % (self._hst_bucket, path)
+                    path = "s3://%s/%s" % (self._pubdata_bucket, path)
                 elif fullUrl:
-                    path = "http://s3.amazonaws.com/%s/%s" % (self._hst_bucket, path)
+                    path = "http://s3.amazonaws.com/%s/%s" % (self._pubdata_bucket, path)
                 return path
             except self._botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] != "404":
@@ -1381,18 +1570,18 @@ class ObservationsClass(MastClass):
 
         raise Exception("Unable to locate file!")
 
-    def _download_from_s3(self, dataProduct, localPath, cache=True):
+    def _download_from_cloud(self, dataProduct, localPath, cache=True):
         # The following is a mishmash of BaseQuery._download_file and s3 access through boto
 
-        self._hst_bucket = 'stpubdata'
+        self._pubdata_bucket = 'stpubdata'
 
         # This is a cheap operation and does not perform any actual work yet
         s3 = self._boto3.resource('s3')
         s3_client = self._boto3.client('s3')
-        bkt = s3.Bucket(self._hst_bucket)
+        bkt = s3.Bucket(self._pubdata_bucket)
 
-        bucketPath = self.get_hst_s3_uri(dataProduct, False)
-        info_lookup = s3_client.head_object(Bucket=self._hst_bucket, Key=bucketPath, RequestPayer='requester')
+        bucketPath = self.get_cloud_uri(dataProduct, False)
+        info_lookup = s3_client.head_object(Bucket=self._pubdata_bucket, Key=bucketPath, RequestPayer='requester')
 
         # Unfortunately, we can't use the reported file size in the reported product.  STScI's backing
         # archive database (CAOM) is frequently out of date and in many cases omits the required information.
@@ -1415,7 +1604,7 @@ class ObservationsClass(MastClass):
                     return
 
         with ProgressBarOrSpinner(length, ('Downloading URL s3://{0}/{1} to {2} ...'.format(
-                self._hst_bucket, bucketPath, localPath))) as pb:
+                self._pubdata_bucket, bucketPath, localPath))) as pb:
 
             # Bytes read tracks how much data has been received so far
             # This variable will be updated in multiple threads below
@@ -1471,15 +1660,15 @@ class ObservationsClass(MastClass):
             url = None
 
             try:
-                if self._boto3 is not None and dataProduct["dataURI"].startswith("mast:HST/product"):
+                if self._boto3 is not None and fpl.has_path(dataProduct):
                     try:
-                        self._download_from_s3(dataProduct, localPath, cache)
+                        self._download_from_cloud(dataProduct, localPath, cache)
                     except Exception as ex:
                         log.exception("Error pulling from S3 bucket: %s" % ex)
                         log.warn("Falling back to mast download...")
-                        self._download_file(dataUrl, localPath, cache=cache)
+                        self._download_file(dataUrl, localPath, cache=cache, head_safe=True)
                 else:
-                    self._download_file(dataUrl, localPath, cache=cache)
+                    self._download_file(dataUrl, localPath, cache=cache, head_safe=True)
 
                 # check if file exists also this is where would perform md5,
                 # and also check the filesize if the database reliably reported file sizes
@@ -1560,7 +1749,10 @@ class ObservationsClass(MastClass):
             download_dir = '.'
 
         if curl_flag:  # don't want to download the files now, just the curl script
-            manifest = self._download_curl_script(products, download_dir)
+            if "SHIB-ECP" == self._auth_mode:
+                manifest = self._shib_download_curl_script(products, download_dir)
+            else:
+                manifest = self._download_curl_script(products, download_dir)
 
         else:
             base_dir = download_dir.rstrip('/') + "/mastDownload"
@@ -1938,7 +2130,7 @@ class CatalogsClass(MastClass):
             bundlerResponse = response[0].json()
 
             localPath = download_dir.rstrip('/') + "/" + downloadFile + ".sh"
-            self._download_file(bundlerResponse['url'], localPath)
+            self._download_file(bundlerResponse['url'], localPath, head_safe=True)
 
             status = "COMPLETE"
             msg = None
@@ -1985,7 +2177,7 @@ class CatalogsClass(MastClass):
                 url = None
 
                 try:
-                    self._download_file(dataUrl, localPath, cache=cache)
+                    self._download_file(dataUrl, localPath, cache=cache, head_safe=True)
 
                     # check file size also this is where would perform md5
                     if not os.path.isfile(localPath):
