@@ -48,6 +48,7 @@ class TapTableMeta(object):
         self.columns.append(tap_column)
 
     def __str__(self):
-        return "TAP Table name: " + str(self.get_qualified_name()) + \
+        return "TAP Table name: " + str(self.name) + \
+            "\nSchema: " + str(self.schema) + \
             "\nDescription: " + str(self.description) + \
             "\nNum. columns: " + str(len(self.columns))
