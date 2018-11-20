@@ -324,6 +324,7 @@ class Tap(object):
             job.set_phase('ERROR')
             responseBytes = response.read()
             responseStr = responseBytes.decode('utf-8')
+
             if dump_to_file:
                 self.__connHandler.dump_to_file(suitableOutputFile,
                                                 responseStr)
