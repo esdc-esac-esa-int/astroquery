@@ -14,6 +14,7 @@ Created on 30 jun. 2016
 
 
 """
+import unittest
 import os
 import numpy as np
 import pytest
@@ -30,7 +31,7 @@ def data_path(filename):
     return os.path.join(data_dir, filename)
 
 
-class TestTap(object):
+class TestTap(unittest.TestCase):
 
     def test_load_tables(self):
         connHandler = DummyConnHandler()
@@ -834,17 +835,7 @@ class TestTap(object):
             "Expected: '%s', found '%s'" % \
             (columnName, dataType, c.dtype)
 
-    def test_parse_url(self):
-        """ test staticmethod parse_url """
-        url = "http://test:1111/tap"
-        r = TapPlus.parse_url(url)
-        assert r == ('http', 'test', 1111, '/tap', '')
 
-        url = "http://test"
-        r = TapPlus.parse_url(url)
-        assert r == ('http', 'test', 80, '', '')
-
-        url = "https://test/tap/foo/bar"
-        r = TapPlus.parse_url(url)
-        assert r == ('https', 'test', 443, '/tap/foo', '/bar')
-
+if __name__ == "__main__":
+    # import sys;sys.argv = ['', 'Test.testName']
+    unittest.main()

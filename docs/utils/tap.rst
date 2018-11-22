@@ -20,7 +20,7 @@ to Structured Query Language (SQL), widely used to query databases.
 TAP provides two operation modes: Synchronous and Asynchronous:
 
 * Synchronous: the response to the request will be generated as soon as the
-  request is received by the server. (Do not use this method for queries that
+  request received by the server. (Do not use this method for queries that
   generate a big amount of results.)
 
 * Asynchronous: the server will start a job that will execute the request.
@@ -48,11 +48,11 @@ To load only table names (TAP+ capability)
 .. code-block:: python
 
   >>> from astroquery.utils.tap.core import TapPlus
-
+  >>>
   >>> gaia = TapPlus(url="http://gea.esac.esa.int/tap-server/tap")
   >>> tables = gaia.load_tables(only_names=True)
   >>> for table in (tables):
-  >>>     print(table.get_qualified_name())
+  >>>   print(table.get_qualified_name())
 
   public.dual
   public.tycho2
@@ -81,11 +81,11 @@ To load table names (TAP compatible)
 .. code-block:: python
 
   >>> from astroquery.utils.tap.core import TapPlus
-
+  >>>
   >>> gaia = TapPlus(url="http://gea.esac.esa.int/tap-server/tap")
   >>> tables = gaia.load_tables()
   >>> for table in (tables):
-  >>>    print(table.get_qualified_name())
+  >>>   print(table.get_qualified_name())
 
   public.dual
   public.tycho2
@@ -131,11 +131,11 @@ Once a table is loaded, columns can be inspected
 .. code-block:: python
 
   >>> from astroquery.utils.tap.core import TapPlus
-
+  >>>
   >>> gaia = TapPlus(url="http://gea.esac.esa.int/tap-server/tap")
   >>> table = gaia.load_table('gaiadr1.gaia_source')
   >>> for column in (gaiadr1_table.get_columns()):
-  >>>    print(column.get_name())
+  >>>   print(column.get_name())
 
   solution_id
   source_id
@@ -164,14 +164,13 @@ Query without saving results in a file:
 .. code-block:: python
 
   >>> from astroquery.utils.tap.core import TapPlus
-
+  >>>
   >>> gaia = TapPlus(url="http://gea.esac.esa.int/tap-server/tap")
-
-  >>> job = gaia.launch_job(
-  >>>     "select top 100 solution_id, ref_epoch, ra_dec_corr, astrometric_n_obs_al,"
-  >>>     "matched_observations, duplicated_source, phot_variable_flag"
-  >>>     "from gaiadr1.gaia_source order by source_id")
-
+  >>>
+  >>> job = gaia.launch_job("select top 100 \
+  >>> solution_id,ref_epoch,ra_dec_corr,astrometric_n_obs_al,matched_observations,duplicated_source,phot_variable_flag \
+  >>> from gaiadr1.gaia_source order by source_id")
+  >>>
   >>> print(job)
 
   Jobid: None

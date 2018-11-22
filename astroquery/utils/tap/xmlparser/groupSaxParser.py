@@ -34,6 +34,9 @@ class GroupSaxParser(xml.sax.ContentHandler):
         '''
         Constructor
         '''
+        self.__internal_init()
+
+    def __internal_init(self):
         self.__concatData = False
         self.__charBuffer = []
         self.__groups = []
@@ -57,18 +60,21 @@ class GroupSaxParser(xml.sax.ContentHandler):
         self.__concatData = False
 
     def parseData(self, data):
+        #  print(str(data))
         self.__status = READING_GROUP
         del self.__groups[:]
         xml.sax.parse(data, self)
         return self.__groups
 
     def startElement(self, name, attrs):
+        #  print("startElement = " + str(name) + " " + str(attrs))
         if self.__status == READING_GROUP:
             self.__reading_group(name, attrs)
         elif self.__status == READING_USERS:
             self.__reading_users(name, attrs)
 
     def endElement(self, name):
+        #  print("endElement = " + str(name))
         if self.__status == READING_GROUP:
             self.__end_group(name)
         elif self.__status == READING_USERS:
