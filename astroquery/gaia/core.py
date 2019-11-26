@@ -33,8 +33,12 @@ class GaiaClass(TapPlus):
     MAIN_GAIA_TABLE_RA = conf.MAIN_GAIA_TABLE_RA
     MAIN_GAIA_TABLE_DEC = conf.MAIN_GAIA_TABLE_DEC
 
-    def __init__(self, tap_plus_conn_handler=None, datalink_handler=None):
-        super(GaiaClass, self).__init__(url="http://gea.esac.esa.int/",
+    def __init__(self, tap_plus_conn_handler=None,
+                 datalink_handler=None,
+                 gaia_tap_server='http://gea.esac.esa.int/',
+                 gaia_data_server='http://gea.esac.esa.int/'):
+        
+        super(GaiaClass, self).__init__(url=gaia_tap_server,
                                         server_context="tap-server",
                                         tap_context="tap",
                                         upload_context="Upload",
@@ -44,7 +48,7 @@ class GaiaClass(TapPlus):
                                         connhandler=tap_plus_conn_handler)
         # Data uses a different TapPlus connection
         if datalink_handler is None:
-            self.__gaiadata = TapPlus(url="http://geadata.esac.esa.int/",
+            self.__gaiadata = TapPlus(url=gaia_data_server,
                                       server_context="data-server",
                                       tap_context="tap",
                                       upload_context="Upload",
@@ -54,9 +58,16 @@ class GaiaClass(TapPlus):
         else:
             self.__gaiadata = datalink_handler
 
-    def load_data(self, ids, retrieval_type="epoch_photometry",
-                  valid_data=True, band=None, format="VOTABLE",
-                  output_file=None, verbose=False):
+    def load_data(self, 
+                  ids, 
+                  data_release=2, 
+                  data_structure='COMBINED',
+                  retrieval_type="ALL",
+                  valid_data=True,
+                  band=None,
+                  format="VOTABLE", 
+                  output_file=None, 
+                  verbose=False):
         """Loads the specified table
         TAP+ only
 
@@ -64,8 +75,17 @@ class GaiaClass(TapPlus):
         ----------
         ids : str list, mandatory
             list of identifiers
-        retrieval_type : str, optional, default 'epoch_photometry'
-            retrieval type identifier
+        data_release: integer, optional, default None
+            data release from which data should be taken
+        data_structure: str, optional, default 'COMBINED'
+            it can be 'INDIVIDUAL', 'COMBINED', 'RAW':
+            'INDIVIDUAL' means...
+            'COMBINED' means...
+            'RAW' means...
+        retrieval_type : str, optional, default 'ALL'
+            retrieval type identifier. It can be either 'epoch_photometry'
+            for compatibility reasons or 'ALL' to retrieve all data from
+            the list of sources.
         valid_data : bool, optional, default True
             By default, the epoch photometry service returns only valid data,
             that is, all data rows where flux is not null and
@@ -92,11 +112,15 @@ class GaiaClass(TapPlus):
             raise ValueError("Missing mandatory argument 'retrieval_type'")
         if ids is None:
             raise ValueError("Missing mandatory argument 'ids'")
+        if str(retrieval_type) != 'ALL' and str(retrieval_type) != 'epoch_photometry':
+            raise ValueError("Invalid mandatory argument 'retrieval_type'")
+
         params_dict = {}
-        if valid_data:
-            params_dict['VALID_DATA'] = "true"
-        else:
+        if not valid_data or str(retrieval_type) == 'ALL':
             params_dict['VALID_DATA'] = "false"
+        elif valid_data:
+            params_dict['VALID_DATA'] = "true"
+
         if band is not None:
             if band != 'G' and band != 'BP' and band != 'RP':
                 raise ValueError("Invalid band value '%s' (Valid values: " +
@@ -111,6 +135,8 @@ class GaiaClass(TapPlus):
             else:
                 ids_arg = ','.join(str(item) for item in ids)
         params_dict['ID'] = ids_arg
+        params_dict['DATA_RELEASE'] = data_release
+        params_dict['DATA_STRUCTURE'] = data_structure
         params_dict['FORMAT'] = str(format)
         params_dict['RETRIEVAL_TYPE'] = str(retrieval_type)
         return self.__gaiadata.load_data(params_dict=params_dict,
