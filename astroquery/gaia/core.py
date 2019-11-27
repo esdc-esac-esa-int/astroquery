@@ -181,6 +181,10 @@ class GaiaClass(TapPlus):
             files[key] = modelutils.read_results_table_from_file(value, format)
         if not output_file_specified:
             shutil.rmtree(path)
+            
+        print("List of product available:")
+        for key,value in files.items():
+            print("Product = ", key)
 
         return files
 
