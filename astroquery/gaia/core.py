@@ -20,8 +20,13 @@ from astroquery.utils import commons
 from astropy import units
 from astropy.units import Quantity
 import six
+import zipfile
 from astroquery.utils.tap import taputils
 from . import conf
+import os
+from datetime import datetime
+import shutil
+import astroquery.utils.tap.model.modelutils as modelutils
 
 
 class GaiaClass(TapPlus):
@@ -60,12 +65,12 @@ class GaiaClass(TapPlus):
 
     def load_data(self, 
                   ids, 
-                  data_release=2, 
+                  data_release=None, 
                   data_structure='COMBINED',
                   retrieval_type="ALL",
                   valid_data=True,
                   band=None,
-                  format="VOTABLE", 
+                  format="votable", 
                   output_file=None, 
                   verbose=False):
         """Loads the specified table
@@ -110,6 +115,20 @@ class GaiaClass(TapPlus):
         """
         if retrieval_type is None:
             raise ValueError("Missing mandatory argument 'retrieval_type'")
+        now = datetime.now()
+        if output_file is None:
+            output_file = os.getcwd() + os.sep + "temp_" + now.strftime("%Y%m%d%H%M%S") + os.sep + "download_" + now.strftime("%Y%m%d%H%M%S")
+        else:
+            output_file = os.getcwd() + os.sep + "temp_" + now.strftime("%Y%m%d%H%M%S") + os.sep + output_file
+        path = os.path.dirname(output_file)
+        try:
+            os.mkdir(path)
+        except OSError:
+            print ("Creation of the directory %s failed" % path)
+
+        print("output_file = ", output_file)
+        print("path = ", path)
+
         if ids is None:
             raise ValueError("Missing mandatory argument 'ids'")
         if str(retrieval_type) != 'ALL' and str(retrieval_type) != 'epoch_photometry':
@@ -135,13 +154,34 @@ class GaiaClass(TapPlus):
             else:
                 ids_arg = ','.join(str(item) for item in ids)
         params_dict['ID'] = ids_arg
-        params_dict['DATA_RELEASE'] = data_release
+        if data_release is not None:
+            params_dict['DATA_RELEASE'] = data_release
         params_dict['DATA_STRUCTURE'] = data_structure
         params_dict['FORMAT'] = str(format)
         params_dict['RETRIEVAL_TYPE'] = str(retrieval_type)
-        return self.__gaiadata.load_data(params_dict=params_dict,
+        self.__gaiadata.load_data(params_dict=params_dict,
                                          output_file=output_file,
                                          verbose=verbose)
+        files = {}
+        if zipfile.is_zipfile(output_file):  
+            with zipfile.ZipFile(output_file, 'r') as zip_ref:
+                zip_ref.extractall(os.path.dirname(output_file))
+            #r=root, d=directories, f = files
+            for r, d, f in os.walk(path):
+                for file in f:
+                    if '.xml' in file:
+                        files[file.split("-")[0]] = os.path.join(r, file)
+        else:
+            for r, d, f in os.walk(path):
+                for file in f:
+                    files['EPOCH_PHOTOMETRY'] = os.path.join(r, file)
+                    break
+
+        for key,value in files.items():
+            files[key] = modelutils.read_results_table_from_file(value, format)
+        
+        shutil.rmtree(path)
+        return files
 
     def get_datalinks(self, ids, verbose=False):
         """Gets datalinks associated to the provided identifiers
