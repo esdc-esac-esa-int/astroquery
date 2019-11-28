@@ -162,20 +162,17 @@ class GaiaClass(TapPlus):
         self.__gaiadata.load_data(params_dict=params_dict,
                                          output_file=output_file,
                                          verbose=verbose)
+
         files = {}
         if zipfile.is_zipfile(output_file):  
             with zipfile.ZipFile(output_file, 'r') as zip_ref:
                 zip_ref.extractall(os.path.dirname(output_file))
-            #r=root, d=directories, f = files
-            for r, d, f in os.walk(path):
-                for file in f:
-                    if '.xml' in file:
-                        files[file.split("-")[0]] = os.path.join(r, file)
-        else:
-            for r, d, f in os.walk(path):
-                for file in f:
-                    files['EPOCH_PHOTOMETRY'] = os.path.join(r, file)
-                    break
+
+        #r=root, d=directories, f = files
+        for r, d, f in os.walk(path):
+            for file in f:
+                if '.xml' in file:
+                    files[os.path.splitext(file)[0]] = os.path.join(r, file)
 
         for key,value in files.items():
             files[key] = modelutils.read_results_table_from_file(value, format)
