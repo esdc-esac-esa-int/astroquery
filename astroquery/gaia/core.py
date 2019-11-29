@@ -171,7 +171,7 @@ class GaiaClass(TapPlus):
         #r=root, d=directories, f = files
         for r, d, f in os.walk(path):
             for file in f:
-                if '.xml' in file:
+                if '.xml' in file or '.csv' in file:
                     files[os.path.splitext(file)[0]] = os.path.join(r, file)
 
         for key,value in files.items():
