@@ -122,7 +122,6 @@ class GaiaClass(TapPlus):
         else:
             output_file_specified = True
             output_file = os.getcwd() + os.sep + "temp_" + now.strftime("%Y%m%d%H%M%S") + os.sep + output_file
-            print("output_file = ", output_file)
         path = os.path.dirname(output_file)
         try:
             os.mkdir(path)
@@ -178,7 +177,9 @@ class GaiaClass(TapPlus):
             files[key] = modelutils.read_results_table_from_file(value, format)
         if not output_file_specified:
             shutil.rmtree(path)
-            
+        else:
+            print("output_file = ", output_file)
+
         print("List of product available:")
         for key,value in files.items():
             print("Product = ", key)
