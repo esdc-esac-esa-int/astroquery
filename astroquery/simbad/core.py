@@ -5,6 +5,7 @@ Simbad query class for accessing the Simbad Service
 from __future__ import print_function
 import copy
 import re
+import requests
 import json
 import os
 from collections import namedtuple
@@ -14,14 +15,15 @@ from astropy.utils.data import get_pkg_data_filename
 import astropy.coordinates as coord
 from astropy.table import Table
 import astropy.io.votable as votable
-from astropy.extern.six import BytesIO
+from six import BytesIO
+
 from ..query import BaseQuery
 from ..utils import commons
 from ..exceptions import TableParseError, LargeQueryWarning
 from . import conf
 from ..utils.process_asyncs import async_to_sync
 
-__all__ = ['Simbad', 'SimbadClass']
+__all__ = ['Simbad', 'SimbadClass', 'SimbadBaseQuery']
 
 
 def validate_epoch(value):
@@ -221,8 +223,46 @@ class SimbadObjectIDsResult(SimbadResult):
         return table
 
 
+class SimbadBaseQuery(BaseQuery):
+    """
+    SimbadBaseQuery overloads the base query because we know that SIMBAD will
+    sometimes blacklist users for exceeding rate limits.  This warning results
+    in a "connection refused" error (error 61) instead of a more typical "error
+    8" that you would get from not having an internet connection at all.
+    """
+    def _request(self, *args, **kwargs):
+        try:
+            response = super(SimbadBaseQuery, self)._request(*args, **kwargs)
+        except requests.exceptions.ConnectionError as ex:
+            if 'Errno 61' in str(ex):
+                extratext = ("\n\n"
+                             "************************* \n"
+                             "ASTROQUERY ADDED WARNING: \n"
+                             "************************* \n"
+                             "Error 61 received from SIMBAD server.  "
+                             "This may indicate that you have been "
+                             "blacklisted for exceeding the query rate limit."
+                             "  See the astroquery SIMBAD documentation.  "
+                             "Blacklists are generally cleared after ~1 hour.  "
+                             "Please reconsider your approach, you may want "
+                             "to use vectorized queries."
+                             )
+                ex.args[0].args = (ex.args[0].args[0] + extratext,)
+            raise ex
+
+        if response.status_code == 403:
+            errmsg = ("Error 403: Forbidden.  You may get this error if you "
+                      "exceed the SIMBAD server's rate limits.  Try again in "
+                      "a few seconds or minutes.")
+            raise requests.exceptions.HTTPError(errmsg)
+        else:
+            response.raise_for_status()
+
+        return response
+
+
 @async_to_sync
-class SimbadClass(BaseQuery):
+class SimbadClass(SimbadBaseQuery):
     """
     The class for querying the Simbad web service.
 
@@ -907,8 +947,13 @@ class SimbadClass(BaseQuery):
         """
         request_payload = dict(script="\n".join(('format object "%IDLIST"',
                                                  'query id %s' % object_name)))
+
+        if get_query_payload:
+            return request_payload
+
         response = self._request("POST", self.SIMBAD_URL, data=request_payload,
                                  timeout=self.TIMEOUT, cache=cache)
+
         return response
 
     def _get_query_header(self, get_raw=False):

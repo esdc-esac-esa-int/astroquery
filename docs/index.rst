@@ -31,6 +31,9 @@ that a release will be instantaniously available after each set of changes
 made to the code.
 The latest version of astroquery can be pip installed.
 
+\*Note: If an environment already has an older version of astroquery installed
+add ``--upgrade`` to make sure the latest version is installed.
+
 .. code-block:: bash
 
     $ pip install --pre astroquery
@@ -61,20 +64,22 @@ The development version can be obtained and installed from github:
 Requirements
 ------------
 
-Astroquery works with Python 2.7 and 3.4 or later.
+Astroquery works with Python 3.6 or later.
 
 The following packages are required for astroquery installation & use:
 
-* `numpy <http://www.numpy.org>`_ >= 1.9
-* `astropy <http://www.astropy.org>`__ (>=1.0)
+* `numpy <http://www.numpy.org>`_ >= 1.14
+* `astropy <http://www.astropy.org>`__ (>=2.0)
 * `requests <http://docs.python-requests.org/en/latest/>`_
 * `keyring <https://pypi.python.org/pypi/keyring>`_
 * `Beautiful Soup <https://www.crummy.com/software/BeautifulSoup/>`_
 * `html5lib <https://pypi.python.org/pypi/html5lib>`_
+* `six <http://pypi.python.org/pypi/six/>`_
 
 and for running the tests:
 
 * `curl <https://curl.haxx.se/>`__
+* `pytest-astropy <https://github.com/astropy/pytest-astropy>`__
 
 The following packages are optional dependencies and are required for the
 full functionality of the `~astroquery.alma` module:
@@ -87,7 +92,12 @@ full functionality of the `~astroquery.cds` module:
 
 * `astropy-healpix <http://astropy-healpix.readthedocs.io/en/latest/>`_
 * `regions <https://astropy-regions.readthedocs.io/en/latest/>`_
-* `mocpy <https://mocpy.readthedocs.io/en/latest/>`_
+* `mocpy <https://mocpy.readthedocs.io/en/latest/>`_ >= 0.5.2
+
+The following packages are optional dependencies and are required for the
+full functionality of the `~astroquery.mast` module:
+
+* `boto3 <https://boto3.readthedocs.io/>`_
 
 Using astroquery
 ----------------
@@ -146,7 +156,10 @@ The following modules have been completed using a common API:
   alma/alma.rst
   atomic/atomic.rst
   besancon/besancon.rst
+  cadc/cadc.rst
+  casda/casda.rst
   cds/cds.rst
+  esa/hubble.rst
   esasky/esasky.rst
   eso/eso.rst
   gaia/gaia.rst
@@ -249,6 +262,8 @@ generally return a table listing the available data first.
 
   alfalfa/alfalfa.rst
   alma/alma.rst
+  cadc/cadc.rst
+  esa/hubble.rst
   eso/eso.rst
   fermi/fermi.rst
   gaia/gaia.rst
@@ -269,7 +284,7 @@ generally return a table listing the available data first.
 Simulations
 -----------
 
-Simulation services query databases of simulated or synthetic data
+These services query databases of simulated or synthetic data:
 
 .. toctree::
   :maxdepth: 1
@@ -277,12 +292,11 @@ Simulation services query databases of simulated or synthetic data
   besancon/besancon.rst
   cosmosim/cosmosim.rst
 
-Other
------
+Line List Services
+------------------
 
-There are other astronomically significant services, e.g. line list and
-atomic/molecular cross section and collision rate services, that don't fit the
-above categories.
+There are several web services that provide atomic or molecular line lists, as
+well as  cross section and collision rates.  Those services are:
 
 .. toctree::
   :maxdepth: 1
@@ -291,13 +305,25 @@ above categories.
   lamda/lamda.rst
   nist/nist.rst
   splatalogue/splatalogue.rst
-  nasa_ads/nasa_ads.rst
   vamdc/vamdc.rst
   hitran/hitran.rst
+
+Other
+-----
+
+There are other astronomically significant services, that don't fit the
+above categories. Those services are here:
+
+.. toctree::
+  :maxdepth: 1
+
+  nasa_ads/nasa_ads.rst
   utils/tap.rst
   jplhorizons/jplhorizons.rst
   jplsbdb/jplsbdb.rst
   jplspec/jplspec.rst
+  imcce/imcce.rst
+  astrometry_net/astrometry_net.rst
 
 
 Topical Collections
@@ -310,7 +336,7 @@ topical submodules:
   :maxdepth: 1
 
   solarsystem/solarsystem.rst
-  
+
 
 Developer documentation
 -----------------------

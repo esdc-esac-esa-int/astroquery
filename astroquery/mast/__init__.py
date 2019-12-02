@@ -3,7 +3,7 @@
 MAST Query Tool
 ===============
 
-This module contains various methods for querying the MAST Portal.
+Module to query the Barbara A. Mikulski Archive for Space Telescopes (MAST).
 """
 
 from astropy import config as _config
@@ -20,6 +20,9 @@ class Conf(_config.ConfigNamespace):
     ssoserver = _config.ConfigItem(
         'https://ssoportal.stsci.edu',
         'MAST SSO Portal server.')
+    catalogsserver = _config.ConfigItem(
+        'https://catalogs.mast.stsci.edu',
+        'Name of the MAST Catalogs server.')
     timeout = _config.ConfigItem(
         600,
         'Time limit for requests from the STScI server.')

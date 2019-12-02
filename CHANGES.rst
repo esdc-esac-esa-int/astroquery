@@ -1,51 +1,416 @@
-0.3.9 (unreleased)
-------------------
+0.4 (unreleased)
+================
 
-- General: re-enable sandboxing / preventing internet access during non-remote
-  tests, which has been unintentionally disabled for a potentially long time.
-  [#1274]
-- WFAU: Added QSL constraints parameter [#1259]
-- ATOMIC: fix several bugs for using Quantited for the range parameters. [#1187]
+New Tools and Services
+----------------------
+
+casda
+^^^^^
+
+- Module added to access data from the CSIRO ASKAP Science Data Archive (CASDA)  [#1505]
+
+
+Service fixes and enhancements
+------------------------------
+
+alfalfa
+^^^^^^^
+
+alma
+^^^^
+
+astrometry_net
+^^^^^^^^^^^^^^
+
+atomic
+^^^^^^
+
+besancon
+^^^^^^^^
+
+cadc
+^^^^
+
+casda
+^^^^^
+
+cds
+^^^
+
+cosmosim
+^^^^^^^^
+
+esa
+^^^
+
+esasky
+^^^^^^
+
+eso
+^^^
+
+exoplanet_orbit_database
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+fermi
+^^^^^
+
+gaia
+^^^^
+
+gama
+^^^^
+
+heasarc
+^^^^^^^
+
+hitran
+^^^^^^
+
+ibe
+^^^
+
+imcce
+^^^^^
+
+irsa
+^^^^
+
+irsa_dust
+^^^^^^^^^
+
+jplhorizons
+^^^^^^^^^^^
+
+jplsbdb
+^^^^^^^
+
+jplspec
+^^^^^^^
+
+lamda
+^^^^^
+
+lcogt
+^^^^^
+
+magpis
+^^^^^^
+
+mast
+^^^^
+- Add Kepler to missions with cloud support,
+  Update ``get_cloud_uri`` so that if a file is not found it produces a warning
+  and returns None rather than throwing an exception. [#1561]
+
+
+mpc
+^^^
+
+nasa_ads
+^^^^^^^^
+
+nasa_exoplanet_archive
+^^^^^^^^^^^^^^^^^^^^^^
+
+ned
+^^^
+
+nist
+^^^^
+
+nrao
+^^^^
+
+nvas
+^^^^
+
+oac
+^^^
+
+ogle
+^^^^
+
+open_exoplanet_catalogue
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+sdss
+^^^^
+
+sha
+^^^
+
+simbad
+^^^^^^
+
+skyview
+^^^^^^^
+
+solarsystem
+^^^^^^^^^^^
+
+splatalogue
+^^^^^^^^^^^
+
+ukidss
+^^^^^^
+
+utils
+^^^^^
+
+- Added timer functions. [#1508]
+
+vamdc
+^^^^^
+
+vizier
+^^^^^^
+
+vo_conesearch
+^^^^^^^^^^^^^
+
+vsa
+^^^
+
+wfau
+^^^^
+
+xmatch
+^^^^^^
+
+
+Infrastructure, Utility and Other Changes and Additions
+-------------------------------------------------------
+
+
+0.3.10 (2019-09-19)
+===================
+
+New Tools and Services
+----------------------
+
+astrometry_net
+^^^^^^^^^^^^^^
+
+- Module added to interface to astrometry.net plate-solving service. [#1163]
+
+cadc
+^^^^
+
+- Module added to access data at the Canadian Astronomy Data Centre. [#1354, #1486]
+
+esa
+^^^
+
+- Module added ``hubble`` for accessing the ESA Hubble Archive. [#1373, #1534]
+
+gaia
+^^^^
+
+- Added tables sharing, tables edition, upload from pytable and job results,
+  cross match, data access and datalink access. [#1266]
+
+imcce
+^^^^^
+
+- Service ``miriade`` added, querying asteroid and comets ephemerides. [#1353]
+
+- Service ``skybot`` added, identifying Solar System objects in a given
+  field at a given epoch. [#1353]
+
+mast
+^^^^
+
+- Addition of observation metadata query. [#1473]
+
+- Addition of catalogs.MAST PanSTARRS catalog queries. [#1473]
+
+mpc
+^^^
+
+- Functionality added to query observations database. [#1350]
+
+
+Service fixes and enhancements
+------------------------------
+
+alma
+^^^^
+
+- Fix some broken VOtable returns and a broken login URL. [#1369]
+
+- ``get_project_metadata()`` is added to query project metadata. [#1147]
+
+- Add access to the ``member_ous_id`` attribute. [#1316]
+
+cds
+^^^
+
+- Apply MOCPy v0.5.* API changes. [#1343]
+
+eso
+^^^
+
+- Try to re-authenticate when logged out from the ESO server. [#1315]
+
+heasarc
+^^^^^^^
+
+- Fixing error handling to filter out only the query errors. [#1338]
+
+jplhorizons
+^^^^^^^^^^^
+
+- Add ``refplane`` keyword to ``vectors_async`` to return data for different
+  available reference planes. [#1335]
+
+- Vector queries provide different aberrations, ephemerides queries provide
+  extra precision option. [#1478]
+
+- Fix crash when precision to the second on epoch is requested. [#1488]
+
+- Fix for missing H, G values. [#1333]
+
+jplsbdb
+^^^^^^^
+
+- Fix for missing values. [#1333]
+
+mast
+^^^^
+
+- Update query_criteria keyword obstype->intentType. [#1366]
+
+- Remove deprecated authorization code, fix unit tests, general code cleanup,
+  documentation additions. [#1409]
+
+- TIC catalog search update. [#1483]
+
+- Add search by object name to Tesscut, make resolver_object public, minor bugfixes. [#1499]
+
+- Add option to query TESS Candidate Target List (CTL) Catalog. [#1503]
+
+- Add verbose keyword for option to silence logger info and warning about S3
+  in enable_cloud_dataset(). [#1536]
+
+nasa_ads
+^^^^^^^^
+
+- Fix an error in one of the default keys, citations->citation. [#1337]
+
+nist
+^^^^
+
+- Fixed an upstream issue where js was included in returned data. [#1359]
+
+- Unescape raw HTML codes in returned data back into Unicode equivalents to
+  stop them silently breaking Table parsing. [#1431]
+
+nrao
+^^^^
+
+- Fix parameter validation allowing for hybrid telescope configuration. [#1283]
+
+sdss
+^^^^
+
+- Update to SDSS-IV URLs and general clean-up. [#1308]
+
+vizier
+^^^^^^
+
+- Support using the output values of ``find_catalog`` in ``get_catalog``. [#603]
+
+- Fix to ensure to fall back on the default catalog when it's not provided as
+  part of the query method. [#1328]
+
+- Fix swapped width and length parameters. [#1406]
+
+xmatch
+^^^^^^
+
+- Add parameter ``area`` to restrict sky  region considered. [#1476]
+
+
+Infrastructure, Utility and Other Changes and Additions
+-------------------------------------------------------
+
+- HTTP user-agent now has the string ``_testrun`` in the version number of astroquery,
+  for queries triggered by testing. [#1307]
+
+- Adding deprecation decorators to ``utils`` from astropy to be used while we
+  support astropy <v3.1.2. [#1435]
+
+- Added tables sharing, tables edition, upload from pytable and job results,
+  data access and datalink access to ``utils.tap``. [#1266]
+
+- Added a new ``astroquery.__citation__`` and ``astroquery.__bibtex__``
+  attributes which give a citation for astroquery in bibtex format. [#1391]
+
+
+
+0.3.9 (2018-12-06)
+==================
+
+- New tool: MPC module can now request comet and asteroid ephemerides from the
+  Minor Planet Ephemeris Service, and return a table of observatory codes and
+  coordinates. [#1177]
+- New tool ``CDS``:  module to query the MOCServer, a CDS tool providing MOCs
+  and meta data of various data-sets. [#1111]
+- New tool ``JPLSDB``: New module for querying JPL's Small Body Database
+  Browser [#1214]
+
+- ATOMIC: fix several bugs for using Quantities for the range parameters.
+  [#1187]
+- CADC: added the get_collections method. [#1482]
 - ESASKY: get_maps() accepts dict or list of (name, Table) pairs as input
   table list. [#1167]
 - ESO: Catch exception on login when keyring fails to get a valid storage.
   [#1198]
 - ESO: Add option to retrieve calibrations associated to data. [#1184]
-- HITRAN: use class-based API [#824]
-- JPL Horizons: Fix for missing total absolute magnitude or phase coefficient
+- FERMI: Switch to HTTPS [#1241]
+- IRSA: Added ``selcols`` keyword. [#1296]
+- JPLHorizons: Fix for missing total absolute magnitude or phase coefficient
   for comets [#1151]
-- MAST: Enable converting list of products into S3 uris [#1126]
-- New tool: MPC module can now request comet and asteroid ephemerides from the
-  Minor Planet Ephemeris Service, and return a table of observatory codes and
-  coordinates. [#1177]
-- NASA_ADS: Use new API [#1162]
-- VO_CONESEARCH: Service validator now uses new STScI VAO TAP registry. [#1114]
-- Nasa Exoplanet Arhive: Add option to return all columns. [#1183]
-- File download progress bar no longer displays when Astropy log level
-  is set to "WARNING", "ERROR", or "CRITICAL". [#1188]
-- New tool: CDS - added module to query the MOCServer, a CDS tool providing MOCs
-  and meta data of various data-sets. [#1111]
-- MAST: Updating HSC and Gaia catalog calls (bugfix) [#1203]
+- JPLHorizons: Fix queries for major solar system bodies when sub-observer or
+  sub-solar positions are requested. [#1268]
+- JPLHorizons: Fix bug with airmass column. [#1284]
 - JPLSpec: New query service for JPL Molecular Spectral Catalog. [#1170]
-- Add docstring and signature for login. [#1199]
 - JPLHorizons: JPL server protocol and epoch range bug fixes, user-defined
   location and additional ephemerides information added [#1207]
-- MAST: Fixing bug in catalog criteria querues, and updating remote tests. [#1223]
-- JPLSDB: New module for querying JPL's Small Body Database Browser [#1214]
-- MAST: Fixing mrp_only but and changing default to False [#1238]
-- SPLATALOGUE: Minor - utils & tests updated to match upstream change [#1236]
-- FERMI: Switch to HTTPS [#1241]
-- utils: fix bug in ``parse_coordinates``, now strings that can be
-  interpreted as coordinates are not sent through Sesame. When unit is not
-  provided, degrees is now explicitely assumed. [#1252]
+- HITRAN: use class-based API [#1028]
+- MAST: Enable converting list of products into S3 uris [#1126]
 - MAST: Adding Tesscut interface for accessing TESS cutouts. [#1264]
 - MAST: Add functionality for switching to auth.mast when it goes live [#1256]
 - MAST: Support downloading data from multiple missions from the cloud [#1275]
-- JPLHorizons: Fix queries for major solar system bodies when
+- MAST: Updating HSC and Gaia catalog calls (bugfix) [#1203]
+- MAST: Fixing bug in catalog criteria queries, and updating remote tests.
+  [#1223]
+- MAST: Fixing mrp_only but and changing default to False [#1238]
+- MAST: TESS input catalog bugfix [#1297]
+- NASA_ADS: Use new API [#1162]
+- Nasa Exoplanet Arhive: Add option to return all columns. [#1183]
+- SPLATALOGUE: Minor - utils & tests updated to match upstream change [#1236]
+- utils.tap: Fix Gaia units. [#1161]
+- VO_CONESEARCH: Service validator now uses new STScI VAO TAP registry. [#1114]
+- WFAU: Added QSL constraints parameter [#1259]
+- XMATCH: default timeout has changed from 60s to 300s. [#1137]
+
+- Re-enable sandboxing / preventing internet access during non-remote tests,
+  which has been unintentionally disabled for a potentially long time.  [#1274]
+- File download progress bar no longer displays when Astropy log level is set
+  to "WARNING", "ERROR", or "CRITICAL". [#1188]
+- utils: fix bug in ``parse_coordinates``, now strings that can be interpreted
+  as coordinates are not sent through Sesame. When unit is not provided,
+  degrees is now explicitely assumed. [#1252]
+- JPLHorizons: fix for #1201 issue in elements() and vectors(), test added
+- JPLHorizons: fix for missing H, G values [#1332]
+- JPLHorizons: warn if URI is longer than 2000 chars, docs updated
+- JPLSBDB: fix for missing value, test added
 
 
 0.3.8 (2018-04-27)
-------------------
+==================
 
 - New tool ``jplhorizons``: JPL Horizons service to obtain ephemerides,
   orbital elements, and state vectors for Solar System objects. [#1023]
@@ -74,7 +439,7 @@
   redirect but it is deprecated. [#1033]
 
 0.3.7 (2018-01-25)
-------------------
+==================
 
 - New tool: Exoplanet Orbit Catalog, NASA Exoplanet Archive [#771]
 - ESO: The upstream API changed.  We have adapted.  [#970]
@@ -113,7 +478,7 @@
 - GAMA: Updated to use the newer DR3 release. [#1005]
 
 0.3.6 (2017-07-03)
-------------------
+==================
 
 - New tool: MAST - added module to access the Barbara A. Mikulski Archive
   for Space Telescopes. [#920, #937]
@@ -131,7 +496,7 @@
   for services that have HTTPS URLs but missing certificates. [#928]
 
 0.3.5 (2017-03-29)
-------------------
+==================
 
 - New tool: Gaia - added module to access the European Space Agency Gaia
   Archive. (#836)
@@ -158,7 +523,7 @@
 - NRAO: Change default radius from 1 degree to 1 arcmin. (#813)
 
 0.3.4 (2016-11-21)
-------------------
+==================
 
 - New tool: basic HITRAN queries support (#617)
 - Fix #737, an issue with broken ALMA archive tables, via a hack (#775)
@@ -172,7 +537,7 @@
 - Fix issue with exclude keyword in Splatalogue queries (#616)
 
 0.3.3 (2016-10-11)
-------------------
+==================
 
 - Option to toggle the display of the download bar (#734)
 - ESASKY - added new module for querying the ESASKY archive (#758, #763, #765)
@@ -183,7 +548,7 @@
 - Minor fixes to ESO to match upstream form changes (#729)
 
 0.3.2 (2016-06-10)
-------------------
+==================
 
 - Update ESO tool to work with new web API (#696)
 - Added new instruments for ESO: ``ambient_paranal`` and ``meteo_paranal``
@@ -198,7 +563,7 @@
 - VIZIER add a flag to return the query payload for debugging (#668)
 
 0.3.1 (2016-01-19)
-------------------
+==================
 
 - Fix bug in xmatch service that required astropy tables to have exactly 2
   columns on input (#641)
@@ -210,14 +575,14 @@
   data in particular. (#450)
 
 0.3.0 (2015-10-26)
-------------------
+==================
 
 - Fix ESO APEX project ID keyword (#591)
 - Fix ALMA queries when accessing private data (#601)
 - Allow data downloads to use the cache (#601)
 
 0.2.6 (2015-07-23)
-------------------
+==================
 
 - ESO bugfixes for handling radio buttons (#560)
 - ESO: added SPHERE to list (#551)
@@ -226,7 +591,7 @@
 - Fix Splatalogue version keyword (#557)
 
 0.2.4 (2015-03-27)
-------------------
+==================
 
 - Bugfix for ``utils.commons.send_request()``: Raise exception if error status
   is returned in the response. (#491)
@@ -236,7 +601,7 @@
   calculation utility (#546)
 
 0.2.3 (2014-09-30)
-------------------
+==================
 
 
 - AstroResponse has been removed, which means that all cached objects will have
@@ -257,7 +622,7 @@
   the payload before querying. (#438)
 
 0.2.2 (2014-09-10)
-------------------
+==================
 
 - Support direct transmission of SQL queries to the SDSS server (#410)
 - Added email/text job completion alert (#407) to the CosmoSim tool (#267).
@@ -270,7 +635,7 @@
 - setup script and installation fixes
 
 0.2 (2014-08-17)
-----------------
+================
 
 - New tools: ESO, GAMA, xmatch, skyview, OEC
 - Consistent with astropy 0.4 API for coordinates
@@ -282,6 +647,6 @@
 
 
 0.1 (2013-09-19)
-----------------
+================
 
 - Initial release.  Includes features!

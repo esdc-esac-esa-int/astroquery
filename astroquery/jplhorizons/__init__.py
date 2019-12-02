@@ -39,6 +39,7 @@ class Conf(_config.ConfigNamespace):
     # query modes
     eph_columns = {'targetname': ('targetname', '---'),
                    'Date__(UT)__HR:MN': ('datetime_str', '---'),
+                   'Date__(UT)__HR:MN:SS': ('datetime_str', '---'),
                    'Date__(UT)__HR:MN:SC.fff': ('datetime_str', '---'),
                    'Date_________JDUT': ('datetime_jd', 'd'),
                    'H': ('H', 'mag'),
@@ -175,6 +176,7 @@ class Conf(_config.ConfigNamespace):
                    'JDTDB': ('datetime_jd', 'd'),
                    'Calendar Date (TDB)': ('datetime_str',
                                            '---'),
+                   'delta-T': ('delta_T', 's'),
                    'H': ('H', 'mag'),
                    'G': ('G', '---'),
                    'M1': ('M1', 'mag'),

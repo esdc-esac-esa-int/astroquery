@@ -3,11 +3,14 @@ from __future__ import print_function
 
 import numpy as np
 import os
+import pytest
 
 from astropy.tests.helper import remote_data
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
+from astropy.tests.helper import catch_warnings
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
 import astropy.units as u
 
@@ -33,6 +36,10 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_mast_service_request(self):
+
+        # clear columns config
+        mast.Mast._column_configs = dict()
+
         service = 'Mast.Caom.Cone'
         params = {'ra': 184.3,
                   'dec': 54.5,
@@ -50,9 +57,16 @@ class TestMast(object):
         assert len(result[np.where(result["obs_id"] == "6374399093149532160")]) == 2
 
     def test_mast_sesion_info(self):
-        sessionInfo = mast.Mast.session_info(True)
-        assert sessionInfo['Username'] == 'anonymous'
-        assert sessionInfo['Session Expiration'] is None
+        sessionInfo = mast.Mast.session_info(verbose=False)
+        assert sessionInfo['ezid'] == 'anonymous'
+        assert sessionInfo['token'] is None
+
+    def test_resolve_object(self):
+        m101_loc = mast.Mast.resolve_object("M101")
+        assert round(m101_loc.separation(SkyCoord("210.80227 54.34895", unit='deg')).value, 4) == 0
+
+        ticobj_loc = mast.Mast.resolve_object("TIC 141914082")
+        assert round(ticobj_loc.separation(SkyCoord("94.6175354 -72.04484622", unit='deg')).value, 4) == 0
 
     ###########################
     # ObservationsClass tests #
@@ -64,12 +78,32 @@ class TestMast(object):
         for m in ['HST', 'HLA', 'GALEX', 'Kepler']:
             assert m in missions
 
+    def test_get_metadata(self):
+        # observations
+        meta_table = mast.Observations.get_metadata("observations")
+        assert isinstance(meta_table, Table)
+        assert "Column Name" in meta_table.colnames
+        assert "Mission" in meta_table["Column Label"]
+        assert "obsid" in meta_table["Column Name"]
+
+        # products
+        meta_table = mast.Observations.get_metadata("products")
+        assert isinstance(meta_table, Table)
+        assert "Column Name" in meta_table.colnames
+        assert "Observation ID" in meta_table["Column Label"]
+        assert "parent_obsid" in meta_table["Column Name"]
+
     # query functions
+
     def test_observations_query_region_async(self):
         responses = mast.Observations.query_region_async("322.49324 12.16683", radius="0.005 deg")
         assert isinstance(responses, list)
 
     def test_observations_query_region(self):
+
+        # clear columns config
+        mast.Observations._column_configs = dict()
+
         result = mast.Observations.query_region("322.49324 12.16683", radius="0.005 deg")
         assert isinstance(result, Table)
         assert len(result) > 500
@@ -85,7 +119,11 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_observations_query_object(self):
-        result = mast.Observations.query_object("M8", radius=".02 deg")
+
+        # clear columns config
+        mast.Observations._column_configs = dict()
+
+        result = mast.Observations.query_object("M8", radius=".04 deg")
         assert isinstance(result, Table)
         assert len(result) > 150
         assert result[np.where(result['obs_id'] == 'ktwo200071160-c92_lc')]
@@ -103,6 +141,10 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_observations_query_criteria(self):
+
+        # clear columns config
+        mast.Observations._column_configs = dict()
+
         # without position
         result = mast.Observations.query_criteria(instrument_name="*WFPC2*",
                                                   proposal_id=8169,
@@ -120,6 +162,20 @@ class TestMast(object):
         assert len(result) == 12
         assert (result['obs_collection'] == 'GALEX').all()
         assert sum(result['filters'] == 'NUV') == 6
+
+        # TEMPORARY test the obstype deprecation
+        with catch_warnings(AstropyDeprecationWarning) as warning_lines:
+            result = mast.Observations.query_criteria(objectname="M101",
+                                                      dataproduct_type="IMAGE", obstype="science")
+            assert (result["intentType"] == "science").all()
+
+            result = mast.Observations.query_criteria(objectname="M101",
+                                                      dataproduct_type="IMAGE", obstype="cal")
+            assert (result["intentType"] == "calibration").all()
+
+        result = mast.Observations.query_criteria(objectname="M101",
+                                                  dataproduct_type="IMAGE", intentType="calibration")
+        assert (result["intentType"] == "calibration").all()
 
     # count functions
     def test_observations_query_region_count(self):
@@ -160,9 +216,13 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_observations_get_product_list(self):
-        observations = mast.Observations.query_object("M8", radius=".02 deg")
+
+        # clear columns config
+        mast.Observations._column_configs = dict()
+
+        observations = mast.Observations.query_object("M8", radius=".04 deg")
         test_obs_id = str(observations[0]['obsid'])
-        mult_obs_ids = str(observations[0]['obsid']) + ',' + str(observations[2]['obsid'])
+        mult_obs_ids = str(observations[0]['obsid']) + ',' + str(observations[1]['obsid'])
 
         result1 = mast.Observations.get_product_list(test_obs_id)
         result2 = mast.Observations.get_product_list(observations[0])
@@ -185,7 +245,7 @@ class TestMast(object):
         assert len(result) == 27
 
     def test_observations_filter_products(self):
-        observations = mast.Observations.query_object("M8", radius=".02 deg")
+        observations = mast.Observations.query_object("M8", radius=".04 deg")
         obsLoc = np.where(observations["obs_id"] == 'ktwo200071160-c92_lc')
         products = mast.Observations.get_product_list(observations[obsLoc])
         result = mast.Observations.filter_products(products,
@@ -195,10 +255,7 @@ class TestMast(object):
         assert len(result) == sum(products['productType'] == "SCIENCE")
 
     def test_observations_download_products(self, tmpdir):
-        observations = mast.Observations.query_object("M8", radius=".02 deg")
-        test_obs_id = str(observations[0]['obsid'])
-
-        # actually download the products
+        test_obs_id = '2003600312'
         result = mast.Observations.download_products(test_obs_id,
                                                      download_dir=str(tmpdir),
                                                      productType=["SCIENCE"],
@@ -226,10 +283,19 @@ class TestMast(object):
         responses = mast.Catalogs.query_region_async("158.47924 -7.30962", catalog="Galex")
         assert isinstance(responses, list)
 
+        # Default catalog is HSC
         responses = mast.Catalogs.query_region_async("322.49324 12.16683", radius="0.02 deg")
         assert isinstance(responses, list)
 
+        responses = mast.Catalogs.query_region_async("322.49324 12.16683", radius="0.02 deg",
+                                                     catalog="panstarrs", table="mean")
+        assert isinstance(responses, list)
+
     def test_catalogs_query_region(self):
+
+        # clear columns config
+        mast.Catalogs._column_configs = dict()
+
         result = mast.Catalogs.query_region("158.47924 -7.30962", radius=0.1,
                                             catalog="Gaia")
         assert isinstance(result, Table)
@@ -255,11 +321,41 @@ class TestMast(object):
         assert isinstance(result, Table)
         assert len(result) > 550
 
+        result = mast.Catalogs.query_region("322.49324 12.16683", radius=0.01,
+                                            catalog="panstarrs", table="mean")
+        assert isinstance(result, Table)
+        assert len(result) > 800
+
+        result = mast.Catalogs.query_region("322.49324 12.16683", radius=0.01,
+                                            catalog="panstarrs", table="mean", pagesize=3)
+        assert isinstance(result, Table)
+        assert len(result) == 3
+
+        result = mast.Catalogs.query_region("158.47924 -7.30962", catalog="Galex")
+        assert isinstance(result, Table)
+        assert len(result) > 700
+
+        result = mast.Catalogs.query_region("158.47924 -7.30962", catalog="tic")
+        assert isinstance(result, Table)
+        assert len(result) > 450
+
+        result = mast.Catalogs.query_region("158.47924 -7.30962", catalog="ctl")
+        assert isinstance(result, Table)
+        assert len(result) > 10
+
+        result = mast.Catalogs.query_region("210.80227 54.34895", radius=1, catalog="diskdetective")
+        assert isinstance(result, Table)
+        assert len(result) > 10
+
     def test_catalogs_query_object_async(self):
         responses = mast.Catalogs.query_object_async("M10", radius=.02, catalog="TIC")
         assert isinstance(responses, list)
 
     def test_catalogs_query_object(self):
+
+        # clear columns config
+        mast.Catalogs._column_configs = dict()
+
         result = mast.Catalogs.query_object("M10", radius=".02 deg", catalog="TIC")
         assert isinstance(result, Table)
         assert len(result) >= 300
@@ -269,9 +365,30 @@ class TestMast(object):
         assert isinstance(result, Table)
         assert len(result) >= 50
 
+        result = mast.Catalogs.query_object("M10", radius=.001, catalog="panstarrs", table="mean")
+        assert isinstance(result, Table)
+        assert len(result) >= 5
+
+        result = mast.Catalogs.query_object("M101", radius=1, catalog="diskdetective")
+        assert isinstance(result, Table)
+        assert len(result) > 10
+
+        result = mast.Catalogs.query_object("M10", radius=0.01, catalog="Gaia", version=1)
+        assert isinstance(result, Table)
+        assert len(result) > 200
+
+        result = mast.Catalogs.query_object("TIC 441662144", radius=0.01, catalog="ctl")
+        assert isinstance(result, Table)
+        assert len(result) == 1
+
     def test_catalogs_query_criteria_async(self):
         # without position
         responses = mast.Catalogs.query_criteria_async(catalog="Tic",
+                                                       Bmag=[30, 50],
+                                                       objType="STAR")
+        assert isinstance(responses, list)
+
+        responses = mast.Catalogs.query_criteria_async(catalog="ctl",
                                                        Bmag=[30, 50],
                                                        objType="STAR")
         assert isinstance(responses, list)
@@ -288,18 +405,38 @@ class TestMast(object):
                                                        objType="EXTENDED")
         assert isinstance(responses, list)
 
+        responses = mast.Catalogs.query_criteria_async(catalog="CTL",
+                                                       objectname="M10",
+                                                       objType="EXTENDED")
+        assert isinstance(responses, list)
+
         responses = mast.Catalogs.query_criteria_async(catalog="DiskDetective",
                                                        objectname="M10",
                                                        radius=2,
                                                        state="complete")
         assert isinstance(responses, list)
 
+        responses = mast.Catalogs.query_criteria_async(catalog="panstarrs", table="mean",
+                                                       objectname="M10",
+                                                       radius=.02,
+                                                       qualityFlag=48)
+        assert isinstance(responses, list)
+
     def test_catalogs_query_criteria(self):
+
+        # clear columns config
+        mast.Catalogs._column_configs = dict()
+
         # without position
         result = mast.Catalogs.query_criteria(catalog="Tic", Bmag=[30, 50], objType="STAR")
         assert isinstance(result, Table)
         assert len(result) >= 10
         assert result[np.where(result['ID'] == '81609218')]
+
+        result = mast.Catalogs.query_criteria(catalog="ctl", Tmag=[10.5, 11], POSflag="2mass")
+        assert isinstance(result, Table)
+        assert len(result) >= 400
+        assert result[np.where(result['ID'] == '291067184')]
 
         result = mast.Catalogs.query_criteria(catalog="DiskDetective",
                                               state=["inactive", "disabled"],
@@ -314,11 +451,21 @@ class TestMast(object):
         assert len(result) >= 7
         assert result[np.where(result['ID'] == '10000732589')]
 
+        result = mast.Catalogs.query_criteria(objectname='TIC 291067184', catalog="ctl",
+                                              Tmag=[10.5, 11], POSflag="2mass")
+        assert isinstance(result, Table)
+        assert len(result) == 1
+
         result = mast.Catalogs.query_criteria(catalog="DiskDetective", objectname="M10", radius=2,
                                               state="complete")
         assert isinstance(result, Table)
         assert len(result) >= 5
         assert result[np.where(result['designation'] == 'J165628.40-054630.8')]
+
+        result = mast.Catalogs.query_criteria(catalog="panstarrs", objectname="M10", radius=.01,
+                                              qualityFlag=32, zoneID=10306)
+        assert isinstance(result, Table)
+        assert len(result) >= 5
 
     def test_catalogs_query_hsc_matchid_async(self):
         catalogData = mast.Catalogs.query_object("M10", radius=.001, catalog="HSC", magtype=1)
@@ -330,6 +477,10 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_catalogs_query_hsc_matchid(self):
+
+        # clear columns config
+        mast.Catalogs._column_configs = dict()
+
         catalogData = mast.Catalogs.query_object("M10", radius=.001, catalog="HSC", magtype=1)
         matchid = catalogData[0]["MatchID"]
 
@@ -348,6 +499,10 @@ class TestMast(object):
         assert isinstance(responses, list)
 
     def test_catalogs_get_hsc_spectra(self):
+
+        # clear columns config
+        mast.Catalogs._column_configs = dict()
+
         result = mast.Catalogs.get_hsc_spectra()
         assert isinstance(result, Table)
         assert len(result) >= 45762
@@ -372,103 +527,88 @@ class TestMast(object):
     ######################
     # TesscutClass tests #
     ######################
-
     def test_tesscut_get_sectors(self):
 
-        # Note: try except will be removed when the service goes live
         coord = SkyCoord(324.24368, -27.01029, unit="deg")
-        try:
-            sector_table = mast.Tesscut.get_sectors(coord)
-            assert isinstance(sector_table, Table)
-            assert len(sector_table) == 1
-            assert sector_table['sectorName'][0] == "tess-s0001-1-3"
-            assert sector_table['sector'][0] == 1
-            assert sector_table['camera'][0] == 1
-            assert sector_table['ccd'][0] == 3
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        sector_table = mast.Tesscut.get_sectors(coordinates=coord)
+        assert isinstance(sector_table, Table)
+        assert len(sector_table) >= 1
+        assert sector_table['sectorName'][0] == "tess-s0001-1-3"
+        assert sector_table['sector'][0] == 1
+        assert sector_table['camera'][0] == 1
+        assert sector_table['ccd'][0] == 3
 
-        try:
-            # This should always return no results
-            coord = SkyCoord(0, 90, unit="deg")
-            sector_table = mast.Tesscut.get_sectors(coord)
-            assert isinstance(sector_table, Table)
-            assert len(sector_table) == 0
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        # This should always return no results
+        coord = SkyCoord(0, 90, unit="deg")
+        sector_table = mast.Tesscut.get_sectors(coordinates=coord)
+        assert isinstance(sector_table, Table)
+        assert len(sector_table) == 0
+
+        sector_table = mast.Tesscut.get_sectors(objectname="M104")
+        assert isinstance(sector_table, Table)
+        assert len(sector_table) >= 1
+        assert sector_table['sectorName'][0] == "tess-s0010-1-4"
+        assert sector_table['sector'][0] == 10
+        assert sector_table['camera'][0] == 1
+        assert sector_table['ccd'][0] == 4
 
     def test_tesscut_download_cutouts(self, tmpdir):
 
-        # Note: try excepts will be removed when the service goes live
-
         coord = SkyCoord(107.18696, -70.50919, unit="deg")
 
-        # Testing with inflate
-        try:
-            manifest = mast.Tesscut.download_cutouts(coord, 5, path=str(tmpdir))
-            assert isinstance(manifest, Table)
-            assert len(manifest) >= 1
-            assert manifest["Local Path"][0][-4:] == "fits"
-            for row in manifest:
-                assert os.path.isfile(row['Local Path'])
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        manifest = mast.Tesscut.download_cutouts(coordinates=coord, size=5, path=str(tmpdir))
+        assert isinstance(manifest, Table)
+        assert len(manifest) >= 1
+        assert manifest["Local Path"][0][-4:] == "fits"
+        for row in manifest:
+            assert os.path.isfile(row['Local Path'])
 
-        try:
-            manifest = mast.Tesscut.download_cutouts(coord, 5,
-                                                     sector=1, path=str(tmpdir))
-            assert isinstance(manifest, Table)
-            assert len(manifest) == 1
-            assert manifest["Local Path"][0][-4:] == "fits"
-            for row in manifest:
-                assert os.path.isfile(row['Local Path'])
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        manifest = mast.Tesscut.download_cutouts(coordinates=coord, size=5, sector=1, path=str(tmpdir))
+        assert isinstance(manifest, Table)
+        assert len(manifest) == 1
+        assert manifest["Local Path"][0][-4:] == "fits"
+        assert os.path.isfile(manifest[0]['Local Path'])
 
-        try:
-            manifest = mast.Tesscut.download_cutouts(coord, [5, 7]*u.pix, path=str(tmpdir))
-            assert isinstance(manifest, Table)
-            assert len(manifest) >= 1
-            assert manifest["Local Path"][0][-4:] == "fits"
-            for row in manifest:
-                assert os.path.isfile(row['Local Path'])
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        manifest = mast.Tesscut.download_cutouts(coordinates=coord, size=[5, 7]*u.pix, path=str(tmpdir))
+        assert isinstance(manifest, Table)
+        assert len(manifest) >= 1
+        assert manifest["Local Path"][0][-4:] == "fits"
+        for row in manifest:
+            assert os.path.isfile(row['Local Path'])
 
-        # Testing without inflate
-        try:
-            manifest = mast.Tesscut.download_cutouts(coord, 5, path=str(tmpdir), inflate=False)
-            assert isinstance(manifest, Table)
-            assert len(manifest) == 1
-            assert manifest["Local Path"][0][-3:] == "zip"
-            assert os.path.isfile(manifest[0]['Local Path'])
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        manifest = mast.Tesscut.download_cutouts(coordinates=coord, size=5, path=str(tmpdir), inflate=False)
+        assert isinstance(manifest, Table)
+        assert len(manifest) == 1
+        assert manifest["Local Path"][0][-3:] == "zip"
+        assert os.path.isfile(manifest[0]['Local Path'])
+
+        manifest = mast.Tesscut.download_cutouts(objectname="TIC 32449963", size=5, path=str(tmpdir))
+        assert isinstance(manifest, Table)
+        assert len(manifest) >= 1
+        assert manifest["Local Path"][0][-4:] == "fits"
+        for row in manifest:
+            assert os.path.isfile(row['Local Path'])
 
     def test_tesscut_get_cutouts(self, tmpdir):
 
-        # Note: try excepts will be removed when the service goes live
         coord = SkyCoord(107.18696, -70.50919, unit="deg")
-        try:
-            cutout_hdus_list = mast.Tesscut.get_cutouts(coord, 5)
-            assert isinstance(cutout_hdus_list, list)
-            assert len(cutout_hdus_list) >= 1
-            assert isinstance(cutout_hdus_list[0], fits.HDUList)
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
 
-        try:
-            cutout_hdus_list = mast.Tesscut.get_cutouts(coord, 5, sector=1)
-            assert isinstance(cutout_hdus_list, list)
-            assert len(cutout_hdus_list) == 1
-            assert isinstance(cutout_hdus_list[0], fits.HDUList)
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        cutout_hdus_list = mast.Tesscut.get_cutouts(coordinates=coord, size=5)
+        assert isinstance(cutout_hdus_list, list)
+        assert len(cutout_hdus_list) >= 1
+        assert isinstance(cutout_hdus_list[0], fits.HDUList)
 
-        try:
-            cutout_hdus_list = mast.Tesscut.get_cutouts(coord, [2, 4]*u.arcmin)
-            assert isinstance(cutout_hdus_list, list)
-            assert len(cutout_hdus_list) >= 1
-            assert isinstance(cutout_hdus_list[0], fits.HDUList)
-        except RemoteServiceError:
-            pass  # service is not live yet so can't test
+        cutout_hdus_list = mast.Tesscut.get_cutouts(coordinates=coord, size=5, sector=1)
+        assert isinstance(cutout_hdus_list, list)
+        assert len(cutout_hdus_list) == 1
+        assert isinstance(cutout_hdus_list[0], fits.HDUList)
+
+        cutout_hdus_list = mast.Tesscut.get_cutouts(coordinates=coord, size=[2, 4]*u.arcmin)
+        assert isinstance(cutout_hdus_list, list)
+        assert len(cutout_hdus_list) >= 1
+        assert isinstance(cutout_hdus_list[0], fits.HDUList)
+
+        cutout_hdus_list = mast.Tesscut.get_cutouts(objectname="TIC 32449963", size=5)
+        assert isinstance(cutout_hdus_list, list)
+        assert len(cutout_hdus_list) >= 1
+        assert isinstance(cutout_hdus_list[0], fits.HDUList)

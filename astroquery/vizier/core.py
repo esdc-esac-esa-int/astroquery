@@ -7,8 +7,8 @@ import json
 import copy
 import re
 
-from astropy.extern import six
-from astropy.extern.six import BytesIO
+import six
+from six import BytesIO
 import astropy.units as u
 import astropy.coordinates as coord
 import astropy.table as tbl
@@ -241,7 +241,7 @@ class VizierClass(BaseQuery):
 
         Parameters
         ----------
-        catalog : str or list, optional
+        catalog : str, Resource, or list, optional
             The catalog(s) that will be retrieved
 
         Returns
@@ -250,7 +250,7 @@ class VizierClass(BaseQuery):
             Returned if asynchronous method used
         """
 
-        if not isinstance(catalog, six.string_types):
+        if not isinstance(catalog, six.string_types + (votable.tree.Resource,)):
             catalog = list(catalog)
         data_payload = self._args_to_payload(catalog=catalog)
         if get_query_payload:
@@ -423,8 +423,8 @@ class VizierClass(BaseQuery):
                 h_box = coord.Angle(height)
                 if w_box.unit != h_box.unit:
                     h_box = h_box.to(w_box.unit)
-                w_unit, w_value = _parse_angle(h_box)
-                h_unit, h_value = _parse_angle(w_box)
+                w_unit, w_value = _parse_angle(w_box)
+                h_unit, h_value = _parse_angle(h_box)
                 key = "-c.b" + w_unit
                 center[key] = "x".join([str(w_value), str(h_value)])
         else:
@@ -443,7 +443,7 @@ class VizierClass(BaseQuery):
         return response
 
     def query_constraints_async(self, catalog=None, return_type='votable',
-                                cache=True,
+                                cache=True, get_query_payload=False,
                                 **kwargs):
         """
         Send a query to Vizier in which you specify constraints with
@@ -502,6 +502,8 @@ class VizierClass(BaseQuery):
             catalog=catalog,
             column_filters=kwargs,
             center={'-c.rd': 180})
+        if get_query_payload:
+            return data_payload
         response = self._request(
             method='POST', url=self._server_to_url(return_type=return_type),
             data=data_payload, timeout=self.TIMEOUT, cache=cache)
@@ -515,15 +517,20 @@ class VizierClass(BaseQuery):
         body = OrderedDict()
         center = kwargs.get('center')
         # process: catalog
-        catalog = kwargs.get('catalog', self.catalog)
+        catalog = kwargs.get('catalog') or self.catalog
 
         if catalog is not None:
             if isinstance(catalog, six.string_types):
                 body['-source'] = catalog
             elif isinstance(catalog, list):
+                catalog = [item.name if hasattr(item, 'name') else item
+                           for item in catalog]
                 body['-source'] = ",".join(catalog)
+            elif hasattr(catalog, 'name'):
+                # this is probably a votable Resource, but no harm in duck-typing on `name`
+                body['-source'] = catalog.name
             else:
-                raise TypeError("Catalog must be specified as list or string")
+                raise TypeError("Catalog must be specified as list, string, or Resource")
         # process: columns
         columns = kwargs.get('columns', copy.copy(self.columns))
 

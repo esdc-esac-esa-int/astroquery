@@ -5,6 +5,9 @@ import glob
 import os
 import sys
 
+# Workaround for https://github.com/pypa/pip/issues/6163
+sys.path.insert(0, os.path.dirname(__file__))
+
 import ah_bootstrap
 from setuptools import setup
 
@@ -19,6 +22,7 @@ from astropy_helpers.setup_helpers import (
     register_commands, get_debug_option, get_package_info)
 from astropy_helpers.git_helpers import get_git_devstr
 from astropy_helpers.version_helpers import generate_version_py
+
 
 # Get some values from the setup.cfg
 try:
@@ -47,7 +51,7 @@ LONG_DESCRIPTION = package.__doc__
 builtins._ASTROPY_PACKAGE_NAME_ = PACKAGENAME
 
 # VERSION should be PEP386 compatible (http://www.python.org/dev/peps/pep-0386)
-VERSION = '0.3.9.dev'
+VERSION = '0.4.dev'
 
 # Indicates if this version is a release version
 RELEASE = 'dev' not in VERSION
@@ -110,15 +114,19 @@ for root, dirs, files in os.walk(PACKAGENAME):
                     os.path.relpath(root, PACKAGENAME), filename))
 package_info['package_data'][PACKAGENAME].extend(c_files)
 
-required_packages = ['astropy>=1.0', 'requests>=2.4.3', 'keyring>=4.0',
-                     'beautifulsoup4>=4.3.2', 'html5lib>=0.999']
+required_packages = ['astropy>=2.0', 'requests>=2.4.3', 'keyring>=4.0',
+                     'beautifulsoup4>=4.3.2', 'html5lib>=0.999', 'six']
+
+extras_require = {
+    'test': ['pytest-astropy', 'photutils', 'scipy']
+}
 
 setup(name=PACKAGENAME,
       version=VERSION,
       description=DESCRIPTION,
       scripts=scripts,
       requires=['astropy', 'requests', 'keyring', 'beautifulsoup4',
-                'html5lib'],
+                'html5lib', 'six'],
       install_requires=required_packages,
       include_package_data=True,
       provides=[PACKAGENAME],
@@ -127,5 +135,7 @@ setup(name=PACKAGENAME,
       zip_safe=False,
       use_2to3=False,
       entry_points=entry_points,
+      extras_require=extras_require,
+      tests_require=['pytest_astropy'],
       **package_info
 )

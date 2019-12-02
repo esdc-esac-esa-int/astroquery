@@ -5,11 +5,15 @@ import re
 
 import astropy.units as u
 import astropy.io.ascii as asciitable
+from six import PY2
 
 from ..query import BaseQuery
 from ..utils import async_to_sync, prepend_docstr_nosections
 from . import conf
 from ..exceptions import TableParseError
+
+if not PY2:
+    import html  # html is available in Py3 stdlib, but not in Py2
 
 __all__ = ['Nist', 'NistClass']
 
@@ -119,6 +123,8 @@ class NistClass(BaseQuery):
         request_payload["enrg_out"] = "on"
         request_payload["J_out"] = "on"
         request_payload["page_size"] = 15
+        request_payload["remove_js"] = "on"
+        request_payload["show_wn"] = 1
         return request_payload
 
     @prepend_docstr_nosections("\n" + _args_to_payload.__doc__)
@@ -144,7 +150,7 @@ class NistClass(BaseQuery):
 
     def _parse_result(self, response, verbose=False):
         """
-        Parses the results form the HTTP response to `astropy.table.Table`.
+        Parses the results from the HTTP response to `astropy.table.Table`.
 
         Parameters
         ----------
@@ -167,6 +173,8 @@ class NistClass(BaseQuery):
         try:
             table = _strip_blanks(pre)
             table = links_re.sub(r'\1', table)
+            if not PY2:
+                table = html.unescape(table)
             table = asciitable.read(table, Reader=asciitable.FixedWidth,
                                     data_start=3, delimiter='|')
             return table

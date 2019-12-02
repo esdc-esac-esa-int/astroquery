@@ -8,7 +8,7 @@ import pytest
 from astropy.tests.helper import remote_data
 from astropy import coordinates
 from astropy import units as u
-from astropy.extern.six.moves.urllib_parse import urlparse
+from six.moves.urllib_parse import urlparse
 
 from .. import Alma
 
@@ -173,7 +173,12 @@ class TestAlma:
         # Apr 25, 2017: 150
         # Jul 2, 2017: 160
         # May 9, 2018: 162
-        assert len(result) == 162
+        # March 18, 2019: 171 (seriously, how do they keep changing history?)
+        assert len(result) == 171
+
+        result = alma.query(payload={'member_ous_id': 'uid://A001/X11a2/X11'},
+                            science=True)
+        assert len(result) == 1
 
     # As of April 2017, these data are *MISSING FROM THE ARCHIVE*.
     # This has been reported, as it is definitely a bug.
@@ -265,3 +270,24 @@ class TestAlma:
 
         # There are 10 small files, but only 8 unique
         assert len(data) == 8
+
+    def test_keywords(self, temp_dir):
+
+        alma = Alma()
+        alma.cache_location = temp_dir
+
+        result = alma.query(payload={'spatial_resolution': '<0.1',
+                                     'science_keyword':
+                                     ['High-mass star formation',
+                                      'Disks around high-mass stars']},
+                            public=False, cache=False)
+
+        assert len(result) >= 72
+        assert 'Orion_Source_I' in result['Source name']
+
+
+@remote_data
+def test_project_metadata():
+    alma = Alma()
+    metadata = alma.get_project_metadata('2013.1.00269.S')
+    assert metadata == ['Sgr B2, a high-mass molecular cloud in our Galaxy\'s Central Molecular Zone, is the most extreme site of ongoing star formation in the Local Group in terms of its gas content, temperature, and velocity dispersion. If any cloud in our galaxy is analogous to the typical cloud at the universal peak of star formation at z~2, this is it. We propose a 6\'x6\' mosaic in the 3mm window targeting gas thermometer lines, specifically CH3CN and its isotopologues. We will measure the velocity dispersion and temperature of the molecular gas on all scales (0.02 - 12 pc, 0.5" - 5\') within the cloud, which will yield resolved measurements of the Mach number and the sonic scale of the gas. We will assess the relative importance of stellar feedback and turbulence on the star-forming gas, determining how extensive the feedback effects are within an ultradense environment. The observations will provide constraints on the inputs to star formation theories and will determine their applicability in extremely dense, turbulent, and hot regions. Sgr B2 will be used as a testing ground for star formation theories in an environment analogous to high-z starburst clouds in which they must be applied.']

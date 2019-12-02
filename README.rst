@@ -8,25 +8,13 @@
    :target: https://travis-ci.org/astropy/astroquery
    :alt: Travis CI Status
 
-.. image:: https://ci.appveyor.com/api/projects/status/srronytiov4mkbna/branch/master?svg=true
-   :target: https://ci.appveyor.com/project/Astropy/astroquery
-   :alt: Appveyor CI Status
-
 .. image:: https://coveralls.io/repos/astropy/astroquery/badge.png
    :target: https://coveralls.io/r/astropy/astroquery
    :alt: Coverage Status
 
-.. image:: https://badges.gitter.im/astropy/astroquery.png
-   :target: https://gitter.im/astropy/astroquery
-   :alt: Gitter
-
 .. image:: https://zenodo.org/badge/DOI/10.5281/zenodo.1160627.svg
    :target: https://doi.org/10.5281/zenodo.1160627
    :alt: Zenodo
-
-.. .. image:: https://d2weczhvl823v0.cloudfront.net/astropy/astroquery/trend.png
-..    :alt: Bitdeli badge
-..    :target: https://bitdeli.com/free
 
 
 ==================================
@@ -50,8 +38,8 @@ website <http://simbad.u-strasbg.fr/simbad/>`_, use the ``simbad`` sub-package:
 Installation and Requirements
 -----------------------------
 
-Astroquery works with Python 2.7 and 3.3 or later.
-As an `astropy`_ affiliate, astroquery requires `astropy`_ version 0.4 or later.
+Astroquery works with Python 3.6 or later.
+As an `astropy`_ affiliate, astroquery requires `astropy`_ version 2.0 or later.
 
 astroquery uses the `requests <http://docs.python-requests.org/en/latest/>`_
 module to communicate with the internet.  `BeautifulSoup
@@ -116,6 +104,7 @@ The following modules have been completed using a common API:
   * `Atomic Line List <http://astroquery.readthedocs.io/en/latest/atomic/atomic.html>`_: A collection of more than 900,000 atomic transitions.
   * `Besancon <http://astroquery.readthedocs.io/en/latest/besancon/besancon.html>`_: Model of stellar population synthesis in the Galaxy.
   * `CDS MOC Service <https://astroquery.readthedocs.io/en/latest/cds/cds.html>`_: A collection of all-sky survey coverage maps.
+  * `CADC <https://astroquery.readthedocs.io/en/latest/cadc/cadc.html>`_: Canadian Astronomy Data Centre.
   * `ESASky <http://astroquery.readthedocs.io/en/latest/esasky/esasky.html>`_: ESASky is a science driven discovery portal providing easy visualizations and full access to the entire sky as observed with ESA Space astronomy missions.
   * `ESO Archive <http://astroquery.readthedocs.io/en/latest/eso/eso.html>`_
   * `Gaia <http://astroquery.readthedocs.io/en/latest/gaia/gaia.html>`_: European Space Agency Gaia Archive.
@@ -149,6 +138,7 @@ These others are functional, but do not follow a common or consistent API:
   * `Fermi <http://astroquery.readthedocs.io/en/latest/fermi/fermi.html>`_: Fermi gamma-ray telescope archive.
   * `HITRAN <http://astroquery.readthedocs.io/en/latest/hitran/hitran.html>`_: Access to the high-resolution transmission molecular absorption database.
   * `JPL Horizons <http://astroquery.readthedocs.io/en/latest/jplhorizons/jplhorizons.html>`_: JPL Solar System Dynamics Horizons Service.
+  * `JPL SBDB <http://astroquery.readthedocs.io/en/latest/jplsbdb/jplsbdb.html>`_: JPL Solar System Dynamics Small-Body Database Browser Service.
   * `Lamda <http://astroquery.readthedocs.io/en/latest/lamda/lamda.html>`_: Leiden Atomic and Molecular Database; energy levels, radiative transitions, and collisional rates for astrophysically relevant atoms and molecules.
   * `NASA Exoplanet Archive  <http://astroquery.readthedocs.io/en/latest/nasa_exoplanet_archive/nasa_exoplanet_archive.html>`_
   * `OAC API <http://astroquery.readthedocs.io/en/latest/oac/oac.html>`_: Open Astronomy Catalog REST API Service.
@@ -157,18 +147,30 @@ These others are functional, but do not follow a common or consistent API:
   * `SDSS <http://astroquery.readthedocs.io/en/latest/sdss/sdss.html>`_: Sloan Digital Sky Survey data, including optical images, spectra, and spectral templates.
   * `SHA <http://astroquery.readthedocs.io/en/latest/sha/sha.html>`_: Spitzer Heritage Archive; infrared data products from the Spitzer Space Telescope.
 
+
+Citing Astroquery
+-----------------
+
+If you use ``astroquery``, please cite the paper we published in `The
+Astronomical Journal <http://adsabs.harvard.edu/abs/2019AJ....157...98G>`__.
+
+The BibTeX entry is available from the package itself::
+
+  import astroquery
+  astroquery.__citation__
+
+
+In addition you may also want to refer to specific versions of the
+package. We create a separate Zenodo DOI for each version, they can be
+looked up at the following `Zenodo page <https://doi.org/10.5281/zenodo.591669>`__
+
+
 Additional Links
 ----------------
 
 `Download Development ZIP`_  |  `Download Development TAR`_
 
-Maintained by `Adam Ginsburg`_ and `Brigitta Sipocz <github.com/bsipocz>`_ (`astropy.astroquery@gmail.com`_)
-
-If you use ``astroquery``, please cite our `Zenodo DOI
-<https://doi.org/10.5281/zenodo.1160627>`_.
-
-(Before using Zenodo, ``astroquery`` v0.1 had a `figshare`_ DOI:
-https://doi.org/10.6084/m9.figshare.805208 )
+Maintained by `Adam Ginsburg`_ and `Brigitta Sipocz <https://github.com/bsipocz>`_ (`astropy.astroquery@gmail.com`_)
 
 
 .. _Download Development ZIP: https://github.com/astropy/astroquery/zipball/master
@@ -178,9 +180,7 @@ https://doi.org/10.6084/m9.figshare.805208 )
 .. _View on Github: https://github.com/astropy/astroquery/
 .. _docs: http://astroquery.readthedocs.io
 .. _Documentation: http://astroquery.readthedocs.io
-.. _latest release: https://github.com/astropy/astroquery/tarball/v0.2
 .. _astropy.astroquery@gmail.com: mailto:astropy.astroquery@gmail.com
 .. _Adam Ginsburg: http://www.adamgginsburg.com
 .. _Blog: http://astropy.org/astroquery-blog
 .. _API: http://astroquery.readthedocs.io/en/latest/api.html
-.. _figshare: http://figshare.com/articles/Astroquery_v0_1/805208

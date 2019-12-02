@@ -8,8 +8,8 @@ import tempfile
 import textwrap
 
 import astropy.coordinates as coord
-from astropy.extern.six.moves import urllib
-from astropy.extern import six
+from six.moves import urllib
+import six
 from astropy.io import fits
 import astropy.io.votable as votable
 import astropy.units as u
@@ -102,6 +102,7 @@ def test_send_request_post(monkeypatch):
     assert response.url == 'https://github.com/astropy/astroquery'
     assert response.data == dict(msg='ok')
     assert 'astroquery' in response.headers['User-Agent']
+    assert response.headers['User-Agent'].endswith("_testrun")
 
 
 def test_send_request_get(monkeypatch):
@@ -468,3 +469,11 @@ def test_filecontainer_get(patch_getreadablefileobj):
 def test_is_coordinate(coordinates, expected):
     out = commons._is_coordinate(coordinates)
     assert out == expected
+
+
+@pytest.mark.parametrize(('radius'),
+                         [0.01*u.deg, '0.01 deg', 0.01*u.arcmin]
+                         )
+def test_radius_to_unit(radius):
+    c = commons.radius_to_unit(radius)
+    assert c is not None

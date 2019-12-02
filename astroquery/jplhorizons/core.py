@@ -6,9 +6,10 @@ from numpy import nan as nan
 from numpy import isnan
 from numpy import ndarray
 from collections import OrderedDict
+import warnings
 
 # 2. third party imports
-from astropy.table import Column
+from astropy.table import Table, Column
 from astropy.io import ascii
 from astropy.time import Time
 
@@ -146,7 +147,8 @@ class HorizonsClass(BaseQuery):
                           closest_apparition=False, no_fragments=False,
                           quantities=conf.eph_quantities,
                           get_query_payload=False,
-                          get_raw_response=False, cache=True):
+                          get_raw_response=False, cache=True,
+                          extra_precision=False):
         """
         Query JPL Horizons for ephemerides. The ``location`` parameter
         in ``HorizonsClass`` refers in this case to the location of
@@ -433,7 +435,7 @@ class HorizonsClass(BaseQuery):
             selection; default: False. Do not use this option for
             non-cometary objects.
         quantities : integer or string, optional
-            single integer or comma-separated list in the form of a string
+            Single integer or comma-separated list in the form of a string
             corresponding to all the
             quantities to be queried from JPL Horizons using the coding
             according to the `JPL Horizons User Manual Definition of
@@ -446,6 +448,8 @@ class HorizonsClass(BaseQuery):
         get_raw_response : boolean, optional
             Return raw data as obtained by JPL Horizons without parsing the
             data into a table, default: False
+        extra_precision : boolean, optional
+            Enables extra precision in RA and DEC values; default: False
 
 
         Returns
@@ -527,7 +531,8 @@ class HorizonsClass(BaseQuery):
             ('ANG_FORMAT', ('DEG')),
             ('APPARENT', ({False: 'AIRLESS',
                            True: 'REFRACTED'}[refraction])),
-            ('REF_SYSTEM', (refsystem))])
+            ('REF_SYSTEM', (refsystem)),
+            ('EXTRA_PREC', {True: 'YES', False: 'NO'}[extra_precision])])
 
         if isinstance(self.location, dict):
             if ('lon' not in self.location or 'lat' not in self.location or
@@ -558,9 +563,12 @@ class HorizonsClass(BaseQuery):
                     'step' not in self.epochs):
                 raise ValueError("'epochs' must contain start, " +
                                  "stop, step")
-            request_payload['START_TIME'] = '"'+self.epochs['start']+'"'
-            request_payload['STOP_TIME'] = '"'+self.epochs['stop']+'"'
-            request_payload['STEP_SIZE'] = '"'+self.epochs['step']+'"'
+            request_payload['START_TIME'] = (
+                '"'+self.epochs['start'].replace("'", '')+'"')
+            request_payload['STOP_TIME'] = (
+                '"'+self.epochs['stop'].replace("'", '')+'"')
+            request_payload['STEP_SIZE'] = (
+                '"'+self.epochs['step'].replace("'", '')+'"')
         else:
             # treat epochs as scalar
             request_payload['TLIST'] = str(self.epochs)
@@ -587,6 +595,13 @@ class HorizonsClass(BaseQuery):
         response = self._request('GET', URL, params=request_payload,
                                  timeout=self.TIMEOUT, cache=cache)
         self.uri = response.url
+
+        # check length of uri
+        if len(self.uri) >= 2000:
+            warnings.warn(('The URI used in this query is very long '
+                           'and might have been truncated. The results of '
+                           'the query might be compromised. If you queried '
+                           'a list of epochs, consider querying a range.'))
 
         return response
 
@@ -755,8 +770,7 @@ class HorizonsClass(BaseQuery):
             ('REF_PLANE', {'ecliptic': 'ECLIPTIC', 'earth': 'FRAME',
                            'body': "'BODY EQUATOR'"}[refplane]),
             ('TP_TYPE', {'absolute': 'ABSOLUTE',
-                         'relative': 'RELATIVE'}[tp_type])]
-        )
+                         'relative': 'RELATIVE'}[tp_type])])
 
         # parse self.epochs
         if isinstance(self.epochs, (list, tuple, ndarray)):
@@ -768,9 +782,12 @@ class HorizonsClass(BaseQuery):
                     'step' not in self.epochs):
                 raise ValueError("'epochs' must contain start, "
                                  "stop, step")
-            request_payload['START_TIME'] = self.epochs['start']
-            request_payload['STOP_TIME'] = self.epochs['stop']
-            request_payload['STEP_SIZE'] = self.epochs['step']
+            request_payload['START_TIME'] = (
+                '"'+self.epochs['start'].replace("'", '')+'"')
+            request_payload['STOP_TIME'] = (
+                '"'+self.epochs['stop'].replace("'", '')+'"')
+            request_payload['STEP_SIZE'] = (
+                '"'+self.epochs['step'].replace("'", '')+'"')
 
         else:
             request_payload['TLIST'] = str(self.epochs)
@@ -790,11 +807,20 @@ class HorizonsClass(BaseQuery):
                                  timeout=self.TIMEOUT, cache=cache)
         self.uri = response.url
 
+        # check length of uri
+        if len(self.uri) >= 2000:
+            warnings.warn(('The URI used in this query is very long '
+                           'and might have been truncated. The results of '
+                           'the query might be compromised. If you queried '
+                           'a list of epochs, consider querying a range.'))
+
         return response
 
     def vectors_async(self, get_query_payload=False,
                       closest_apparition=False, no_fragments=False,
-                      get_raw_response=False, cache=True):
+                      get_raw_response=False, cache=True,
+                      refplane='ecliptic', aberrations='geometric',
+                      delta_T=False,):
         """
         Query JPL Horizons for state vectors. The ``location``
         parameter in ``HorizonsClass`` refers in this case to the center
@@ -828,6 +854,9 @@ class HorizonsClass(BaseQuery):
         | datetime_str     | epoch Date (str, ``Calendar Date (TDB)``)     |
         +------------------+-----------------------------------------------+
         | datetime_jd      | epoch Julian Date (float, ``JDTDB``)          |
+        +------------------+-----------------------------------------------+
+        | delta_T          | time-varying difference between TDB and UT    |
+        |                  | (float, ``delta-T``, optional)                |
         +------------------+-----------------------------------------------+
         | x                | x-component of position vector                |
         |                  | (float, au, ``X``)                            |
@@ -873,6 +902,18 @@ class HorizonsClass(BaseQuery):
         get_raw_response: boolean, optional
             Return raw data as obtained by JPL Horizons without parsing the
             data into a table, default: False
+        refplane : string
+            Reference plane for all output quantities: ``'ecliptic'``
+            (ecliptic and mean equinox of reference epoch), ``'earth'``
+            (Earth mean equator and equinox of reference epoch), or
+            ``'body'`` (body mean equator and node of date); default:
+            ``'ecliptic'``
+        aberrations : string, optional
+            Aberrations to be accounted for: [``'geometric'``,
+            ``'astrometric'``, ``'apparent'``]. Default: ``'geometric'``
+        delta_T : boolean, optional
+            Triggers output of time-varying difference between TDB and UT
+            time-scales. Default: False
 
 
         Returns
@@ -953,10 +994,14 @@ class HorizonsClass(BaseQuery):
             ('COMMAND', '"' + commandline + '"'),
             ('CENTER', ("'" + str(self.location) + "'")),
             ('CSV_FORMAT', ('"YES"')),
-            ('REF_PLANE', 'ECLIPTIC'),
+            ('REF_PLANE', {'ecliptic': 'ECLIPTIC', 'earth': 'FRAME',
+                           'body': "'BODY EQUATOR'"}[refplane]),
             ('REF_SYSTEM', 'J2000'),
             ('TP_TYPE', 'ABSOLUTE'),
             ('LABELS', 'YES'),
+            ('VECT_CORR', {'geometric': '"NONE"', 'astrometric': '"LT"',
+                           'apparent': '"LT+S"'}[aberrations]),
+            ('VEC_DELTA_T', {True: 'YES', False: 'NO'}[delta_T]),
             ('OBJ_DATA', 'YES')]
         )
 
@@ -969,9 +1014,12 @@ class HorizonsClass(BaseQuery):
                     'step' not in self.epochs):
                 raise ValueError("'epochs' must contain start, " +
                                  "stop, step")
-            request_payload['START_TIME'] = self.epochs['start']
-            request_payload['STOP_TIME'] = self.epochs['stop']
-            request_payload['STEP_SIZE'] = self.epochs['step']
+            request_payload['START_TIME'] = (
+                '"'+self.epochs['start'].replace("'", '')+'"')
+            request_payload['STOP_TIME'] = (
+                '"'+self.epochs['stop'].replace("'", '')+'"')
+            request_payload['STEP_SIZE'] = (
+                '"'+self.epochs['step'].replace("'", '')+'"')
 
         else:
             # treat epochs as a list
@@ -991,6 +1039,13 @@ class HorizonsClass(BaseQuery):
         response = self._request('GET', URL, params=request_payload,
                                  timeout=self.TIMEOUT, cache=cache)
         self.uri = response.url
+
+        # check length of uri
+        if len(self.uri) >= 2000:
+            warnings.warn(('The URI used in this query is very long '
+                           'and might have been truncated. The results of '
+                           'the query might be compromised. If you queried '
+                           'a list of epochs, consider querying a range.'))
 
         return response
 
@@ -1058,8 +1113,12 @@ class HorizonsClass(BaseQuery):
             if "rotational period in hours)" in line:
                 HGline = src[idx + 2].split('=')
                 if 'B-V' in HGline[2] and 'G' in HGline[1]:
-                    H = float(HGline[1].rstrip('G'))
-                    G = float(HGline[2].rstrip('B-V'))
+                    try:
+                        H = float(HGline[1].rstrip('G'))
+                        G = float(HGline[2].rstrip('B-V'))
+                    except ValueError:
+                        H = nan
+                        G = nan
             # read in M1, M2, k1, k2, and phcof (if available)
             if "Comet physical" in line:
                 HGline = src[idx + 2].split('=')
@@ -1130,6 +1189,8 @@ class HorizonsClass(BaseQuery):
                           names=headerline,
                           fill_values=[('.n.a.', '0'),
                                        ('n.a.', '0')])
+        # force to a masked table
+        data = Table(data, masked=True)
 
         # convert data to QTable
         # from astropy.table import QTable
@@ -1167,7 +1228,7 @@ class HorizonsClass(BaseQuery):
                                    name='phasecoeff'), index=7)
 
         # replace missing airmass values with 999 (not observable)
-        if self.query_type is 'ephemerides':
+        if self.query_type is 'ephemerides' and 'a-mass' in data.colnames:
             data['a-mass'] = data['a-mass'].filled(999)
 
         # set column definition dictionary

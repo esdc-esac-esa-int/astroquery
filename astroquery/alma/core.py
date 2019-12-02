@@ -13,9 +13,9 @@ import sys
 from pkg_resources import resource_filename
 from bs4 import BeautifulSoup
 
-from astropy.extern.six.moves.urllib_parse import urljoin, urlparse
-from astropy.extern.six import iteritems, StringIO
-from astropy.extern import six
+from six.moves.urllib_parse import urljoin, urlparse
+from six import iteritems, StringIO
+import six
 from astropy.table import Table, Column
 from astropy import log
 from astropy.utils.console import ProgressBar
@@ -271,7 +271,7 @@ class AlmaClass(QueryWithLogin):
 
         self._get_dataarchive_url()
 
-        url = urljoin(self.dataarchive_url, 'rh/submission')
+        url = urljoin(self._get_dataarchive_url(), 'rh/submission')
         log.debug("First request URL: {0}".format(url))
         # 'ALMA+uid___A002_X391d0b_X7b'
         payload = {'dataset': ['ALMA+' + clean_uid(uid) for uid in uids]}
@@ -324,7 +324,7 @@ class AlmaClass(QueryWithLogin):
         log.debug("Request ID: {0}".format(request_id))
 
         # Submit a request for the specific request ID identified above
-        submission_url = urljoin(self.dataarchive_url,
+        submission_url = urljoin(self._get_dataarchive_url(),
                                  url_helpers.join('rh/submission', request_id))
         log.debug("Submission URL: {0}".format(submission_url))
         self._staging_log['submission_url'] = submission_url
@@ -470,8 +470,7 @@ class AlmaClass(QueryWithLogin):
             if response.text == "":
                 raise RemoteServiceError("Empty return.")
             # this is a CSV-like table returned via a direct browser request
-            import pandas
-            table = Table.from_pandas(pandas.read_csv(StringIO(response.text)))
+            table = Table.read(response.text, format='ascii.csv', fast_reader=False)
 
         else:
             fixed_content = self._hack_bad_arraysize_vofix(response.content)
@@ -490,28 +489,33 @@ class AlmaClass(QueryWithLogin):
         '      <FIELD name="Band" datatype="char" ID="32817" xtype="adql:VARCHAR" arraysize="0*">\r',
         has an invalid ``arraysize`` entry.  Also, it returns a char, but it
         should be an int.
+        As of February 2019, this issue appears to be half-fixed; the arraysize
+        is no longer incorrect, but the data type remains incorrect.
 
         Since that problem was discovered and fixed, many other entries have
-        the same error.
+        the same error.  Feb 2019, the other instances are gone.
 
         According to the IVOA, the tables are wrong, not astropy.io.votable:
         http://www.ivoa.net/documents/VOTable/20130315/PR-VOTable-1.3-20130315.html#ToC11
+
+        A new issue, #1340, noted that 'Release date' and 'Mosaic' both lack data type
+        metadata, necessitating the hack below
         """
         lines = text.split(b"\n")
         newlines = []
 
         for ln in lines:
             if b'FIELD name="Band"' in ln:
-                ln = ln.replace(b'arraysize="0*"', b'arraysize="1*"')
                 ln = ln.replace(b'datatype="char"', b'datatype="int"')
-            elif b'arraysize="0*"' in ln:
-                ln = ln.replace(b'arraysize="0*"', b'arraysize="*"')
+            elif b'FIELD name="Release date"' in ln or b'FIELD name="Mosaic"' in ln:
+                ln = ln.replace(b'/>', b' arraysize="*"/>')
             newlines.append(ln)
 
         return b"\n".join(newlines)
 
     def _login(self, username=None, store_password=False,
-               reenter_password=False):
+               reenter_password=False, auth_urls=['asa.alma.cl',
+                                                  'rh-cas.alma.cl']):
         """
         Login to the ALMA Science Portal.
 
@@ -535,8 +539,26 @@ class AlmaClass(QueryWithLogin):
             else:
                 username = self.USERNAME
 
+        success = False
+        for auth_url in auth_urls:
+            # set session cookies (they do not get set otherwise)
+            cookiesetpage = self._request("GET",
+                                          urljoin(self._get_dataarchive_url(),
+                                                  'rh/forceAuthentication'),
+                                          cache=False)
+            self._login_cookiepage = cookiesetpage
+            cookiesetpage.raise_for_status()
+
+            if (auth_url+'/cas/login' in cookiesetpage.request.url):
+                # we've hit a target, we're good
+                success = True
+                break
+        if not success:
+            raise LoginError("Could not log in to any of the known ALMA "
+                             "authorization portals: {0}".format(auth_urls))
+
         # Check if already logged in
-        loginpage = self._request("GET", "https://asa.alma.cl/cas/login",
+        loginpage = self._request("GET", "https://{auth_url}/cas/login".format(auth_url=auth_url),
                                   cache=False)
         root = BeautifulSoup(loginpage.content, 'html5lib')
         if root.find('div', class_='success'):
@@ -545,22 +567,28 @@ class AlmaClass(QueryWithLogin):
 
         # Get password from keyring or prompt
         password, password_from_keyring = self._get_password(
-            "astroquery:asa.alma.cl", username, reenter=reenter_password)
+            "astroquery:{0}".format(auth_url), username, reenter=reenter_password)
 
         # Authenticate
-        log.info("Authenticating {0} on asa.alma.cl ...".format(username))
+        log.info("Authenticating {0} on {1} ...".format(username, auth_url))
         # Do not cache pieces of the login process
         data = {kw: root.find('input', {'name': kw})['value']
                 for kw in ('lt', '_eventId', 'execution')}
         data['username'] = username
         data['password'] = password
+        data['submit'] = 'LOGIN'
 
-        login_response = self._request("POST", "https://asa.alma.cl/cas/login",
-                                       params={'service':
-                                               urljoin(self.archive_url,
-                                                       'rh/login')},
+        login_response = self._request("POST", "https://{0}/cas/login".format(auth_url),
+                                       params={'service': self._get_dataarchive_url()},
                                        data=data,
                                        cache=False)
+
+        # save the login response for debugging purposes
+        self._login_response = login_response
+        # do not expose password back to user
+        del data['password']
+        # but save the parameters for debug purposes
+        self._login_parameters = data
 
         authenticated = ('You have successfully logged in' in
                          login_response.text)
@@ -572,7 +600,7 @@ class AlmaClass(QueryWithLogin):
             log.exception("Authentication failed!")
         # When authenticated, save password in keyring if needed
         if authenticated and password_from_keyring is None and store_password:
-            keyring.set_password("astroquery:asa.alma.cl", username, password)
+            keyring.set_password("astroquery:{0}".format(auth_url), username, password)
         return authenticated
 
     def get_cycle0_uid_contents(self, uid):
@@ -885,6 +913,7 @@ class AlmaClass(QueryWithLogin):
             # allowed
             self._valid_params.append('download')
             self._valid_params.append('format')
+            self._valid_params.append('member_ous_id')
         invalid_params = [k for k in payload if k not in self._valid_params]
         if len(invalid_params) > 0:
             raise InvalidQueryError("The following parameters are not accepted"
@@ -1025,6 +1054,21 @@ class AlmaClass(QueryWithLogin):
 
         tbl = Table([Column(name=k, data=v) for k, v in iteritems(columns)])
         return tbl
+
+    def get_project_metadata(self, projectid, cache=True):
+        """
+        Get the metadata - specifically, the project abstract - for a given project ID.
+        """
+        url = urljoin(self._get_dataarchive_url(), 'aq/')
+
+        assert len(projectid) == 14, "Wrong length for project ID"
+        assert projectid[4] == projectid[6] == projectid[12] == '.', "Wrong format for project ID"
+        response = self._request('GET', "{0}meta/project/{1}".format(url, projectid),
+                                 timeout=self.TIMEOUT,
+                                 cache=cache)
+        response.raise_for_status()
+
+        return response.json()
 
 
 Alma = AlmaClass()
