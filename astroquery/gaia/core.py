@@ -27,7 +27,7 @@ import os
 from datetime import datetime
 import shutil
 import astroquery.utils.tap.model.modelutils as modelutils
-
+from astropy.io.votable import parse
 
 class GaiaClass(TapPlus):
 
@@ -66,7 +66,7 @@ class GaiaClass(TapPlus):
     def load_data(self, 
                   ids, 
                   data_release=None, 
-                  data_structure='COMBINED',
+                  data_structure='INDIVIDUAL',
                   retrieval_type="ALL",
                   valid_data=True,
                   band=None,
@@ -82,7 +82,7 @@ class GaiaClass(TapPlus):
             list of identifiers
         data_release: integer, optional, default None
             data release from which data should be taken
-        data_structure: str, optional, default 'COMBINED'
+        data_structure: str, optional, default 'INDIVIDUAL'
             it can be 'INDIVIDUAL', 'COMBINED', 'RAW':
             'INDIVIDUAL' means...
             'COMBINED' means...
@@ -170,19 +170,23 @@ class GaiaClass(TapPlus):
         #r=root, d=directories, f = files
         for r, d, f in os.walk(path):
             for file in f:
-                if '.xml' in file or '.csv' in file:
-                    files[os.path.splitext(file)[0]] = os.path.join(r, file)
+                if '.fits' in file or '.xml' in file or '.csv' in file:
+                    files[file] = os.path.join(r, file)
 
         for key,value in files.items():
-            files[key] = modelutils.read_results_table_from_file(value, format)
+            if '.fits' in key or '.csv' in key:
+                files[key] = modelutils.read_results_table_from_file(value, format)
+            elif '.xml' in key:
+                files[key] = parse(value)
+
         if not output_file_specified:
             shutil.rmtree(path)
         else:
-            print("output_file = ", output_file)
+            print("output_file =", output_file)
 
-        print("List of product available:")
+        print("List of products available:")
         for key,value in files.items():
-            print("Product = ", key)
+            print("Product =", key)
 
         return files
 
