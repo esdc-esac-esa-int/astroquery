@@ -875,31 +875,52 @@ So, the first step, is to execute a query to obtain the identifiers, and then yo
   >>> # Retrieve data products
   >>> all = Gaia.load_data(ids=ids, format='fits', data_release=2)
 Retrieving data.
+
 Done.
+
 List of products available:
+
 Product = RVS_SPECTRA-Gaia DR2 4203426768245304192.fits
+
 Product = RVS_SPECTRA-Gaia DR2 4257750098718805248.fits
+
 Product = XP_BASIS-Gaia DR2 4203426768245304192.fits
+
 Product = MCMC-Gaia DR2 4257750098718805248.fits
+
 Product = XP_SPECTRA-Gaia DR2 4257750098718805248.fits
+
 Product = EPOCH_PHOTOMETRY-Gaia DR2 4257750098718805248.fits
+
 Product = XP_BASIS-Gaia DR2 4257750098718805248.fits
+
 Product = MCMC-Gaia DR2 4203426768245304192.fits
+
 Product = XP_SPECTRA-Gaia DR2 4203426768245304192.fits
 	
   >>> # Get one data product above listed
   >>> all['RVS_SPECTRA-Gaia DR2 4203426768245304192.fits']
+
 <Table length=2400>
+
 wavelength    flux     flux_error
-    nm                           
- float64    float32     float32  
+
+nm                  
+             
+float64    float32     float32  
+ 
 ---------- ---------- -----------
- 846.0  1.1543361  0.14655493
+
+846.0  1.1543361  0.14655493
+ 
 846.01  1.0716769  0.09160478
-   ...        ...         ...
+
+...        ...         ...
+   
 869.77  1.0126361  0.03356205
+
 869.78  1.0286258 0.035302058
-  >>> 
+
 
 
 Reference/API
