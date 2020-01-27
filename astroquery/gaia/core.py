@@ -63,15 +63,70 @@ class GaiaClass(TapPlus):
         else:
             self.__gaiadata = datalink_handler
 
-    def load_data(self, 
-                  ids, 
-                  data_release=None, 
+    def dual_login(self, data=None, verbose=False):
+        if data is None:
+            data = self.__gaiadata
+
+        correct = True
+        try:
+            TapPlus.login(self, verbose)
+        except:
+            print ("Error logging in tap")
+            correct = False
+        if correct == True:
+            try:
+                TapPlus.login(data, verbose=verbose)
+            except:
+                print ("Error logging in data")
+                TapPlus.logout(self, verbose)
+
+    def dual_login_gui(self, data=None, verbose=False):
+        if data is None:
+            data = self.__gaiadata
+
+        correct = True
+        try:
+            TapPlus.login_gui(self, verbose)
+        except:
+            print ("Error logging in tap")
+            correct = False
+        if correct == True:
+            try:
+                TapPlus.login_gui(data, verbose=verbose)
+            except:
+                print ("Error logging in data")
+                print ("Logging out from tap")
+                TapPlus.logout(self, verbose)
+
+    def dual_logout(self, data=None, verbose=False):
+        if data is None:
+            data = self.__gaiadata
+
+        correct = True
+        try:
+            TapPlus.logout(self, verbose=verbose)
+        except:
+            print ("Error logging out tap")
+            correct = False
+        if correct == True:
+            print("OK")
+            try:
+                TapPlus.logout(data, verbose=verbose)
+            except:
+                correct = False
+                print ("Error logging out data")
+        if correct == True:
+            print("OK")
+
+    def load_data(self,
+                  ids,
+                  data_release=None,
                   data_structure='INDIVIDUAL',
                   retrieval_type="ALL",
                   valid_data=True,
                   band=None,
-                  format="votable", 
-                  output_file=None, 
+                  format="votable",
+                  output_file=None,
                   verbose=False):
         """Loads the specified table
         TAP+ only
