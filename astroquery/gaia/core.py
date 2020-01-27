@@ -69,7 +69,7 @@ class GaiaClass(TapPlus):
 
         correct = True
         try:
-            TapPlus.login(self, verbose)
+            TapPlus.login(self, verbose=verbose)
         except:
             print ("Error logging in tap")
             correct = False
@@ -78,7 +78,7 @@ class GaiaClass(TapPlus):
                 TapPlus.login(data, verbose=verbose)
             except:
                 print ("Error logging in data")
-                TapPlus.logout(self, verbose)
+                TapPlus.logout(verbose=verbose)
 
     def dual_login_gui(self, data=None, verbose=False):
         if data is None:
@@ -86,7 +86,7 @@ class GaiaClass(TapPlus):
 
         correct = True
         try:
-            TapPlus.login_gui(self, verbose)
+            TapPlus.login_gui(self, verbose=verbose)
         except:
             print ("Error logging in tap")
             correct = False
@@ -96,7 +96,7 @@ class GaiaClass(TapPlus):
             except:
                 print ("Error logging in data")
                 print ("Logging out from tap")
-                TapPlus.logout(self, verbose)
+                TapPlus.logout(self, verbose=verbose)
 
     def dual_logout(self, data=None, verbose=False):
         if data is None:
