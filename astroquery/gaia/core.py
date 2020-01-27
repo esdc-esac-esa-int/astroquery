@@ -78,7 +78,8 @@ class GaiaClass(TapPlus):
                 TapPlus.login(data, verbose=verbose)
             except:
                 print ("Error logging in data")
-                TapPlus.logout(verbose=verbose)
+                print ("Logging out from tap")
+                TapPlus.logout(self, verbose=verbose)
 
     def dual_login_gui(self, data=None, verbose=False):
         if data is None:
