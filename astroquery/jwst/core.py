@@ -40,12 +40,12 @@ class JwstClass(object):
 
     def __init__(self, tap_plus_handler=None, data_handler=None):
         if tap_plus_handler is None:
-            self.__jwsttap = TapPlus(url="http://jwstdev.n1data.lan:8080/server/tap")
+            self.__jwsttap = TapPlus(url="http://jwstdev.esac.esa.int/server/tap")
         else:
             self.__jwsttap = tap_plus_handler
             
         if data_handler is None:
-            self.__jwstdata = JwstDataHandler(base_url="http://jwstdev.n1data.lan:8080/server/data?");
+            self.__jwstdata = JwstDataHandler(base_url="http://jwstdev.esac.esa.int/server/data?");
         else:
             self.__jwstdata = data_handler;
 
