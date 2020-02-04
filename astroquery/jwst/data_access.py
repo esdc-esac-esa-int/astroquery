@@ -22,7 +22,7 @@ __all__ = ['JwstData', 'JwstDataHandler']
 class JwstDataHandler(object):
     def __init__(self, base_url=None):
         if base_url is None:
-            self.base_url = "http://jwstdev.n1data.lan:8080/server/data?"
+            self.base_url = "http://jwstdev.esac.esa.int/server/data?"
         else:
             self.base_url = base_url
             
