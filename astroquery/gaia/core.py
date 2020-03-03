@@ -28,6 +28,8 @@ from datetime import datetime
 import shutil
 import astroquery.utils.tap.model.modelutils as modelutils
 from astropy.io.votable import parse
+from astropy.io.votable.tree import VOTableFile, Resource, Field
+from astropy.table import Table
 
 class GaiaClass(TapPlus):
 
@@ -233,7 +235,10 @@ class GaiaClass(TapPlus):
             if '.fits' in key or '.csv' in key:
                 files[key] = modelutils.read_results_table_from_file(value, format)
             elif '.xml' in key:
-                files[key] = parse(value)
+                tables = []
+                for table in parse(value).iter_tables():
+                    tables.append(table)
+                files[key] = tables
 
         if not output_file_specified:
             shutil.rmtree(path)
