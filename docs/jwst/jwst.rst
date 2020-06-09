@@ -145,7 +145,7 @@ Examples
   0.8042331552744052 00000000-0000-0000-babe-5c1ec63d3301 ... PRIME        S
 
 1.3. Query by target name
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To provide the target coordinates based on its name and execute the query region method.
 It uses three different catalogs to resolve the coordinates: SIMBAD, NED and VIZIER. An additional target
