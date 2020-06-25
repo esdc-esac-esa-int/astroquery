@@ -43,6 +43,9 @@ class Conf(_config.ConfigNamespace):
     JWST_PLANE_TABLE = _config.ConfigItem("jwst.plane",
                                          "JWST plane table")
 
+    JWST_OBS_MEMBER_TABLE = _config.ConfigItem("jwst.observationmember",
+                                         "JWST observation member table")
+
     JWST_OBSERVATION_TABLE_RA = _config.ConfigItem("targetposition_coordinates_cval1",
                                             "Name of RA parameter in table")
 
