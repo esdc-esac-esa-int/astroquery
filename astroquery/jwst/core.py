@@ -40,7 +40,8 @@ from .data_access import JwstDataHandler
 from builtins import isinstance
 
 __all__ = ['Jwst', 'JwstClass']
-    
+
+
 class JwstClass(object):
 
     """
@@ -55,27 +56,32 @@ class JwstClass(object):
     JWST_ARTIFACT_TABLE = conf.JWST_ARTIFACT_TABLE
 
     JWST_DEFAULT_COLUMNS = ['observationid', 'calibrationlevel', 'public',
-                            'dataproducttype', 'instrument_name', 'energy_bandpassname',
-                            'target_name', 'target_ra', 'target_dec', 'position_bounds_center',
+                            'dataproducttype', 'instrument_name',
+                            'energy_bandpassname', 'target_name', 'target_ra',
+                            'target_dec', 'position_bounds_center',
                             'position_bounds_spoly']
-    
+
     PLANE_DATAPRODUCT_TYPES = ['image', 'cube', 'measurements', 'spectrum']
-    ARTIFACT_PRODUCT_TYPES = ['info', 'thumbnail', 'auxiliary', 'science', 'preview']
+    ARTIFACT_PRODUCT_TYPES = ['info', 'thumbnail', 'auxiliary', 'science',
+                              'preview']
     INSTRUMENT_NAMES = ['NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS']
     TARGET_RESOLVERS = ['ALL', 'SIMBAD', 'NED', 'VIZIER']
     CAL_LEVELS = ['ALL', 1, 2, 3]
+    REQUESTED_OBSERVATION_ID = "Missing required argument: 'observation_id'"
 
     def __init__(self, tap_plus_handler=None, data_handler=None):
         if tap_plus_handler is None:
-            self.__jwsttap = TapPlus(url="http://jwstdev.esac.esa.int/server/tap", data_context='data')
+            self.__jwsttap = TapPlus(url="http://jwstdev.esac.esa.int/"
+                                     "server/tap", data_context='data')
         else:
             self.__jwsttap = tap_plus_handler
-            
+
         if data_handler is None:
-            self.__jwstdata = JwstDataHandler(base_url="http://jwstdev.esac.esa.int/server/data?");
+            self.__jwstdata = JwstDataHandler(base_url="http://jwstdev"
+                                              ".esac.esa.int/server/data?")
             # self.__jwstdata = self.__jwsttap;
         else:
-            self.__jwstdata = data_handler;
+            self.__jwstdata = data_handler
 
     def load_tables(self, only_names=False, include_shared_tables=False,
                     verbose=False):
@@ -140,7 +146,8 @@ class JwstClass(object):
             if True, the results are saved in a file instead of using memory
         upload_resource: str, optional, default None
             resource to be uploaded to UPLOAD_SCHEMA
-        upload_table_name: str, required if uploadResource is provided, default None
+        upload_table_name: str, required if uploadResource is provided
+            Default None
             resource temporary table name associated to the uploaded resource
 
         Returns
@@ -179,26 +186,27 @@ class JwstClass(object):
         dump_to_file : bool, optional, default 'False'
             if True, the results are saved in a file instead of using memory
         background : bool, optional, default 'False'
-            when the job is executed in asynchronous mode, this flag specifies whether
-            the execution will wait until results are available
+            when the job is executed in asynchronous mode, this flag specifies
+            whether the execution will wait until results are available
         upload_resource: str, optional, default None
             resource to be uploaded to UPLOAD_SCHEMA
-        upload_table_name: str, required if uploadResource is provided, default None
+        upload_table_name: str, required if uploadResource is provided
+            Default None
             resource temporary table name associated to the uploaded resource
 
         Returns
         -------
         A Job object
         """
-        return self.__jwsttap.launch_job_async(query,
-                                               name=name,
-                                               output_file=output_file,
-                                               output_format=output_format,
-                                               verbose=verbose,
-                                               dump_to_file=dump_to_file,
-                                               background=background,
-                                               upload_resource=upload_resource,
-                                               upload_table_name=upload_table_name)
+        return (self.__jwsttap.launch_job_async(query,
+                name=name,
+                output_file=output_file,
+                output_format=output_format,
+                verbose=verbose,
+                dump_to_file=dump_to_file,
+                background=background,
+                upload_resource=upload_resource,
+                upload_table_name=upload_table_name))
 
     def load_async_job(self, jobid=None, name=None, verbose=False):
         """Loads an asynchronous job
@@ -268,7 +276,8 @@ class JwstClass(object):
         ----------
         coordinate : astropy.coordinate, mandatory
             coordinates center point
-        radius : astropy.units, required if no 'width' nor 'height' are provided
+        radius : astropy.units, required if no 'width' nor 'height'
+            are provided
             radius (deg)
         width : astropy.units, required if no 'radius' is provided
             box width
@@ -279,20 +288,23 @@ class JwstClass(object):
         cal_level : object, optional, default 'Top'
             get the planes with the given calibration level. Options are:
             'Top': str, only the planes with the highest calibration level
-            1,2,3: int, the given calibration level 
+            1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of the
+            given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of
+            the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
             get the observations from the given proposal ID.
         show_all_columns : bool, optional, default 'False'
-            flag to show all available columns in the output. Default behaviour is to show the most
-            representative columns only
+            flag to show all available columns in the output.
+            Default behaviour is to show the most representative columns only
         only_public : bool, optional, default 'False'
             flag to show only metadata corresponding to public observations
         async_job : bool, optional, default 'False'
@@ -308,7 +320,7 @@ class JwstClass(object):
         coord = self.__get_coord_input(coordinate, "coordinate")
         job = None
         if radius is not None:
-            job = self.__cone_search(coord, radius, 
+            job = self.__cone_search(coord, radius,
                                      only_public=only_public,
                                      observation_id=observation_id,
                                      cal_level=cal_level,
@@ -326,13 +338,13 @@ class JwstClass(object):
             widthDeg = widthQuantity.to(units.deg)
             heightDeg = heightQuantity.to(units.deg)
 
-            observationid_condition = self.__get_observationid_condition(observation_id)
-            cal_level_condition = self.__get_callevel_condition(cal_level) 
+            obsid_cond = self.__get_observationid_condition(observation_id)
+            cal_level_condition = self.__get_callevel_condition(cal_level)
             public_condition = self.__get_public_condition(only_public)
-            prod_type_condition = self.__get_plane_dataproducttype_condition(prod_type)
-            instrument_name_condition = self.__get_instrument_name_condition(instrument_name)
-            filter_name_condition = self.__get_filter_name_condition(filter_name)
-            proposal_id_condition = self.__get_proposal_id_condition(proposal_id)
+            prod_cond = self.__get_plane_dataproducttype_condition(prod_type)
+            instr_cond = self.__get_instrument_name_condition(instrument_name)
+            filter_name_cond = self.__get_filter_name_condition(filter_name)
+            props_id_cond = self.__get_proposal_id_condition(proposal_id)
 
             columns = str(', '.join(self.JWST_DEFAULT_COLUMNS))
             if show_all_columns:
@@ -340,8 +352,9 @@ class JwstClass(object):
 
             query = "SELECT DISTANCE(POINT('ICRS'," +\
                 str(self.JWST_MAIN_TABLE_RA) + "," +\
-                str(self.JWST_MAIN_TABLE_DEC) +"), \
-                POINT('ICRS'," + str(ra) + "," + str(dec) +")) AS dist, "+columns+" \
+                str(self.JWST_MAIN_TABLE_DEC) + "), \
+                POINT('ICRS'," + str(ra) + "," + str(dec) + ")) "\
+                "AS dist, "+columns+" \
                 FROM " + str(self.JWST_MAIN_TABLE) + " \
                 WHERE CONTAINS(\
                 POINT('ICRS'," +\
@@ -350,13 +363,13 @@ class JwstClass(object):
                 BOX('ICRS'," + str(ra) + "," + str(dec)+", " +\
                 str(widthDeg.value)+", " +\
                 str(heightDeg.value)+"))=1 " +\
-                observationid_condition +\
+                obsid_cond +\
                 cal_level_condition +\
                 public_condition +\
-                prod_type_condition +\
-                instrument_name_condition + \
-                filter_name_condition + \
-                proposal_id_condition + \
+                prod_cond +\
+                instr_cond + \
+                filter_name_cond + \
+                props_id_cond + \
                 "ORDER BY dist ASC"
             print(query)
             if async_job:
@@ -382,7 +395,8 @@ class JwstClass(object):
         ----------
         coordinate : astropy.coordinates, mandatory
             coordinates center point
-        radius : astropy.units, required if no 'width' nor 'height' are provided
+        radius : astropy.units, required if no 'width' nor 'height'
+            are provided
             radius (deg)
         width : astropy.units, required if no 'radius' is provided
             box width
@@ -396,10 +410,13 @@ class JwstClass(object):
             1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of the
+            given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of
+            the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
@@ -407,8 +424,8 @@ class JwstClass(object):
         only_public : bool, optional, default 'False'
             flag to show only metadata corresponding to public observations
         show_all_columns : bool, optional, default 'False'
-            flag to show all available columns in the output. Default behaviour is to show the most
-            representative columns only
+            flag to show all available columns in the output. Default behaviour
+            is to show the most representative columns only
         verbose : bool, optional, default 'False'
             flag to display information about the process
 
@@ -445,7 +462,8 @@ class JwstClass(object):
         ----------
         coordinate : astropy.coordinates, mandatory
             coordinates center point
-        radius : astropy.units, required if no 'width' nor 'height' are provided
+        radius : astropy.units, required if no 'width' nor 'height' are
+            provided
             radius (deg)
         width : astropy.units, required if no 'radius' is provided
             box width
@@ -459,10 +477,13 @@ class JwstClass(object):
             1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of the
+            given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of
+            the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
@@ -470,8 +491,8 @@ class JwstClass(object):
         only_public : bool, optional, default 'False'
             flag to show only metadata corresponding to public observations
         show_all_columns : bool, optional, default 'False'
-            flag to show all available columns in the output. Default behaviour is to show the most
-            representative columns only
+            flag to show all available columns in the output. Default
+            behaviour is to show the most representative columns only
         verbose : bool, optional, default 'False'
             flag to display information about the process
 
@@ -491,7 +512,7 @@ class JwstClass(object):
                                    show_all_columns=show_all_columns,
                                    verbose=verbose)
 
-    def __cone_search(self, coordinate, radius, 
+    def __cone_search(self, coordinate, radius,
                       observation_id=None,
                       cal_level="Top",
                       prod_type=None,
@@ -523,10 +544,13 @@ class JwstClass(object):
             1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of
+            the given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results
+            of the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
@@ -560,11 +584,11 @@ class JwstClass(object):
         ra_hours, dec = commons.coord_to_radec(coord)
         ra = ra_hours * 15.0  # Converts to degrees
 
-        observationid_condition = self.__get_observationid_condition(observation_id)
-        cal_level_condition = self.__get_callevel_condition(cal_level) 
+        obsid_condition = self.__get_observationid_condition(observation_id)
+        cal_level_condition = self.__get_callevel_condition(cal_level)
         public_condition = self.__get_public_condition(only_public)
-        prod_type_condition = self.__get_plane_dataproducttype_condition(prod_type)
-        instrument_name_condition = self.__get_instrument_name_condition(instrument_name)
+        prod_type_cond = self.__get_plane_dataproducttype_condition(prod_type)
+        inst_name_cond = self.__get_instrument_name_condition(instrument_name)
         filter_name_condition = self.__get_filter_name_condition(filter_name)
         proposal_id_condition = self.__get_proposal_id_condition(proposal_id)
 
@@ -579,17 +603,17 @@ class JwstClass(object):
         query = "SELECT DISTANCE(POINT('ICRS'," +\
             str(self.JWST_MAIN_TABLE_RA) + "," +\
             str(self.JWST_MAIN_TABLE_DEC) + "), \
-            POINT('ICRS'," + str(ra) + "," + str(dec) +")) AS dist, "+columns+" \
+            POINT('ICRS'," + str(ra) + "," + str(dec) + ")) AS dist, "+columns+" \
             FROM " + str(self.JWST_MAIN_TABLE) + " WHERE CONTAINS(\
             POINT('ICRS'," + str(self.JWST_MAIN_TABLE_RA) + "," +\
             str(self.JWST_MAIN_TABLE_DEC)+"),\
             CIRCLE('ICRS'," + str(ra)+"," + str(dec) + ", " +\
             str(radius_deg)+"))=1" +\
-            observationid_condition +\
+            obsid_condition +\
             cal_level_condition +\
             public_condition + \
-            prod_type_condition + \
-            instrument_name_condition + \
+            prod_type_cond + \
+            inst_name_cond + \
             filter_name_condition + \
             proposal_id_condition + \
             "ORDER BY dist ASC"
@@ -637,10 +661,13 @@ class JwstClass(object):
             1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of the
+            given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of
+            the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
@@ -648,8 +675,8 @@ class JwstClass(object):
         only_public : bool, optional, default 'False'
             flag to show only metadata corresponding to public observations
         show_all_columns : bool, optional, default 'False'
-            flag to show all available columns in the output. Default behaviour is to show the most
-            representative columns only
+            flag to show all available columns in the output. Default behaviour
+            is to show the most representative columns only
         output_file : str, optional, default None
             file name where the results are saved if dumpToFile is True.
             If this parameter is not provided, the jobid is used instead
@@ -713,10 +740,13 @@ class JwstClass(object):
             1,2,3: int, the given calibration level
         prod_type : str, optional, default None
             get the observations providing the given product type. Options are:
-            'image','cube','measurements','spectrum': str, only results of the given product type
+            'image','cube','measurements','spectrum': str, only results of the
+            given product type
         instrument_name : str, optional, default None
-            get the observations corresponding to the given instrument name. Options are:
-            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of the given instrument
+            get the observations corresponding to the given instrument name.
+            Options are:
+            'NIRISS', 'NIRSPEC', 'NIRCAM', 'MIRI', 'FGS': str, only results of
+            the given instrument
         filter_name : str, optional, default None
             get the observations made with the given filter.
         proposal_id : str, optional, default None
@@ -724,8 +754,8 @@ class JwstClass(object):
         only_public : bool, optional, default 'False'
             flag to show only metadata corresponding to public observations
         show_all_columns : bool, optional, default 'False'
-            flag to show all available columns in the output. Default behaviour is to show the most
-            representative columns only
+            flag to show all available columns in the output.
+            Default behaviour is to show the most representative columns only
         background : bool, optional, default 'False'
             when the job is executed in asynchronous mode, this flag specifies
             whether the execution will wait until results are available
@@ -764,19 +794,19 @@ class JwstClass(object):
                                   dump_to_file=dump_to_file)
 
     def query_target_name(self, target_name, target_resolver="ALL",
-                             radius=None,
-                             width=None,
-                             height=None,
-                             observation_id=None,
-                             cal_level="Top",
-                             prod_type=None,
-                             instrument_name=None,
-                             filter_name=None,
-                             proposal_id=None,
-                             only_public=False,
-                             show_all_columns=False,
-                             async_job=False,
-                             verbose=False):
+                          radius=None,
+                          width=None,
+                          height=None,
+                          observation_id=None,
+                          cal_level="Top",
+                          prod_type=None,
+                          instrument_name=None,
+                          filter_name=None,
+                          proposal_id=None,
+                          only_public=False,
+                          show_all_columns=False,
+                          async_job=False,
+                          verbose=False):
         """Launches a job
         TAP & TAP+
 
@@ -923,8 +953,8 @@ class JwstClass(object):
               verbose=False):
         """Performs a login.
         TAP+ only
-        User and password can be used or a file that contains user name and 
-        password (2 lines: one for user name and the following one for the 
+        User and password can be used or a file that contains user name and
+        password (2 lines: one for user name and the following one for the
         password)
 
         Parameters
@@ -933,7 +963,8 @@ class JwstClass(object):
             login name
         password : str, mandatory if 'file' is not provided, default None
             user password
-        credentials_file : str, mandatory if no 'user' & 'password' are provided
+        credentials_file : str, mandatory if no 'user' & 'password' are
+            provided
             file containing user and password in two lines
         verbose : bool, optional, default 'False'
             flag to display information about the process
@@ -966,8 +997,8 @@ class JwstClass(object):
         return self.__jwsttap.logout(verbose)
 
     def get_product_list(self, observation_id=None,
-                                cal_level="ALL",
-                                product_type=None):
+                         cal_level="ALL",
+                         product_type=None):
         """Get the list of products of a given JWST observation_id.
 
         Parameters
@@ -975,7 +1006,13 @@ class JwstClass(object):
         observation_id : str, mandatory
             Observation identifier.
         cal_level : str, optional
-            Calibration level. Possible values: 'ALL', 'SELECTED', '1'
+            Calibration level. Default value ia 'ALL', to download all the
+            products associated to this observation_id and lower levels.
+            Requesting more accurate levels than the one associated to the
+            observation_id is not allowed (as level 3 observations are
+            composite products based on level 2 products). To request upper
+            levels, please use get_related_observations functions first.
+            Possible values: 'ALL', '3', '2', '1'
         product_type : str, optional, default None
             List only products of the given type. If None, all products are \
             listed. Possible values: 'thumbnail', 'preview', 'info', \
@@ -988,29 +1025,28 @@ class JwstClass(object):
         self.__validate_cal_level(cal_level)
 
         if observation_id is None:
-            raise ValueError("'observation_id is a mandatory requirement'")
-
+            raise ValueError(self.REQUESTED_OBSERVATION_ID)
         plane_id, max_cal_level = self.__get_plane_id(observation_id)
-        
-        if (cal_level == 3 and cal_level>max_cal_level):
-            raise ValueError('LOOK FOR TOP');
+        if (cal_level == 3 and cal_level > max_cal_level):
+            raise ValueError("Requesting upper levels is not allowed")
+        list = self.__get_associated_planes(plane_id, cal_level,
+                                            max_cal_level, False)
 
-        list = self.__get_associated_planes(plane_id, cal_level, False)
-        
         query = "select distinct a.uri, a.filename, a.contenttype, "\
             "a.producttype, p.calibrationlevel, p.public FROM {0} p JOIN {1} "\
             "a ON (p.planeid=a.planeid) WHERE a.planeid IN {2} {3};"\
-            .format(self.JWST_PLANE_TABLE ,self.JWST_ARTIFACT_TABLE, list,
+            .format(self.JWST_PLANE_TABLE, self.JWST_ARTIFACT_TABLE, list,
                     self.__get_artifact_producttype_condition(product_type))
         job = self.__jwsttap.launch_job(query=query)
         return job.get_results()
-    
+
     def __validate_cal_level(self, cal_level):
         if (cal_level not in self.CAL_LEVELS):
             raise ValueError("This calibration level is not valid")
-    
-    def __get_associated_planes(self, plane_id, cal_level, is_url):
-        if (cal_level == 'SELECTED'):
+
+    def __get_associated_planes(self, plane_id, cal_level,
+                                max_cal_level, is_url):
+        if (cal_level == max_cal_level):
             if (not is_url):
                 list = "('{}')".format(plane_id)
             else:
@@ -1018,34 +1054,36 @@ class JwstClass(object):
         else:
             siblings = self.__get_sibling_planes(plane_id, cal_level)
             members = self.__get_member_planes(plane_id, cal_level)
-            plane_id_table = vstack([siblings, members])
+            pids_table = vstack([siblings, members])
             if (not is_url):
                 list = "('{}')".format("', '".join(
-                    plane_id_table['product_planeid'].pformat(show_name=False)))
+                    pids_table["product_planeid"].pformat(show_name=False)))
             else:
                 list = "{}".format(",".join(
-                    plane_id_table['product_planeid'].pformat(show_name=False)))
+                    pids_table["product_planeid"].pformat(show_name=False)))
         return list
-    
+
     def __get_plane_id(self, observation_id):
         try:
             query_plane = "select m.planeid, m.calibrationlevel from {} m "\
                 "where m.observationid = '{}'"\
                 .format(self.JWST_MAIN_TABLE, observation_id)
             job = self.__jwsttap.launch_job(query=query_plane)
-            job.get_results().sort(['planeid'])
-            planeid = job.get_results()['planeid'][0].decode('utf-8')
-            max_cal_level = job.get_results()['calibrationlevel'][0]
+            job.get_results().sort(["planeid"])
+            planeid = job.get_results()["planeid"][0].decode('utf-8')
+            max_cal_level = job.get_results()["calibrationlevel"][0]
             return planeid, max_cal_level
         except Exception as e:
             raise ValueError(e)
-        
+
     def __get_sibling_planes(self, planeid, cal_level='ALL'):
-        where_clause = ''
-        if (cal_level == 'ALL'):
-            where_clause = 'WHERE sp.calibrationlevel<=p.calibrationlevel AND p.planeid =';
+        where_clause = ""
+        if (cal_level == "ALL"):
+            where_clause = "WHERE sp.calibrationlevel<=p.calibrationlevel "\
+                           "AND p.planeid ="
         else:
-            where_clause = 'WHERE sp.calibrationlevel={} AND p.planeid ='.format(cal_level);
+            where_clause = "WHERE sp.calibrationlevel={} AND "\
+                           "p.planeid =".format(cal_level)
         try:
             query_siblings = "SELECT o.observationuri, p.planeid, "\
                              "p.calibrationlevel, sp.planeid as "\
@@ -1056,21 +1094,21 @@ class JwstClass(object):
                              .format(self.JWST_OBSERVATION_TABLE,
                                      self.JWST_PLANE_TABLE,
                                      where_clause,
-                                     planeid);
+                                     planeid)
             job = self.__jwsttap.launch_job(query=query_siblings)
-            log.info('sibling ' + query_siblings)
             return job.get_results()
         except Exception as e:
             raise ValueError(e)
 
     def __get_member_planes(self, planeid, cal_level='ALL'):
-        where_clause = ''
-        if (cal_level == 'ALL'):
-            where_clause = 'WHERE p.planeid =';
+        where_clause = ""
+        if (cal_level == "ALL"):
+            where_clause = "WHERE p.planeid ="
         else:
-            where_clause = 'WHERE mp.calibrationlevel={} AND p.planeid ='.format(cal_level);
+            where_clause = "WHERE mp.calibrationlevel={} AND "\
+                           "p.planeid =".format(cal_level)
         try:
-            query_members ="SELECT o.observationuri, p.planeid, "\
+            query_members = "SELECT o.observationuri, p.planeid, "\
                             "p.calibrationlevel, mp.planeid as "\
                             "product_planeid, mp.calibrationlevel as "\
                             "product_level FROM {0} o JOIN {1} p on "\
@@ -1078,16 +1116,41 @@ class JwstClass(object):
                             "o.obsid=m.compositeid JOIN {0} "\
                             "mo on m.simpleid=mo.observationuri JOIN "\
                             "{1} mp on mo.obsid=mp.obsid {3}'{4}'"\
-                             .format(self.JWST_OBSERVATION_TABLE,
-                                     self.JWST_PLANE_TABLE,
-                                     self.JWST_OBS_MEMBER_TABLE,
-                                     where_clause,
-                                     planeid);
+                            .format(self.JWST_OBSERVATION_TABLE,
+                                    self.JWST_PLANE_TABLE,
+                                    self.JWST_OBS_MEMBER_TABLE,
+                                    where_clause,
+                                    planeid)
             job = self.__jwsttap.launch_job(query=query_members)
-            log.info('members ' + query_members)
             return job.get_results()
         except Exception as e:
             raise ValueError(e)
+
+    def get_related_observations(self, observation_id):
+        """Get the list of level 3 products that make use of a given JWST
+        observation_id.
+
+        Parameters
+        ----------
+        observation_id : str, mandatory
+            Observation identifier.
+
+        Returns
+        -------
+        A list of strings with the observation_id of the associated
+        observations that can be used in get_product_list and
+        get_obs_products functions
+        """
+        if observation_id is None:
+            raise ValueError(self.REQUESTED_OBSERVATION_ID)
+        query_upper = "select * from {} m where m.members like "\
+                      "'%{}%'".format(self.JWST_MAIN_TABLE, observation_id)
+        job = self.__jwsttap.launch_job(query=query_upper)
+        if any(job.get_results()["observationid"]):
+            oids = job.get_results()["observationid"].pformat(show_name=False)
+        else:
+            oids = [observation_id]
+        return oids
 
     def get_product(self, artifact_id=None, file_name=None):
         """Get a JWST product given its Artifact ID.
@@ -1109,7 +1172,8 @@ class JwstClass(object):
         params_dict['DATA_RETRIEVAL_ORIGIN'] = 'ASTROQUERY'
 
         if artifact_id is None and file_name is None:
-            raise ValueError("Missing required argument: 'artifact_id' or 'file_name'")
+            raise ValueError("Missing required argument: "
+                             "'artifact_id' or 'file_name'")
         else:
             if file_name is None:
                 output_file_name = str(artifact_id)
@@ -1121,25 +1185,19 @@ class JwstClass(object):
             if artifact_id is not None:
                 params_dict['ARTIFACTID'] = str(artifact_id)
             else:
-                params_dict['ARTIFACT_URI'] = 'mast:JWST/product/' + str(file_name)
-
-        #url=self.__jwstdata.base_url+"RETRIEVAL_TYPE=PRODUCT&DATA_RETRIEVAL_ORIGIN=ASTROQUERY" +\
-        #            "&ARTIFACTID=" + artifact_id
-        #
-        #try:
-        #    file = self.__jwstdata.download_file(url)
-        #except:
-        #    raise ValueError('Product ' + artifact_id + ' not available')
-        #return file
+                params_dict['ARTIFACT_URI'] = 'mast:JWST/product/' +\
+                                            str(file_name)
         try:
-            self.__jwsttap.load_data(params_dict=params_dict, output_file=output_file_name)
+            self.__jwsttap.load_data(params_dict=params_dict,
+                                     output_file=output_file_name)
         except Exception as exx:
             raise ValueError('Error retrieving product for ' +
                              err_msg + ': %s' % str(exx))
         print("Product saved at: %s" % (output_file_name))
         return output_file_name
 
-    def get_obs_products(self, observation_id=None, cal_level=None, product_type=None, output_file=None):
+    def get_obs_products(self, observation_id=None, cal_level=None,
+                         product_type=None, output_file=None):
         """Get a JWST product given its Artifact ID.
 
         Parameters
@@ -1147,7 +1205,13 @@ class JwstClass(object):
         observation_id : str, mandatory
             Observation identifier.
         cal_level : str, optional
-            Calibration level.
+            Calibration level. Default value ia 'ALL', to download all the
+            products associated to this observation_id and lower levels.
+            Requesting more accurate levels than the one associated to the
+            observation_id is not allowed (as level 3 observations are
+            composite products based on level 2 products). To request upper
+            levels, please use get_related_observations functions first.
+            Possible values: 'ALL', '3', '2', '1'
         product_type : str, optional, default None
             List only products of the given type. If None, all products are \
             listed. Possible values: 'thumbnail', 'preview', 'auxiliary', \
@@ -1162,32 +1226,31 @@ class JwstClass(object):
         """
 
         if observation_id is None:
-            raise ValueError("Missing required argument: 'observation_id'")
+            raise ValueError(self.REQUESTED_OBSERVATION_ID)
         plane_id, max_cal_level = self.__get_plane_id(observation_id)
 
-        if (cal_level == 3 and cal_level>max_cal_level):
-            raise ValueError('LOOK FOR TOP');
+        if (cal_level == 3 and cal_level > max_cal_level):
+            raise ValueError("Requesting upper levels is not allowed")
 
         params_dict = {}
         params_dict['RETRIEVAL_TYPE'] = 'OBSERVATION'
         params_dict['DATA_RETRIEVAL_ORIGIN'] = 'ASTROQUERY'
 
         if (cal_level == 2 and max_cal_level != 2):
-            plane_id = self.__get_associated_planes(plane_id, 2, True)
-
+            plane_id = self.__get_associated_planes(plane_id, 2,
+                                                    max_cal_level, True)
         params_dict['planeid'] = plane_id
-        self.__set_additional_parameters(params_dict, cal_level, max_cal_level, product_type)
-
-        log.info(params_dict)
+        self.__set_additional_parameters(params_dict, cal_level, max_cal_level,
+                                         product_type)
 
         output_file_full_path, output_dir = self.__set_dirs(output_file,
                                                             observation_id)
-
         # Get file name only
         output_file_name = os.path.basename(output_file_full_path)
 
         try:
-            self.__jwsttap.load_data(params_dict=params_dict, output_file=output_file_full_path)
+            self.__jwsttap.load_data(params_dict=params_dict,
+                                     output_file=output_file_full_path)
         except Exception as exx:
             raise ValueError('Cannot retrieve products for observation ' +
                              observation_id + ': %s' % str(exx))
@@ -1199,8 +1262,8 @@ class JwstClass(object):
             return files
 
         self.__check_file_number(output_dir, output_file_name,
-                            output_file_full_path, files)
-        
+                                 output_file_full_path, files)
+
         for f in files:
             print("Product = %s" % f)
 
@@ -1246,7 +1309,7 @@ class JwstClass(object):
             formatted_now = now.strftime("%Y%m%d_%H%M%S")
             output_dir = os.getcwd() + os.sep + "temp_" + \
                 formatted_now
-            output_file_full_path =  output_dir + os.sep + observation_id +\
+            output_file_full_path = output_dir + os.sep + observation_id +\
                 "_all_products"
         else:
             output_file_full_path = output_file
@@ -1254,15 +1317,16 @@ class JwstClass(object):
         try:
             os.makedirs(output_dir, exist_ok=True)
         except OSError as err:
-            print("Creation of the directory %s failed: %s" % (output_dir, err.strerror))
+            print("Creation of the directory %s failed: %s"
+                  % (output_dir, err.strerror))
             raise err
         return output_file_full_path, output_dir
 
-    def __set_additional_parameters(self, param_dict, cal_level, max_cal_level, product_type):
+    def __set_additional_parameters(self, param_dict, cal_level,
+                                    max_cal_level, product_type):
         if cal_level is not None:
             self.__validate_cal_level(cal_level)
-            
-            if(cal_level == max_cal_level or cal_level==2):
+            if(cal_level == max_cal_level or cal_level == 2):
                 param_dict['calibrationlevel'] = 'SELECTED'
             elif(cal_level == 1):
                 param_dict['calibrationlevel'] = 'LEVEL1ONLY'
@@ -1285,7 +1349,8 @@ class JwstClass(object):
             return value
 
     def __get_coord_input(self, value, msg):
-        if not (isinstance(value, str) or isinstance(value, commons.CoordClasses)):
+        if not (isinstance(value, str) or isinstance(value,
+                                                     commons.CoordClasses)):
             raise ValueError(
                 str(msg) + " must be either a string or astropy.coordinates")
         if isinstance(value, str):
@@ -1293,7 +1358,7 @@ class JwstClass(object):
             return c
         else:
             return value
-        
+
     def __get_observationid_condition(self, value=None):
         condition = ""
         if(value is not None):
@@ -1309,12 +1374,13 @@ class JwstClass(object):
             if(isinstance(cal_level, str) and cal_level == 'Top'):
                 condition = " AND max_cal_level=calibrationlevel "
             elif(isinstance(cal_level, int)):
-                condition = " AND calibrationlevel="+\
+                condition = " AND calibrationlevel=" +\
                                         str(cal_level)+" "
             else:
-                raise ValueError("cal_level must be either 'Top' or an integer")
+                raise ValueError("cal_level must be either "
+                                 "'Top' or an integer")
         return condition
-    
+
     def __get_public_condition(self, only_public):
         condition = ""
         if(not isinstance(only_public, bool)):
@@ -1329,10 +1395,11 @@ class JwstClass(object):
             if(not isinstance(prod_type, str)):
                 raise ValueError("prod_type must be string")
             elif(str(prod_type).lower() not in self.PLANE_DATAPRODUCT_TYPES):
-                raise ValueError("prod_type must be one of: " +\
+                raise ValueError("prod_type must be one of: " +
                                  str(', '.join(self.PLANE_DATAPRODUCT_TYPES)))
             else:
-                condition = " AND dataproducttype LIKE '"+prod_type.lower()+"' "
+                condition = " AND dataproducttype LIKE '"+prod_type.lower() + \
+                    "' "
         return condition
 
     def __get_instrument_name_condition(self, value=None):
@@ -1341,7 +1408,7 @@ class JwstClass(object):
             if(not isinstance(value, str)):
                 raise ValueError("instrument_name must be string")
             elif(str(value).upper() not in self.INSTRUMENT_NAMES):
-                raise ValueError("instrument_name must be one of: " +\
+                raise ValueError("instrument_name must be one of: " +
                                  str(', '.join(self.INSTRUMENT_NAMES)))
             else:
                 condition = " AND instrument_name LIKE '"+value.upper()+"' "
@@ -1373,7 +1440,7 @@ class JwstClass(object):
             if(not isinstance(product_type, str)):
                 raise ValueError("product_type must be string")
             elif(product_type not in self.ARTIFACT_PRODUCT_TYPES):
-                raise ValueError("product_type must be one of: " +\
+                raise ValueError("product_type must be one of: " +
                                  str(', '.join(self.ARTIFACT_PRODUCT_TYPES)))
             else:
                 condition = " AND producttype LIKE '"+product_type+"' "
@@ -1397,7 +1464,8 @@ class JwstClass(object):
 
     @staticmethod
     def gzip_uncompress(input_file, output_file):
-        with open(output_file, 'wb') as f_out, gzip.open(input_file, 'rb') as f_in:
+        with open(output_file, 'wb') as f_out, gzip.open(input_file,
+                                                         'rb') as f_in:
             shutil.copyfileobj(f_in, f_out)
 
     @staticmethod
@@ -1405,8 +1473,10 @@ class JwstClass(object):
         output_dir = os.path.dirname(input_file)
         file = os.path.basename(input_file)
         output_decompressed_file = output_dir + os.sep + file + "_decompressed"
-        JwstClass.gzip_uncompress(input_file=input_file, output_file=output_decompressed_file)
-        # Remove uncompressed file and rename decompressed file to the original one
+        JwstClass.gzip_uncompress(input_file=input_file,
+                                  output_file=output_decompressed_file)
+        # Remove uncompressed file and rename decompressed file to the
+        # original one
         os.remove(input_file)
         if file.lower().endswith(".gz"):
             # remove .gz
