@@ -780,6 +780,7 @@ class TestTap(unittest.TestCase):
             files_returned = (jwst.get_obs_products(
                               observation_id=observation_id, cal_level='ALL',
                               output_file=output_file_full_path))
+
             dummyTapHandler.check_call('load_data', parameters)
             self.__check_extracted_files(files_expected=expected_files,
                                          files_returned=files_returned)
