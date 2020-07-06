@@ -1048,7 +1048,7 @@ class JwstClass(object):
                                max_cal_level, is_url):
         if (cal_level == max_cal_level):
             if (not is_url):
-                list = "('{}')".format(plane_ids)
+                list = "('{}')".format("', '".join(plane_ids))
             else:
                 list = "{}".format(",".join(plane_ids))
             return list
@@ -1180,6 +1180,7 @@ class JwstClass(object):
         params_dict['DATA_RETRIEVAL_ORIGIN'] = 'ASTROQUERY'
 
         if artifact_id is None and file_name is None:
+            log.info("ARTIFACT NONE")
             raise ValueError("Missing required argument: "
                              "'artifact_id' or 'file_name'")
         else:
