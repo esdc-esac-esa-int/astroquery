@@ -271,7 +271,7 @@ class XMMNewtonClass(BaseQuery):
     def _parse_filename(self, filename):
         """Parses the file's name of a product
 
-        Parses the file's name of a product following 
+        Parses the file's name of a product following
         http://xmm-tools.cosmos.esa.int/external/xmm_user_support/documentation/dfhb/pps.html
 
         Parameters
@@ -295,12 +295,12 @@ class XMMNewtonClass(BaseQuery):
         ret["Z"] = filename[28:]
         return ret
 
-    def get_epic_images(self, filename, band = [], instrument = [], **kwargs):
+    def get_epic_images(self, filename, band=[], instrument=[], **kwargs):
         """Extracts the EPIC images from a given TAR file
 
         For a given TAR file obtained with:
             `XMM.download_data(OBS_ID,level="PPS",extension="FTZ",filename=tarfile)`
-        This function extracts the EPIC images in a given band (or bands) and 
+        This function extracts the EPIC images in a given band (or bands) and
         instrument (or instruments) from it
 
         The result is a dictionary containing the paths to the extracted EPIC images
@@ -309,8 +309,8 @@ class XMMNewtonClass(BaseQuery):
         If the band or the instrument are not specified this function will return all
         the available bands and instruments
 
-        Additionaly, the get_detmask and get_exposure_map can be set to True. If so, 
-        this function will also extract the exposure maps and detector masks within the specified 
+        Additionaly, the get_detmask and get_exposure_map can be set to True. If so,
+        this function will also extract the exposure maps and detector masks within the specified
         bands and instruments
 
         Examples:
@@ -320,7 +320,7 @@ class XMMNewtonClass(BaseQuery):
         If we want to retrieve the band 3 for the instrument PN
             `fits_image = result[3]['PN']`
         fits_image will be the full path to the extracted FTZ file
-        
+
         Extracting the exposure and detector maps:
             `result = XMM.get_epic_images(tarfile,band=[1,2,3,4,5,8],instrument=['M1','M2','PN'], get_detmask=True, get_exposure_map=True)'
         If we want to retrieve exposure map in the band 3 for the instrument PN
@@ -354,13 +354,13 @@ class XMMNewtonClass(BaseQuery):
         _band = [1, 2, 3, 4, 5, 8]
         _path = ""
         for arg in kwargs:
-            if arg == "get_detmask" and kwargs[arg] == True:
+            if arg == "get_detmask" and kwargs[arg] is True:
                 _product_type.append("DETMSK")
-            if arg == "get_exposure_map" and kwargs[arg] == True:
+            if arg == "get_exposure_map" and kwargs[arg] is True:
                 _product_type.append("EXPMAP")
             if arg == "path" and os.path.exists(kwargs[arg]):
                 _path = kwargs[arg]
-                
+
         ret = {}
         if band == []:
             band = _band
@@ -369,7 +369,7 @@ class XMMNewtonClass(BaseQuery):
                 if not i in _band:
                     log.warning("Invalid band %u"%i)
                     band.remove(i)
-        
+
         if instrument == []:
             instrument = _instrument
         else:
@@ -406,9 +406,9 @@ class XMMNewtonClass(BaseQuery):
         except FileNotFoundError:
             log.error("File %s not found"%(filename))
             return {}
-                
+
         return ret
 
-                
-        
+
+
 XMMNewton = XMMNewtonClass()

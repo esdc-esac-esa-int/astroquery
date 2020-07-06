@@ -90,16 +90,16 @@ class TestXMMNewton():
         dummyTapHandler.check_call("get_columns", parameters2)
 
     _files = {
-        "0405320501":{
-            "pps":[
-                "P0405320501M1S002EXPMAP1000.FTZ", 
-                "P0405320501M1S002IMAGE_4000.FTZ", 
-                "P0405320501M2S003EXPMAP2000.FTZ", 
-                "P0405320501M2S003IMAGE_5000.FTZ", 
-                "P0405320501PNS001EXPMAP3000.FTZ", 
+        "0405320501": {
+            "pps": [
+                "P0405320501M1S002EXPMAP1000.FTZ",
+                "P0405320501M1S002IMAGE_4000.FTZ",
+                "P0405320501M2S003EXPMAP2000.FTZ",
+                "P0405320501M2S003IMAGE_5000.FTZ",
+                "P0405320501PNS001EXPMAP3000.FTZ",
                 "P0405320501PNS001IMAGE_8000.FTZ",
-                "P0405320501M1S002EXPMAP2000.FTZ", 
-                "P0405320501M1S002IMAGE_5000.FTZ", 
+                "P0405320501M1S002EXPMAP2000.FTZ",
+                "P0405320501M1S002IMAGE_5000.FTZ",
                 "P0405320501M2S003EXPMAP3000.FTZ",
                 "P0405320501M2S003IMAGE_8000.FTZ",
                 "P0405320501PNS001EXPMAP4000.FTZ",
@@ -159,7 +159,7 @@ class TestXMMNewton():
                                 pass
                             else:
                                 raise
-                        _file = open(os.path.join(ob_name, ftype, f),"w")
+                        _file = open(os.path.join(ob_name, ftype, f), "w")
                         _file.close()
                         tar.add(os.path.join(ob_name, ftype, f))
                         os.remove(os.path.join(ob_name, ftype, f))
@@ -205,13 +205,13 @@ class TestXMMNewton():
         self._create_tar(_tarname, self._files)
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_images(_tarname, [], [], get_detmask=True, get_exposure_map=True)
-        assert len(res) == 6 # Number of different bands
-        assert len(res[1]) == 9 # Number of different instruments within band 1
-        assert len(res[2]) == 9 # Number of different instruments within band 2
-        assert len(res[3]) == 9 # Number of different instruments within band 3
-        assert len(res[4]) == 9 # Number of different instruments within band 4
-        assert len(res[5]) == 9 # Number of different instruments within band 5
-        assert len(res[8]) == 6 # Number of different instruments within band 8
+        assert len(res) == 6     # Number of different bands
+        assert len(res[1]) == 9  # Number of different instruments within band 1
+        assert len(res[2]) == 9  # Number of different instruments within band 2
+        assert len(res[3]) == 9  # Number of different instruments within band 3
+        assert len(res[4]) == 9  # Number of different instruments within band 4
+        assert len(res[5]) == 9  # Number of different instruments within band 5
+        assert len(res[8]) == 6  # Number of different instruments within band 8
         # Notice that we consider the exposure and the detector maps as an instrument
         for k, v in res[1].items():
             f = os.path.split(v)
@@ -245,10 +245,10 @@ class TestXMMNewton():
                 for b in res:
                     for i in res[b]:
                         assert os.path.isfile(res[b][i])
-        
+
         # Removing files created in this test
         for ob_name in self._files:
             shutil.rmtree(ob_name)
         os.remove(_tarname)
-        
-        
+
+
