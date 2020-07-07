@@ -325,7 +325,7 @@ class XMMNewtonClass(BaseQuery):
             `result = XMM.get_epic_images(tarfile,band=[1,2,3,4,5,8],instrument=['M1','M2','PN'], get_detmask=True, get_exposure_map=True)'
         If we want to retrieve exposure map in the band 3 for the instrument PN
             `fits_image = result[3]['PN_expo']`
-        If we want to retrieve detector mask in the band 3 for the instrument PN 
+        If we want to retrieve detector mask in the band 3 for the instrument PN
             `fits_image = result[3]['PN_det']`
 
         Parameters
@@ -408,7 +408,5 @@ class XMMNewtonClass(BaseQuery):
             return {}
 
         return ret
-
-
 
 XMMNewton = XMMNewtonClass()

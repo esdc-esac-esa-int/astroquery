@@ -250,5 +250,3 @@ class TestXMMNewton():
         for ob_name in self._files:
             shutil.rmtree(ob_name)
         os.remove(_tarname)
-
-
