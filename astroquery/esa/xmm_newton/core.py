@@ -417,4 +417,5 @@ class XMMNewtonClass(BaseQuery):
 
         return ret
 
+
 XMMNewton = XMMNewtonClass()
