@@ -17,13 +17,8 @@ class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astroquery.esa.hubble`.
     """
-    DATA_ACTION = _config.ConfigItem("http://archives.esac.esa.int/"
-                                     "ehst-sl-server/servlet/data-action",
-                                     "Main url for retriving hst files")
-    METADATA_ACTION = _config.ConfigItem("http://archives.esac.esa.int/"
-                                         "ehst-sl-server/servlet/"
-                                         "metadata-action",
-                                         "Main url for retriving hst metadata")
+    DATA_ACTION = _config.ConfigItem("https://ila.esac.esa.int/tap/data",
+                                     "Main url for retriving integral products")
     TIMEOUT = 60
 
 

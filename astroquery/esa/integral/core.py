@@ -26,6 +26,7 @@ from astropy.table import Table
 from six import BytesIO
 import shutil
 import os
+import time
 
 from . import conf
 from astropy import log
@@ -39,7 +40,7 @@ class IntegralClass(BaseQuery):
     """
 
     data_url = conf.DATA_ACTION
-    metadata_url = conf.METADATA_ACTION
+
     TIMEOUT = conf.TIMEOUT
     copying_string = "Copying file to {0}..."
 
@@ -47,7 +48,8 @@ class IntegralClass(BaseQuery):
         super(IntegralClass, self).__init__()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="https://isladev.esac.esa.int/tap-dev/tap")
+            self._tap = TapPlus(url="https://isladev.esac.esa.int/tap-dev/tap",
+                                data_context='data')
         else:
             self._tap = tap_handler
 
@@ -190,11 +192,11 @@ class IntegralClass(BaseQuery):
         table = job.get_results()
         return table
 
-    def data_download(self, scw_id=None,
-                          obs_id=None, rev_id=None,
-                          prop_id=None, async_job=True, output_file=None,
-                          output_format="votable", verbose=False,
-                          get_query=False):
+    def data_download(self, scwid=None,
+                          obsid=None, revid=None,
+                          propid=None, async_job=True, output_file=None,
+                          filename=None,
+                          output_format="votable", verbose=False):
         """
         Launches a synchronous or asynchronous job to query the isla tap
         using scw_id, obs_id, rev_id and prop_id as criteria to create 
@@ -202,52 +204,48 @@ class IntegralClass(BaseQuery):
 
         Parameters
         ----------
-        scw_id : str, optional
-        obs_id : str, optional
-        rev_id : str, optional
-        prop_id : str, optional
+        scwid : str, optional
+        obsid : str, optional
+        revid : str, optional
+        propid : str, optional
         async_job : bool, optional, default 'True'
             executes the query (job) in asynchronous/synchronous mode (default
             synchronous)
-        output_file : str, optional, default None
+        filename : str, optional, default None
             file name where the results are saved if dumpToFile is True.
-            If this parameter is not provided, the jobid is used instead
+            If this parameter is not provided, 'download.tar' is used instead
         output_format : str, optional, default 'votable'
             results format
         verbose : bool, optional, default 'False'
             flag to display information about the process
-        get_query : bool, optional, default 'False'
-            flag to return the query associated to the criteria as the result
-            of this function.
 
         Returns
         -------
         A table object
         """
 
-        parameters = []
-        if scw_id is not None:
-            parameters.append("scwid=%{}%".format(scw_id))
-        if obs_id is not None:
-            parameters.append("obsid=%{}%".format(obs_id))   
-        if rev_id is not None:
-            parameters.append("REVID=%{}%".format(rev_id))   
-        if prop_id is not None:
-            parameters.append("PROPID=%{}%".format(prop_id))   
-        parameters.append("RETRIEVAL_TYPE=SCW")
- 
-        query = "select * from ila.scw"
-        if parameters:
-            query += " where({})".format(" AND ".join(parameters))
-        table = self.query_integral_tap(query=query, async_job=async_job,
-                                   output_file=output_file,
-                                   output_format=output_format,
-                                   verbose=verbose)
+        parameters = {}
+        if scwid is not None:
+            parameters["scwid"]=scwid
+        if obsid is not None:
+            parameters["obsid"]=obsid
+        if revid is not None:
+            parameters["REVID"]=revid
+        if propid is not None:
+            parameters["PROPID"]=propid
+        parameters["RETRIEVAL_TYPE"]="SCW"
+
+        response = self._request('GET', self.data_url, save=True, cache=True,
+                                 params=parameters)
+
         if verbose:
-            log.info(query)
-        if get_query:
-            return query
-        return table
+            log.info(self.data_url)
+            log.info(parameters)
+
+        if filename is None:
+            filename = "isla_download_{}.tar".format(str(time.time()))
+
+        shutil.move(response, filename)
 
     def __get_calibration_level(self, calibration_level):
         condition = ""
