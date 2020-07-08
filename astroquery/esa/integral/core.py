@@ -194,7 +194,7 @@ class IntegralClass(BaseQuery):
 
     def data_download(self, scwid=None,
                           obsid=None, revid=None,
-                          propid=None, async_job=True, output_file=None,
+                          propid=None, async_job=True,
                           filename=None,
                           output_format="votable", verbose=False):
         """
