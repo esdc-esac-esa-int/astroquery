@@ -143,10 +143,10 @@ class IntegralClass(BaseQuery):
         if starttime is not None and endtime is not None:
             parameters.append("starttime <= '{}'".format(starttime))
             parameters.append("endtime >= '{}'".format(endtime))
-        elif starttime is None:
-            parameter.append("endtime == '{}'".format(endtime))
-        elif endtime is None:
-            parameter.append("starttime == '{}'".format(starttime))
+        elif starttime is None and endtime is not None:
+            parameters.append("endtime == '{}'".format(endtime))
+        elif endtime is None and starttime is not None:
+            parameters.append("starttime == '{}'".format(starttime))
 
         query = "select * from ila.cons_observation"
         
