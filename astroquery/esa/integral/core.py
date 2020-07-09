@@ -2,7 +2,7 @@
 """
 
 ======================
-eHST Astroquery Module
+Integral Astroquery Module
 ======================
 
 
@@ -27,6 +27,7 @@ from six import BytesIO
 import shutil
 import os
 import time
+import json
 
 from . import conf
 from astropy import log
@@ -39,10 +40,7 @@ class IntegralClass(BaseQuery):
     Class to init ESA Integral Module and communicate with isla
     """
 
-    data_url = conf.DATA_ACTION
-
     TIMEOUT = conf.TIMEOUT
-    copying_string = "Copying file to {0}..."
 
     def __init__(self, tap_handler=None):
         super(IntegralClass, self).__init__()
@@ -50,6 +48,7 @@ class IntegralClass(BaseQuery):
         if tap_handler is None:
             self._tap = TapPlus(url="https://isladev.esac.esa.int/tap-dev/tap",
                                 data_context='data')
+            self._data = "https://ila.esac.esa.int/tap/data"
         else:
             self._tap = tap_handler
 
@@ -59,60 +58,9 @@ class IntegralClass(BaseQuery):
     def logout(self, verbose=False):
         self._tap.logout(verbose)
 
-    def download_product(self, observation_id, calibration_level="RAW",
-                         filename=None, verbose=False):
-        """
-        Download products from isla
-
-        Parameters
-        ----------
-        observation_id : string
-            id of the observation to be downloaded, mandatory
-            The identifier of the observation we want to retrieve, regardless
-            of whether it is simple or composite.
-        calibration_level : string
-            calibration level, optional, default 'RAW'
-            The identifier of the data reduction/processing applied to the
-            data. By default, the most scientifically relevant level will be
-            chosen. RAW, CALIBRATED, PRODUCT or AUXILIARY
-        filename : string
-            file name to be used to store the artifact, optional, default
-            None
-            File name for the observation.
-        verbose : bool
-            optional, default 'False'
-            flag to display information about the process
-
-        Returns
-        -------
-        None. It downloads the observation indicated
-        """
-
-        params = {"OBSERVATION_ID": observation_id,
-                  "CALIBRATION_LEVEL": calibration_level}
-
-        if filename is None:
-            filename = observation_id + ".tar"
-
-        response = self._request('GET', self.data_url, save=True, cache=True,
-                                 params=params)
-
-        if verbose:
-            log.info(self.data_url + "?OBSERVATION_ID=" + observation_id +
-                     "&CALIBRATION_LEVEL=" + calibration_level)
-            log.info(self.copying_string.format(filename))
-
-        shutil.move(response, filename)
-
-    def query_target(self, name, filename=None, output_format='votable',
+    def search_target(self, name, filename=None, outputformat='votable',
                      verbose=False):
         """
-        https://ila.esac.esa.int/tap/servlet/target-resolver?
-        TARGET_NAME=m31&RESOLVER_TYPE=ALL&FORMAT=json
-        https://ila.esac.esa.int/tap/tap/sync?LANG=ADQL&REQUEST=doQuery&FORMAT=json&QUERY=
-        select TOP 1000 * from ila.cons_observation where 
-        1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',10.68470833,41.26875%2C1)) order by obsid
-        It executes a query over isla and download the json with the results.
 
         Parameters
         ----------
@@ -120,7 +68,7 @@ class IntegralClass(BaseQuery):
             target name to be requested, mandatory
         filename : string
             file name to be used to store the metadata, optional, default None
-        output_format : string
+        outputformat : string
             optional, default 'votable'
             output format of the query
         verbose : bool
@@ -131,37 +79,38 @@ class IntegralClass(BaseQuery):
         -------
         Table with the result of the query. It downloads metadata as a file.
         """
+        return self.search_metadata(targetname=name,
+                               outputformat=outputformat,
+                               verbose=verbose)
 
-        params = {"RESOURCE_CLASS": "OBSERVATION",
-                  "SELECTED_FIELDS": "OBSERVATION",
-                  "QUERY": "(TARGET.TARGET_NAME=='" + name + "')",
-                  "RETURN_TYPE": str(output_format)}
-        response = self._request('GET', self.metadata_url, save=True,
-                                 cache=True,
-                                 params=params)
-
-        if verbose:
-            log.info(self.metadata_url + "?RESOURCE_CLASS=OBSERVATION&"
-                     "SELECTED_FIELDS=OBSERVATION&QUERY=(TARGET.TARGET_NAME"
-                     "=='" + name + "')&RETURN_TYPE=" + str(output_format))
-            log.info(self.copying_string.format(filename))
-        if filename is None:
-            filename = "target.xml"
-
-        shutil.move(response, filename)
-
-        return modelutils.read_results_table_from_file(filename,
-                                                       str(output_format))
-
-    def query_tap(self, query, async_job=False, output_file=None,
-                      output_format="votable", verbose=False):
-        """Launches a synchronous or asynchronous job to query the isla tap
+    def search_metadata(self, targetname=None, piname=None,
+               revno=None, srcname=None,
+               obsid=None, starttime=None, endtime=None,
+               asyncjob=True, filename=None,
+               outputformat="votable", verbose=False,
+               getquery=False):
+        """
+        Launches a synchronous or asynchronous job to query the isla tap
+        using different fields as criteria to create and execute the
+        associated query.
 
         Parameters
         ----------
-        query : str, mandatory
-            query (adql) to be executed
-        async_job : bool, optional, default 'False'
+        piname : str, optional
+            P.I. name
+        targetname : str, optional
+            Target name
+        revno : str, optional
+            Revolution number
+        srcname : str, optional
+            Source name
+        obsid : str, optional
+            Observation id
+        starttime : str, optional
+            Start time. e.g. '2020-02-12 00:00:00.0'
+        endtime : str, optional
+            End time. e.g. '2020-07-08 00:00:00.0'
+        async_job : bool, optional, default 'True'
             executes the query (job) in asynchronous/synchronous mode (default
             synchronous)
         output_file : str, optional, default None
@@ -171,25 +120,47 @@ class IntegralClass(BaseQuery):
             results format
         verbose : bool, optional, default 'False'
             flag to display information about the process
+        get_query : bool, optional, default 'False'
+            flag to return the query associated to the criteria as the result
+            of this function.
 
         Returns
         -------
         A table object
         """
-                
-        if async_job:
-            job = self._tap.launch_job_async(query=query,
-                                             output_file=output_file,
-                                             output_format=output_format,
-                                             verbose=verbose,
-                                             dump_to_file=output_file
-                                             is not None)
-        else:
-            job = self._tap.launch_job(query=query, output_file=output_file,
-                                       output_format=output_format,
-                                       verbose=verbose,
-                                       dump_to_file=output_file is not None)
-        table = job.get_results()
+
+        parameters = []
+        if targetname is not None:
+            parameters.append(self.__get_target_filter(targetname))
+        if piname is not None:
+            parameters.append("surname like '%{}%'".format(piname))
+        if revno is not None:
+            parameters.append("start_revno <= '{}' and end_revno >= '{}'".format(revno, revno))
+        if srcname is not None:
+            parameters.append("srcname like '%{}%'".format(srcname))
+        if obsid is not None:
+            parameters.append("obsid like '%{}%'".format(obsid))
+        if starttime is not None:
+            parameters.append("starttime <= '{}'".format(starttime))
+        if endtime is not None:
+            parameters.append("endtime >= '{}'".format(endtime))
+
+        query = "select * from ila.cons_observation"
+        
+        if parameters:
+            query += " where ({})".format(" and ".join(parameters))
+            
+        query += " order by obsid"
+        
+        if verbose:
+            log.info(query)
+
+        table = self.query_tap(query=query, asyncjob=asyncjob,
+                                   filename=filename,
+                                   outputformat=outputformat,
+                                   verbose=verbose)
+        if getquery:
+            return query
         return table
 
     def data_download(self, scwid=None,
@@ -247,6 +218,149 @@ class IntegralClass(BaseQuery):
 
         shutil.move(response, filename)
 
+    def query_tap(self, query, asyncjob=False, filename=None,
+                      outputformat="votable", verbose=False):
+        """Launches a synchronous or asynchronous job to query the isla tap
+
+        Parameters
+        ----------
+        query : str, mandatory
+            query (adql) to be executed
+        asyncjob : bool, optional, default 'False'
+            executes the query (job) in asynchronous/synchronous mode (default
+            synchronous)
+        filename : str, optional, default None
+            file name where the results are saved if dumpToFile is True.
+            If this parameter is not provided, the jobid is used instead
+        outputformat : str, optional, default 'votable'
+            results format
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
+
+        Returns
+        -------
+        A table object
+        """
+                
+        if asyncjob:
+            job = self._tap.launch_job_async(query=query,
+                                             output_file=filename,
+                                             output_format=outputformat,
+                                             verbose=verbose,
+                                             dump_to_file=filename
+                                             is not None)
+        else:
+            job = self._tap.launch_job(query=query, output_file=filename,
+                                       output_format=outputformat,
+                                       verbose=verbose,
+                                       dump_to_file=filename is not None)
+        table = job.get_results()
+        return table
+
+    def get_tables(self, onlynames=True, verbose=False):
+        """Get the available table in isla TAP service
+
+        Parameters
+        ----------
+        only_names : bool, TAP+ only, optional, default 'False'
+            True to load table names only
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
+
+        Returns
+        -------
+        A list of tables
+        """
+
+        tables = self._tap.load_tables(only_names=onlynames,
+                                       include_shared_tables=False,
+                                       verbose=verbose)
+        if onlynames is True:
+            tablenames = []
+            for t in tables:
+                tablenames.append(t.name)
+            return tablenames
+        else:
+            return tables
+
+    def get_columns(self, tablename, onlynames=True, verbose=False):
+        """Get the available columns for a table in isla TAP service
+
+        Parameters
+        ----------
+        tablename : string, mandatory, default None
+            table name of which, columns will be returned
+        onlynames : bool, TAP+ only, optional, default 'False'
+            True to load table names only
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
+
+        Returns
+        -------
+        A list of columns
+        """
+
+        tables = self._tap.load_tables(only_names=onlynames,
+                                       include_shared_tables=False,
+                                       verbose=verbose)
+        columns = None
+        for t in tables:
+            if str(t.name) == str(tablename):
+                columns = t.columns
+                break
+
+        if columns is None:
+            raise ValueError("table name specified is not found in "
+                             "EHST TAP service")
+
+        if onlynames is True:
+            columnnames = []
+            for c in columns:
+                columnnames.append(c.name)
+            return columnnames
+        else:
+            return columns
+
+    def get_position(self, targetname, verbose=False):
+        p = {}
+        if targetname is not None:
+            url = "https://ila.esac.esa.int/tap/servlet/target-resolver?"\
+                  "TARGET_NAME={}&RESOLVER_TYPE=ALL&FORMAT=json".format(targetname)
+            response = self._request('GET', url)
+            if "TARGET NOT FOUND" not in response.text:                    
+                output = json.loads(response.text)
+                ra = output['objects'][0]['raDegrees']
+                dec = output['objects'][0]['decDegrees']
+                p = { 'ra': ra, "dec": dec }
+            else:
+                print (response.text)
+
+        if verbose:
+            print (p)
+
+        return p
+    
+    def __get_target_filter(self, targetname):
+        filter=""
+        if targetname is not None:           
+            position = self.get_position(targetname)
+            ra = position['ra']
+            dec = position['dec']
+            if ra is not None or dec is not None:
+                filter = "1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{},{},1))".format(ra,dec)
+        return filter
+        
+    def __getCoordInput(self, value, msg):
+        if not (isinstance(value, str) or isinstance(value,
+                                                     commons.CoordClasses)):
+            raise ValueError(str(msg) + ""
+                             " must be either a string or astropy.coordinates")
+        if isinstance(value, str):
+            c = commons.parse_coordinates(value)
+            return c
+        else:
+            return value
+
     def __get_calibration_level(self, calibration_level):
         condition = ""
         if(calibration_level is not None):
@@ -270,81 +384,5 @@ class IntegralClass(BaseQuery):
         else:
             raise ValueError("One of the lists is empty or there are "
                              "elements that are not strings")
-
-    def get_tables(self, only_names=True, verbose=False):
-        """Get the available table in isla TAP service
-
-        Parameters
-        ----------
-        only_names : bool, TAP+ only, optional, default 'False'
-            True to load table names only
-        verbose : bool, optional, default 'False'
-            flag to display information about the process
-
-        Returns
-        -------
-        A list of tables
-        """
-
-        tables = self._tap.load_tables(only_names=only_names,
-                                       include_shared_tables=False,
-                                       verbose=verbose)
-        if only_names is True:
-            table_names = []
-            for t in tables:
-                table_names.append(t.name)
-            return table_names
-        else:
-            return tables
-
-    def get_columns(self, table_name, only_names=True, verbose=False):
-        """Get the available columns for a table in isla TAP service
-
-        Parameters
-        ----------
-        table_name : string, mandatory, default None
-            table name of which, columns will be returned
-        only_names : bool, TAP+ only, optional, default 'False'
-            True to load table names only
-        verbose : bool, optional, default 'False'
-            flag to display information about the process
-
-        Returns
-        -------
-        A list of columns
-        """
-
-        tables = self._tap.load_tables(only_names=False,
-                                       include_shared_tables=False,
-                                       verbose=verbose)
-        columns = None
-        for t in tables:
-            if str(t.name) == str(table_name):
-                columns = t.columns
-                break
-
-        if columns is None:
-            raise ValueError("table name specified is not found in "
-                             "EHST TAP service")
-
-        if only_names is True:
-            column_names = []
-            for c in columns:
-                column_names.append(c.name)
-            return column_names
-        else:
-            return columns
-
-    def _getCoordInput(self, value, msg):
-        if not (isinstance(value, str) or isinstance(value,
-                                                     commons.CoordClasses)):
-            raise ValueError(str(msg) + ""
-                             " must be either a string or astropy.coordinates")
-        if isinstance(value, str):
-            c = commons.parse_coordinates(value)
-            return c
-        else:
-            return value
-
 
 Integral = IntegralClass()

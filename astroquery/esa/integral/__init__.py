@@ -17,10 +17,7 @@ class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astroquery.esa.hubble`.
     """
-    DATA_ACTION = _config.ConfigItem("https://ila.esac.esa.int/tap/data",
-                                     "Main url for retriving integral products")
     TIMEOUT = 60
-
 
 conf = Conf()
 
