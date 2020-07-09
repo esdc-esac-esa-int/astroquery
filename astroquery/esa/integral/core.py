@@ -140,10 +140,13 @@ class IntegralClass(BaseQuery):
             parameters.append("srcname like '%{}%'".format(srcname))
         if obsid is not None:
             parameters.append("obsid like '%{}%'".format(obsid))
-        if starttime is not None:
+        if starttime is not None and endtime is not None:
             parameters.append("starttime <= '{}'".format(starttime))
-        if endtime is not None:
             parameters.append("endtime >= '{}'".format(endtime))
+        elif starttime is None:
+            parameter.append("endtime == '{}'".format(endtime))
+        elif endtime is None:
+            parameter.append("starttime == '{}'".format(starttime))
 
         query = "select * from ila.cons_observation"
         
@@ -333,10 +336,10 @@ class IntegralClass(BaseQuery):
                 dec = output['objects'][0]['decDegrees']
                 p = { 'ra': ra, "dec": dec }
             else:
-                print (response.text)
+                log.info (response.text)
 
         if verbose:
-            print (p)
+            log.info (p)
 
         return p
     
