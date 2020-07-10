@@ -46,7 +46,7 @@ class IntegralClass(BaseQuery):
         super(IntegralClass, self).__init__()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="https://isladev.esac.esa.int/tap-dev/tap",
+            self._tap = TapPlus(url="https://ila.esac.esa.int/tap/tap",
                                 data_context='data')
             self._data = "https://ila.esac.esa.int/tap/data"
         else:
@@ -209,7 +209,7 @@ class IntegralClass(BaseQuery):
             parameters["PROPID"]=propid
         parameters["RETRIEVAL_TYPE"]="SCW"
 
-        response = self._request('GET', self.data_url, save=True, cache=True,
+        response = self._request('GET', self._data, save=True, cache=False,
                                  params=parameters)
 
         if verbose:
