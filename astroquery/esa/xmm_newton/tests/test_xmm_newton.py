@@ -12,8 +12,13 @@ Created on 4 Sept. 2019
 
 import pytest
 
+import tarfile
+import os
+import errno
+import shutil
 from ..core import XMMNewtonClass
 from ..tests.dummy_tap_handler import DummyXMMNewtonTapHandler
+from astropy.io import fits
 
 
 class TestXMMNewton():
@@ -84,3 +89,175 @@ class TestXMMNewton():
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         xsa.get_columns("table", only_names=True, verbose=True)
         dummyTapHandler.check_call("get_columns", parameters2)
+
+    _files = {
+        "0405320501": {
+            "pps": [
+                "P0405320501M1S002EXPMAP1000.FTZ",
+                "P0405320501M1S002IMAGE_4000.FTZ",
+                "P0405320501M2S003EXPMAP2000.FTZ",
+                "P0405320501M2S003IMAGE_5000.FTZ",
+                "P0405320501PNS001EXPMAP3000.FTZ",
+                "P0405320501PNS001IMAGE_8000.FTZ",
+                "P0405320501M1S002EXPMAP2000.FTZ",
+                "P0405320501M1S002IMAGE_5000.FTZ",
+                "P0405320501M2S003EXPMAP3000.FTZ",
+                "P0405320501M2S003IMAGE_8000.FTZ",
+                "P0405320501PNS001EXPMAP4000.FTZ",
+                "P0405320501PNX000DETMSK1000.FTZ",
+                "P0405320501M1S002EXPMAP3000.FTZ",
+                "P0405320501M1S002IMAGE_8000.FTZ",
+                "P0405320501M2S003EXPMAP4000.FTZ",
+                "P0405320501M2X000DETMSK1000.FTZ",
+                "P0405320501PNS001EXPMAP5000.FTZ",
+                "P0405320501PNX000DETMSK2000.FTZ",
+                "P0405320501M1S002EXPMAP4000.FTZ",
+                "P0405320501M1X000DETMSK1000.FTZ",
+                "P0405320501M2S003EXPMAP5000.FTZ",
+                "P0405320501M2X000DETMSK2000.FTZ",
+                "P0405320501PNS001EXPMAP8000.FTZ",
+                "P0405320501PNX000DETMSK3000.FTZ",
+                "P0405320501M1S002EXPMAP5000.FTZ",
+                "P0405320501M1X000DETMSK2000.FTZ",
+                "P0405320501M2S003EXPMAP8000.FTZ",
+                "P0405320501M2X000DETMSK3000.FTZ",
+                "P0405320501PNS001IMAGE_1000.FTZ",
+                "P0405320501PNX000DETMSK4000.FTZ",
+                "P0405320501M1S002EXPMAP8000.FTZ",
+                "P0405320501M1X000DETMSK3000.FTZ",
+                "P0405320501M2S003IMAGE_1000.FTZ",
+                "P0405320501M2X000DETMSK4000.FTZ",
+                "P0405320501PNS001IMAGE_2000.FTZ",
+                "P0405320501PNX000DETMSK5000.FTZ",
+                "P0405320501M1S002IMAGE_1000.FTZ",
+                "P0405320501M1X000DETMSK4000.FTZ",
+                "P0405320501M2S003IMAGE_2000.FTZ",
+                "P0405320501M2X000DETMSK5000.FTZ",
+                "P0405320501PNS001IMAGE_3000.FTZ",
+                "P0405320501M1S002IMAGE_2000.FTZ",
+                "P0405320501M1X000DETMSK5000.FTZ",
+                "P0405320501M2S003IMAGE_3000.FTZ",
+                "P0405320501PNS001EXPMAP1000.FTZ",
+                "P0405320501PNS001IMAGE_4000.FTZ",
+                "P0405320501M1S002IMAGE_3000.FTZ",
+                "P0405320501M2S003EXPMAP1000.FTZ",
+                "P0405320501M2S003IMAGE_4000.FTZ",
+                "P0405320501PNS001EXPMAP2000.FTZ",
+                "P0405320501PNS001IMAGE_5000.FTZ",
+                "P0405320501M2S003SRSPEC0053.FTZ",
+                "P0405320501PNS001BGSPEC0053.FTZ",
+                "P0405320501M2S003BGSPEC0053.FTZ",
+                "P0405320501PNS001SRCARF0053.FTZ",
+                "P0405320501M2S003SRCARF0053.FTZ",
+                "P0405320501PNS001SRSPEC0053.FTZ"
+            ]
+        }
+    }
+
+    _rmf_files = ["epn_e2_ff20_sdY4.rmf", "m2_e9_im_pall_o.rmf"]
+
+    def _create_tar(self, tarname, files):
+        with tarfile.open(tarname, "w") as tar:
+            for ob_name, ob in self._files.items():
+                for ftype, ftype_val in ob.items():
+                    for f in ftype_val:
+                        try:
+                            os.makedirs(os.path.join(ob_name, ftype))
+                        except OSError as exc:
+                            if exc.errno == errno.EEXIST and \
+                              os.path.isdir(os.path.join(ob_name, ftype)):
+                                pass
+                            else:
+                                raise
+                        if f[17:23] == "SRSPEC":
+                            rmf_file = self._rmf_files[1]
+                            if f[11:13] == "PN":
+                                rmf_file = self._rmf_files[0]
+                            hdr = fits.Header()
+                            hdr["RESPFILE"] = rmf_file
+                            hdr["SPECDELT"] = 5
+                            hdu = fits.PrimaryHDU(header=hdr)
+                            hdu.name = "SPECTRUM"
+                            hdu.writeto(os.path.join(ob_name, ftype, f))
+
+                        else:
+                            _file = open(os.path.join(ob_name, ftype, f), "w")
+                            _file.close()
+                        tar.add(os.path.join(ob_name, ftype, f))
+                        os.remove(os.path.join(ob_name, ftype, f))
+                    shutil.rmtree(os.path.join(ob_name, ftype))
+                shutil.rmtree(ob_name)
+
+    def test_get_epic_spectra_non_existing_file(self, capsys):
+        _tarname = "nonexistingfile.tar"
+        _source_number = 83
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        res = xsa.get_epic_spectra(_tarname, _source_number,
+                                   instrument=[])
+        assert res == {}
+        out, err = capsys.readouterr()
+        assert err == ("ERROR: File %s not found "
+                       "[astroquery.esa.xmm_newton.core]\n" % _tarname)
+
+    def test_get_epic_spectra_invalid_instrumnet(self, capsys):
+        _tarname = "tarfile.tar"
+        _invalid_instrument = "II"
+        _source_number = 83
+        self._create_tar(_tarname, self._files)
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        res = xsa.get_epic_spectra(_tarname, _source_number,
+                                   instrument=[_invalid_instrument])
+        assert res == {}
+        out, err = capsys.readouterr()
+        assert err == ("WARNING: Invalid instrument %s "
+                       "[astroquery.esa.xmm_newton.core]\n"
+                       % _invalid_instrument)
+        os.remove(_tarname)
+
+    def test_get_epic_spectra_invalid_source_number(self, capsys):
+        _tarname = "tarfile.tar"
+        _invalid_source_number = 833
+        _default_instrument = ['M1', 'M2', 'PN', 'EP']
+        self._create_tar(_tarname, self._files)
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        res = xsa.get_epic_spectra(_tarname, _invalid_source_number,
+                                   instrument=[])
+        assert res == {}
+        out, err = capsys.readouterr()
+        assert out == ("INFO: Nothing to extract with the given parameters:\n"
+                       "  PPS: %s\n"
+                       "  Source Number: %u\n"
+                       "  Instrument: %s\n"
+                       " [astroquery.esa.xmm_newton.core]\n"
+                       % (_tarname, _invalid_source_number,
+                          _default_instrument))
+        os.remove(_tarname)
+
+    @pytest.mark.remote_data
+    def test_get_epic_spectra(self):
+        _tarname = "tarfile.tar"
+        _source_number = 83
+        _instruments = ["M1", "M1_arf", "M1_bkg", "M1_rmf",
+                        "M2", "M2_arf", "M2_bkg", "M2_rmf",
+                        "PN", "PN_arf", "PN_bkg", "PN_rmf"]
+        self._create_tar(_tarname, self._files)
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        res = xsa.get_epic_spectra(_tarname, _source_number,
+                                   instrument=[])
+        assert len(res) == 8
+        for k, v in res.items():
+            f = os.path.split(v)
+            assert k in _instruments
+            assert f[1] in self._files["0405320501"]["pps"] or \
+                f[1] in self._rmf_files
+        for ob in self._files:
+            assert os.path.isdir(ob)
+            for t in self._files[ob]:
+                assert os.path.isdir(os.path.join(ob, t))
+                for s in res:
+                    assert os.path.isfile(res[s])
+
+        # Removing files created in this test
+        for ob_name in self._files:
+            shutil.rmtree(ob_name)
+        os.remove(_tarname)
