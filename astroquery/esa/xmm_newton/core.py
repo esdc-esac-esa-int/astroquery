@@ -330,7 +330,7 @@ class XMMNewtonClass(BaseQuery):
         filename : string, mandatory
             The name of the tarfile to be proccessed
         source_number : integer, mandatory
-            The source number of the observation
+            The source number, in decimal, in the observation
         instruments : array of strings, optional, default []
             An array of strings indicating the desired instruments
         path: string, optional
@@ -340,6 +340,11 @@ class XMMNewtonClass(BaseQuery):
         -------
         A dictionary with the full paths of the extracted EPIC sources
         spectral products. The key is the instrument
+
+        Notes
+        -----
+        The filenames will contain the source number in hexadecimal,
+        as this is the convention used by the pipeline.
         """
         _instrument = ["M1", "M2", "PN", "EP"]
         _product_type = ["SRSPEC", "BGSPEC", "SRCARF"]
