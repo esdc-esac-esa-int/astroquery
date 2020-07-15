@@ -295,31 +295,29 @@ class XMMNewtonClass(BaseQuery):
         return ret
 
     def get_epic_lightcurve(self, filename, source_number, *,
-                            band=[], instrument=[], path=""):
+                            instrument=[], path=""):
         """Extracts the EPIC sources light curve products from a given TAR file
 
         For a given TAR file obtained with:
             XMM.download_data(OBS_ID,level="PPS",extension="FTZ",filename=tarfile)
 
         This function extracts the EPIC sources light curve products in a given
-        band (or bands) and instrument (or instruments) from said TAR file
+        instrument (or instruments) from said TAR file
 
         The result is a dictionary containing the paths to the extracted EPIC
-        sources light curve products with the key being the band and the
-        instrument
+        sources light curve products with the key being the instrument
 
-        If the band or the instrument is not specified, this function will
-        return all available bands and instruments
+        If the instrument is not specified, this function will
+        return all available instruments
 
         Examples:
 
-        Extracting all bands and instruments:
+        Extracting all instruments:
             result = XMM.get_epic_lightcurve(tarfile,146,
-                                             band=[1, 2, 3, 4, 5, 8],
                                              instrument=['M1','M2','PN'])
 
-        If we want to retrieve the band 3 for the instrument PN
-            fits_image = result[3]['PN']
+        If we want to retrieve the light curve of the instrument PN
+            fits_image = result['PN']
 
         fits_image will be the full path to the extracted FTZ file
 
@@ -329,8 +327,6 @@ class XMMNewtonClass(BaseQuery):
             The name of the tarfile to be proccessed
         source_number : integer, mandatory
             The source number, in decimal, in the observation
-        band : array of integers, optional, default []
-            An array of intergers indicating the desired bands
         instruments : array of strings, optional, default []
             An array of strings indicating the desired instruments
         path: string, optional
@@ -338,10 +334,8 @@ class XMMNewtonClass(BaseQuery):
 
         Returns
         -------
-        A dictionary of dictionaries with the full paths of the extracted
-        EPIC sources light curves. The keys of each dictionary are the band
-        for the first level dictionary and the instrument for the second
-        level dictionaries
+        A dictionary with the full paths of the extracted EPIC sources
+        light curve products. The key is the instrument
 
         Notes
         -----
@@ -349,18 +343,11 @@ class XMMNewtonClass(BaseQuery):
         as this is the convention used by the pipeline.
         """
         _instrumnet = ["M1", "M2", "PN", "EP"]
-        _band = [1, 2, 3, 4, 5, 8]
+        _band = [8]
         _product_type = ["SRCTSR", "FBKTSR"]
         _path = ""
 
         ret = {}
-        if band == []:
-            band = _band
-        else:
-            for i in band:
-                if i not in _band:
-                    log.warning("Invalid band %u" % i)
-                    band.remove(i)
 
         if instrument == []:
             instrument = _instrumnet
@@ -386,20 +373,18 @@ class XMMNewtonClass(BaseQuery):
                         continue
                     if not fname_info["I"] in instrument:
                         continue
-                    if not int(fname_info["S"]) in band:
+                    if not int(fname_info["S"]) in _band:
                         continue
                     if not fname_info["T"] in _product_type:
                         continue
                     if int(fname_info["X-"], 16) != source_number:
                         continue
                     tar.extract(i, _path)
-                    if not ret.get(int(fname_info["S"])):
-                        ret[int(fname_info["S"])] = {}
                     if fname_info["T"] == "FBKTSR":
-                        ret[int(fname_info["S"])][fname_info["I"] + "_bkg"] =\
+                        ret[fname_info["I"] + "_bkg"] =\
                             os.path.abspath(os.path.join(_path, i.name))
                     else:
-                        ret[int(fname_info["S"])][fname_info["I"]] =\
+                        ret[fname_info["I"]] =\
                             os.path.abspath(os.path.join(_path, i.name))
 
         except FileNotFoundError:
@@ -410,8 +395,7 @@ class XMMNewtonClass(BaseQuery):
             log.info("Nothing to extract with the given parameters:\n"
                      "  PPS: %s\n"
                      "  Source Number: %u\n"
-                     "  Band: %s\n"
-                     "  Instrument: %s\n" % (filename, source_number, band,
+                     "  Instrument: %s\n" % (filename, source_number,
                                              instrument))
 
         return ret

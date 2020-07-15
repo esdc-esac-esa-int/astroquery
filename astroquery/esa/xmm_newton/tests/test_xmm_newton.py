@@ -152,9 +152,7 @@ class TestXMMNewton():
                 "P0405320501PNS001SRCTSR8092.FTZ",
                 "P0405320501PNS001FBKTSR8092.FTZ",
                 "P0405320501PNS001SRCTSR8093.FTZ",
-                "P0405320501PNS001FBKTSR8093.FTZ",
-                "P0405320501M1S001SRCTSR2092.FTZ",
-                "P0405320501M1S001FBKTSR2092.FTZ"
+                "P0405320501PNS001FBKTSR8093.FTZ"
             ]
         }
     }
@@ -184,7 +182,7 @@ class TestXMMNewton():
         _source_number = 146
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_lightcurve(_tarname, _source_number,
-                                      band=[], instrument=[])
+                                      instrument=[])
         assert res == {}
         out, err = capsys.readouterr()
         assert err == ("ERROR: File %s not found "
@@ -197,7 +195,6 @@ class TestXMMNewton():
         self._create_tar(_tarname, self._files)
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_lightcurve(_tarname, _source_number,
-                                      band=[],
                                       instrument=[_invalid_instrument])
         assert res == {}
         out, err = capsys.readouterr()
@@ -206,61 +203,37 @@ class TestXMMNewton():
                        % _invalid_instrument)
         os.remove(_tarname)
 
-    def test_get_epic_lightcurve_invalid_band(self, capsys):
-        _tarname = "tarfile.tar"
-        _source_number = 146
-        _invalid_band = 10
-        self._create_tar(_tarname, self._files)
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        res = xsa.get_epic_lightcurve(_tarname, _source_number,
-                                      band=[_invalid_band],
-                                      instrument=[])
-        assert res == {}
-        out, err = capsys.readouterr()
-        assert err == ("WARNING: Invalid band %u "
-                       "[astroquery.esa.xmm_newton.core]\n" % _invalid_band)
-        os.remove(_tarname)
-
     def test_get_epic_lightcurve_invalid_source_number(self, capsys):
         _tarname = "tarfile.tar"
         _invalid_source_number = 833
-        _default_band = [1, 2, 3, 4, 5, 8]
         _default_instrument = ['M1', 'M2', 'PN', 'EP']
         self._create_tar(_tarname, self._files)
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_lightcurve(_tarname, _invalid_source_number,
-                                      band=[], instrument=[])
+                                      instrument=[])
         assert res == {}
         out, err = capsys.readouterr()
         assert out == ("INFO: Nothing to extract with the given parameters:\n"
                        "  PPS: %s\n"
                        "  Source Number: %u\n"
-                       "  Band: %s\n"
                        "  Instrument: %s\n"
                        " [astroquery.esa.xmm_newton.core]\n"
-                       % (_tarname, _invalid_source_number, _default_band,
+                       % (_tarname, _invalid_source_number,
                           _default_instrument))
         os.remove(_tarname)
 
     def test_get_epic_lightcurve(self):
         _tarname = "tarfile.tar"
         _source_number = 146
-        _band = [1, 2, 3, 4, 5, 8]
         _instruments = ["M1", "M1_bkg",
                         "M2", "M2_bkg",
                         "PN", "PN_bkg"]
         self._create_tar(_tarname, self._files)
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_lightcurve(_tarname, _source_number,
-                                      band=[], instrument=[])
+                                      instrument=[])
         assert len(res) == 2
-        assert len(res[2]) == 2
-        assert len(res[8]) == 2
-        for k, v in res[2].items():
-            f = os.path.split(v)
-            assert k in _instruments
-            assert f[1] in self._files["0405320501"]["pps"]
-        for k, v in res[8].items():
+        for k, v in res.items():
             f = os.path.split(v)
             assert k in _instruments
             assert f[1] in self._files["0405320501"]["pps"]
@@ -269,9 +242,8 @@ class TestXMMNewton():
             assert os.path.isdir(ob)
             for t in self._files[ob]:
                 assert os.path.isdir(os.path.join(ob, t))
-                for b in res:
-                    for i in res[b]:
-                        assert os.path.isfile(res[b][i])
+                for i in res:
+                    assert os.path.isfile(res[i])
 
         # Removing files created in this test
         for ob_name in self._files:
