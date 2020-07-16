@@ -3,22 +3,17 @@ from __future__ import print_function
 
 import pytest
 
-from astropy.tests.helper import remote_data
 from astropy.table import Table
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-import requests
-import imp
 
 from ... import vsa
-
-imp.reload(requests)
 
 
 vista = vsa.core.VsaClass()
 
 
-@remote_data
+@pytest.mark.remote_data
 class TestVista:
 
     @pytest.mark.dependency(name='vsa_up')

@@ -1,19 +1,15 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 from __future__ import print_function
 
-from astropy.tests.helper import remote_data
-from astropy.table import Table
+import pytest
 import astropy.coordinates as coord
+from astropy.table import Table
 from astropy import units as u
-import requests
-import imp
 
 from ... import nrao
 
-imp.reload(requests)
 
-
-@remote_data
+@pytest.mark.remote_data
 class TestNrao:
 
     def test_query_region_async(self):
@@ -30,6 +26,14 @@ class TestNrao:
         assert isinstance(result, Table)
         # I don't know why this is byte-typed
         assert b'0430+052' in result['Source']
+
+    def test_query_region_project_code(self):
+        result = nrao.core.Nrao.query_region(
+            coord.SkyCoord("04h33m11.1s 05d21m15.5s"),
+            project_code="AD0094", retry=5)
+        assert len(result) == 42
+        assert len(set(result['Project'])) == 1
+        assert "AD0094" in list(set(result['Project']))[0]
 
     def test_query_region_archive(self):
         result = nrao.core.Nrao.query_region(

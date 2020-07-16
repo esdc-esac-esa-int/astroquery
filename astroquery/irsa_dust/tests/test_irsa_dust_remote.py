@@ -1,15 +1,12 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-import imp
 import os
-import astropy.units as u
 import pytest
 import requests
 
-from astropy.tests.helper import remote_data
 from astropy.table import Table
-from ... import irsa_dust
+import astropy.units as u
 
-imp.reload(requests)
+from ... import irsa_dust
 
 M31_XML = "dustm31.xml"
 M81_XML = "dustm81.xml"
@@ -43,7 +40,7 @@ class DustTestCase(object):
         return os.path.join(data_dir, filename)
 
 
-@remote_data
+@pytest.mark.remote_data
 class TestDust(DustTestCase):
 
     def test_xml_ok(self):

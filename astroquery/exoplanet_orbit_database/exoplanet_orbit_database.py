@@ -63,7 +63,7 @@ class ExoplanetOrbitDatabaseClass(object):
             if table_path is None:
                 table_path = download_file(EXOPLANETS_CSV_URL, cache=cache,
                                            show_progress=show_progress)
-            exoplanets_table = ascii.read(table_path)
+            exoplanets_table = ascii.read(table_path, fast_reader=False)
 
             # Store column of lowercase names for indexing:
             lowercase_names = [i.lower().replace(" ", "")
@@ -79,8 +79,10 @@ class ExoplanetOrbitDatabaseClass(object):
             for col in exoplanets_table.colnames:
                 if col in self.param_units:
                     # Check that unit is implemented in this version of astropy
-                    if hasattr(u, self.param_units[col]):
+                    try:
                         exoplanets_table[col].unit = u.Unit(self.param_units[col])
+                    except ValueError:
+                        print(f"WARNING: Unit {self.param_units[col]} not recognised")
 
             self._table = QTable(exoplanets_table)
 

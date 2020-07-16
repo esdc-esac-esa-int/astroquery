@@ -51,7 +51,7 @@ LONG_DESCRIPTION = package.__doc__
 builtins._ASTROPY_PACKAGE_NAME_ = PACKAGENAME
 
 # VERSION should be PEP386 compatible (http://www.python.org/dev/peps/pep-0386)
-VERSION = '0.4.dev'
+VERSION = '0.4.1.dev'
 
 # Indicates if this version is a release version
 RELEASE = 'dev' not in VERSION
@@ -136,6 +136,6 @@ setup(name=PACKAGENAME,
       use_2to3=False,
       entry_points=entry_points,
       extras_require=extras_require,
-      tests_require=['pytest_astropy'],
+      tests_require=['pytest-astropy'],
       **package_info
 )

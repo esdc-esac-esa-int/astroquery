@@ -6,7 +6,6 @@ import pytest
 import requests
 from requests import ReadTimeout
 
-from astropy.tests.helper import remote_data
 from astropy.table import Table
 from astropy.units import arcsec, arcmin
 from astropy.io import ascii
@@ -24,7 +23,7 @@ from ...xmatch import XMatch
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 
 
-@remote_data
+@pytest.mark.remote_data
 @pytest.mark.dependency(name='xmatch_up')
 def test_is_xmatch_up():
     try:
@@ -33,7 +32,7 @@ def test_is_xmatch_up():
         pytest.xfail("XMATCH appears to be down.  Exception was: {0}".format(ex))
 
 
-@remote_data
+@pytest.mark.remote_data
 @pytest.mark.dependency(depends=["xmatch_up"])
 class TestXMatch:
     # fixture only used here to save creating XMatch instances in each
@@ -112,5 +111,5 @@ class TestXMatch:
                   '-F cat1=@{1} -F colRA1=ra -F colDec1=dec -F cat2=vizier:II/246/out  '
                   'http://cdsxmatch.u-strasbg.fr/xmatch/api/v1/sync > {0}'.
                   format(outfile, infile))
-        table = ascii.read(outfile, format='csv')
+        table = ascii.read(outfile, format='csv', fast_reader=False)
         return table

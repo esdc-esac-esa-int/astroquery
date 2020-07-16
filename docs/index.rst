@@ -87,12 +87,18 @@ full functionality of the `~astroquery.alma` module:
 * `APLpy <http://aplpy.readthedocs.io/>`_
 * `pyregion <http://pyregion.readthedocs.io/>`_
 
+
+The following packages are optional dependencies and are required for the
+functionality of the `~astroquery.cadc` module:
+
+* `pyVO`_ (>=1.0)
+
 The following packages are optional dependencies and are required for the
 full functionality of the `~astroquery.cds` module:
 
 * `astropy-healpix <http://astropy-healpix.readthedocs.io/en/latest/>`_
 * `regions <https://astropy-regions.readthedocs.io/en/latest/>`_
-* `mocpy <https://mocpy.readthedocs.io/en/latest/>`_ >= 0.5.2
+* `mocpy <https://cds-astro.github.io/mocpy/>`_ >= 0.5.2
 
 The following packages are optional dependencies and are required for the
 full functionality of the `~astroquery.mast` module:
@@ -164,6 +170,7 @@ The following modules have been completed using a common API:
   eso/eso.rst
   gaia/gaia.rst
   gama/gama.rst
+  gemini/gemini.rst
   heasarc/heasarc.rst
   hitran/hitran.rst
   ibe/ibe.rst
@@ -176,6 +183,7 @@ The following modules have been completed using a common API:
   nasa_ads/nasa_ads.rst
   ned/ned.rst
   nist/nist.rst
+  noirlab/noirlab.rst
   nrao/nrao.rst
   nvas/nvas.rst
   simbad/simbad.rst
@@ -187,6 +195,8 @@ The following modules have been completed using a common API:
   vo_conesearch/vo_conesearch.rst
   vsa/vsa.rst
   xmatch/xmatch.rst
+  dace/dace.rst
+  esa/xmm_newton.rst
 
 
 These others are functional, but do not follow a common & consistent API:
@@ -263,6 +273,7 @@ generally return a table listing the available data first.
   alfalfa/alfalfa.rst
   alma/alma.rst
   cadc/cadc.rst
+  casda/casda.rst
   esa/hubble.rst
   eso/eso.rst
   fermi/fermi.rst
@@ -271,8 +282,10 @@ generally return a table listing the available data first.
   ibe/ibe.rst
   irsa/irsa.rst
   magpis/magpis.rst
+  gemini/gemini.rst
   mast/mast.rst
   ned/ned.rst
+  noirlab/noirlab.rst
   nrao/nrao.rst
   nvas/nvas.rst
   sdss/sdss.rst
@@ -280,6 +293,7 @@ generally return a table listing the available data first.
   ukidss/ukidss.rst
   vsa/vsa.rst
   skyview/skyview.rst
+  esa/xmm_newton.rst
 
 Simulations
 -----------

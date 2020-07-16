@@ -324,6 +324,7 @@ class Tap(object):
             job.set_phase('ERROR')
             responseBytes = response.read()
             responseStr = responseBytes.decode('utf-8')
+
             if dump_to_file:
                 self.__connHandler.dump_to_file(suitableOutputFile,
                                                 responseStr)
@@ -849,7 +850,7 @@ class TapPlus(Tap):
             if 'format' in params_dict:
                 output_format = params_dict['format'].lower()
             else:
-                if 'FORMAT'in params_dict:
+                if 'FORMAT' in params_dict:
                     output_format = params_dict['FORMAT'].lower()
                 else:
                     output_format = "votable"
@@ -1693,7 +1694,7 @@ class TapPlus(Tap):
                 if value is None:
                     raise ValueError("None of the values for the changes " +
                                      "can be null")
-                if (index == 1 and value != 'utype' and value != 'ucd'and
+                if (index == 1 and value != 'utype' and value != 'ucd' and
                         value != 'flags' and value != 'indexed'):
                     raise ValueError("Position 2 of all changes must be " +
                                      "'utype', 'ucd', 'flags' or 'indexed'")

@@ -144,37 +144,101 @@ Examples
   0.8042331552744052 00000000-0000-0000-babe-5c1ec63d3301 ... PRIME        S
   0.8042331552744052 00000000-0000-0000-babe-5c1ec63d3301 ... PRIME        S
 
-1.3 Getting data products
+1.3. Query by target name
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-To query the data products associated with a certain plane ID
+
+To provide the target coordinates based on its name and execute the query region method.
+It uses three different catalogs to resolve the coordinates: SIMBAD, NED and VIZIER. An additional target
+resolver is provider, ALL (which is also the default value), using all the aforementioned
+catalogues in the defined order to obtain the required coordinates (using the following
+element in the list if the target name cannot be resolved).
 
 .. code-block:: python
 
   >>> from astroquery.jwst import Jwst
-  >>> product_list = Jwst.get_product_list(observation_id='jw97012001001_02101_00001_guider1')
-  >>> for row in result:
-  >>>     print("artifactid: %s\tfilename: %s" % (row['artifactid'].decode('UTF-8'), row['filename'].decode('UTF-8')))
+  >>> import astropy.units as u
+  >>> 
+  >>> target_name = 'M1'
+  >>> target_resolver = 'ALL'
+  >>> radius = u.Quantity(5, u.deg)
+  >>> r = Jwst.query_target(target_name = target_name, target_resolver = target_resolver, radius = radius)
+  >>> r.pprint()
 
+         dist                   observationid         ...
+  ------------------ -------------------------------- ...
+  3.4465676399769096 jw01179006001_xx100_00000_nircam ...
+  3.4465676399769096 jw01179005001_xx100_00000_nircam ...
+  3.4465676399769096 jw01179005001_xx103_00003_nircam ...
+  3.4465676399769096 jw01179006001_xx101_00001_nircam ...
+  3.4465676399769096 jw01179005001_xx102_00002_nircam ...
+  3.4465676399769096 jw01179006001_xx105_00002_nircam ...
+  3.4465676399769096 jw01179005001_xx106_00003_nircam ...
+  3.4465676399769096 jw01179006001_xx102_00002_nircam ...
+  3.4465676399769096 jw01179006001_xx103_00003_nircam ...
+  3.4465676399769096 jw01179005001_xx101_00001_nircam ...
+  3.4465676399769096 jw01179005001_xx104_00001_nircam ...
+  3.4465676399769096 jw01179006001_xx104_00001_nircam ...
+  3.4465676399769096 jw01179006001_xx106_00003_nircam ...
+  3.4465676399769096 jw01179005001_xx105_00002_nircam ...
 
-  artifactid: 00000000-0000-0000-b774-8f78db4cb6cd	file: jw97012001001_02101_00001_guider1_rateints.fits
-  artifactid: 00000000-0000-0000-a09d-13769875a033	file: jw97012001001_02101_00001_guider1_rate.fits
-  artifactid: 00000000-0000-0000-8e72-d874267e0c68	file: jw97012001001_02101_00001_guider1_trapsfilled.fits
-  artifactid: 00000000-0000-0000-8ac0-62f0af170c96	file: jw97012001001_02101_00001_guider1_uncal.jpg
-  artifactid: 00000000-0000-0000-8d00-ec105bf49e9e	file: jw97012001001_02101_00001_guider1_cal.jpg
-  artifactid: 00000000-0000-0000-9c58-5d15fd353a73	file: jw97012001001_02101_00001_guider1_cal.fits
-  artifactid: 00000000-0000-0000-8424-8a9bc0f8301c	file: jw97012001001_02101_00001_guider1_uncal.fits
+This method uses the same parameters as query region, but also includes the target name and the catalogue
+(target resolver) to retrieve the coordinates.
 
-You can filter by product type (calibration level is also available)
+.. code-block:: python
+
+  >>> from astroquery.jwst import Jwst
+  >>> import astropy.units as u
+  >>> 
+  >>> target_name = 'LMC'
+  >>> target_resolver = 'NED'
+  >>> width = u.Quantity(5, u.deg)
+  >>> height = u.Quantity(5, u.deg)
+  >>> r = Jwst.query_target(target_name = target_name, target_resolver = target_resolver, width = width, height = height)
+  >>> r.pprint()
+
+         dist                        observationid              ...
+  ---------------------- -------------------------------------- ...
+  0.00010777991644807922 jw00322001003_02101_00001_nrca1        ...
+  0.00010777991644807922 jw00322001003_02101_00001_nrcb2        ...
+  0.00010777991644807922 jw96854009004_xxxxx_00003-00003_nircam ...
+  0.00010777991644807922 jw00322001003_02101_00001_nrcblong     ...
+  0.00010777991644807922 jw00827011001_02101_00001_mirimage     ...
+  0.00010777991644807922 jw01039004001_xx101_00001_miri         ...
+  0.00010777991644807922 jw00322001003_02101_00001_nrcb1        ...
+  0.00010777991644807922 jw00322001002_02101_00001_nrcb2        ...
+  0.00010777991644807922 jw96854009001_xx102_00002_nircam       ...
+  ...                    ...                                    ...
+
+1.4 Getting data products
+~~~~~~~~~~~~~~~~~~~~~~~~~
+To query the data products associated with a certain Observation ID
+
+.. code-block:: python
+
+  >>> from astroquery.jwst import Jwst
+  >>> product_list = Jwst.get_product_list(observation_id='jw00777011001_02104_00001_nrcblong')
+  >>> for row in product_list:
+  >>>     print("filename: %s" % (row['filename'].decode('UTF-8')))
+
+  filename: jw00777011001_02104_00001_nrcblong_c1005_crf.fits
+  filename: jw00777011001_02104_00001_nrcblong_cal.fits
+  filename: jw00777011001_02104_00001_nrcblong_cal.jpg
+  filename: jw00777011001_02104_00001_nrcblong_cal_thumb.jpg
+  filename: jw00777011001_02104_00001_nrcblong_i2d.fits
+  filename: jw00777011001_02104_00001_nrcblong_o011_crf.fits
+
+You can filter by product type and calibration level (using a numerical value or the option 'ALL' -set by default- that will download
+all the products associated to this observation_id with the same and lower levels).
 
 .. code-block:: python
 
   >>> from astroquery.jwst import Jwst
   >>> product_list = Jwst.get_product_list(observation_id='jw97012001001_02101_00001_guider1', product_type='science')
-  >>> for row in result:
-  >>>     print("artifactid: %s\tfilename: %s" % (row['artifactid'].decode('UTF-8'), row['filename'].decode('UTF-8')))
+  >>> for row in product_list:
+  >>>     print("filename: %s" % (row['filename'].decode('UTF-8')))
 
-  artifactid: 00000000-0000-0000-9c58-5d15fd353a73	file: jw97012001001_02101_00001_guider1_cal.fits
-  artifactid: 00000000-0000-0000-8424-8a9bc0f8301c	file: jw97012001001_02101_00001_guider1_uncal.fits
+  filename: jw97012001001_02101_00001_guider1_cal.fits
+  filename: jw97012001001_02101_00001_guider1_uncal.fits
 
 To download a data product
 
@@ -198,26 +262,39 @@ To download a data product
   >>> output_file = Jwst.get_product(artifact_id='00000000-0000-0000-9335-09ff0e02f06b')
   >>> output_file = Jwst.get_product(file_name='jw00601004001_02102_00001_nrcb1_uncal.fits')
 
-To download products by observation identifier
+To download products by observation identifier, it is possible to use the get_obs_products function, with the same parameters
+than get_product_list.
 
 .. code-block:: python
 
-  >>> observation_id = 'jw97012001001_02101_00001_guider1'
-  >>> results = jwst.get_obs_products(observation_id=observation_id, product_type='science')
+  >>> observation_id = 'jw00777011001_02104_00001_nrcblong'
+  >>> results = Jwst.get_obs_products(observation_id=observation_id, cal_level=3, product_type='science')
 
-
+  INFO: {'RETRIEVAL_TYPE': 'OBSERVATION', 'DATA_RETRIEVAL_ORIGIN': 'ASTROQUERY', 'planeid': '00000000-0000-0000-879d-ae91fa2f43e2', 'calibrationlevel': 'SELECTED', 'product_type': 'science'} [astroquery.jwst.core]
   Retrieving data.
   Done.
-  Product(s) saved at: /<local_path>/<temporary_directory>/jw97012001001_02101_00001_guider1_all_products
-  Product = /<local_path>/<temporary_directory>/jw97012001001_02101_00001_guider1
+  Product(s) saved at: /<local_path>/<temporary_directory>/\temp_20200706_131015\jw00777011001_02104_00001_nrcblong_all_products
+  Product = /<local_path>/<temporary_directory>/\temp_20200706_131015\jw00777\level_1\jw00777011001_02104_00001_nrcblong_uncal.fits
+  Product = /<local_path>/<temporary_directory>/\temp_20200706_131015\jw00777\level_2\jw00777011001_02104_00001_nrcblong_cal.fits
+  Product =/<local_path>/<temporary_directory>/\temp_20200706_131015\jw00777\level_2\jw00777011001_02104_00001_nrcblong_i2d.fits
 
-You can use product_type and cal_level arguments to retrieve specific products.
 
 A temporary directory is created with the files and a list of the them is provided.
 
 When more than one product is found, a tar file is retrieved. This method extracts the products.
 
-1.4 Getting public tables
+It is also possible to extract the products associated to an observation with upper calibration levels with get_related_observations.
+Using the observation ID as input parameter, this function will retrieve the observations (IDs) that use it to create a composite observation.
+
+.. code-block:: python
+
+  >>> observation_id = 'jw00777011001_02104_00001_nrcblong'
+  >>> results = Jwst.get_related_observations(observation_id=observation_id)
+
+  [' jw00777-o011_t005_nircam_f277w-sub160', 'jw00777-c1005_t005_nircam_f277w-sub160']
+
+
+1.5 Getting public tables
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To load only table names (TAP+ capability)
@@ -306,7 +383,7 @@ Once a table is loaded, columns can be inspected
   type
   typecode
 
-1.5 Synchronous query
+1.6 Synchronous query
 ~~~~~~~~~~~~~~~~~~~~~
 
 A synchronous query will not store the results at server side. These queries 
@@ -419,7 +496,7 @@ Query saving results in a file:
   Length = 37 rows
 
 
-1.6 Synchronous query on an 'on-the-fly' uploaded table
+1.7 Synchronous query on an 'on-the-fly' uploaded table
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A table can be uploaded to the server in order to be used in a query.
@@ -441,7 +518,7 @@ A table can be uploaded to the server in order to be used in a query.
           c   5.0   6.0
 
 
-1.7 Asynchronous query
+1.8 Asynchronous query
 ~~~~~~~~~~~~~~~~~~~~~~
 
 Asynchronous queries save results at server side. These queries can be accessed at any time. For anonymous users, results are kept for three days.
@@ -537,7 +614,7 @@ Query saving results in a file:
   Length = 37 rows
 
 
-1.8 Asynchronous job removal
+1.9 Asynchronous job removal
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To remove asynchronous

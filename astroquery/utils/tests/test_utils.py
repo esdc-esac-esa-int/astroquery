@@ -14,7 +14,6 @@ from astropy.io import fits
 import astropy.io.votable as votable
 import astropy.units as u
 from astropy.table import Table
-from astropy.tests.helper import remote_data
 import astropy.utils.data as aud
 
 from ...utils import chunk_read, chunk_report, class_or_instance, commons
@@ -35,7 +34,7 @@ class SimpleQueryClass(object):
             return "instance"
 
 
-@remote_data
+@pytest.mark.remote_data
 def test_chunk_read():
     datasize = 50000
     response = urllib.request.urlopen('http://httpbin.org/stream-bytes/{0}'.format(datasize))
@@ -59,7 +58,7 @@ def test_parse_coordinates_1(coordinates):
     assert c is not None
 
 
-@remote_data
+@pytest.mark.remote_data
 @pytest.mark.parametrize(('coordinates'),
                          ["00h42m44.3s +41d16m9s",
                           "m81"])
@@ -412,6 +411,8 @@ def patch_getreadablefileobj(request):
     _is_url = aud._is_url
     aud._is_url = lambda x: True
     _urlopen = urllib.request.urlopen
+    _urlopener = urllib.request.build_opener
+    _urlrequest = urllib.request.Request
     filesize = os.path.getsize(fitsfilepath)
 
     class MockRemote(object):
@@ -437,13 +438,30 @@ def patch_getreadablefileobj(request):
         print("Monkeyed URLopen")
         return MockRemote(fitsfilepath, *args, **kwargs)
 
+    def monkey_builder(tlscontext=None):
+        mock_opener = type('MockOpener', (object,), {})()
+        mock_opener.open = lambda x, **kwargs: MockRemote(fitsfilepath, **kwargs)
+        return mock_opener
+
+    def monkey_urlrequest(x, *args, **kwargs):
+        # urlrequest allows passing headers; this will just return the URL
+        # because we're ignoring headers during mocked actions
+        print("Monkeyed URLrequest")
+        return x
+
+    aud.urllib.request.Request = monkey_urlrequest
     aud.urllib.request.urlopen = monkey_urlopen
+    aud.urllib.request.build_opener = monkey_builder
     urllib.request.urlopen = monkey_urlopen
+    urllib.request.build_opener = monkey_builder
 
     def closing():
         aud._is_url = _is_url
         urllib.request.urlopen = _urlopen
         aud.urllib.request.urlopen = _urlopen
+        urllib.request.build_opener = _urlopener
+        aud.urllib.request.build_opener = _urlopener
+        aud.urllib.request.Request = _urlrequest
 
     request.addfinalizer(closing)
 
