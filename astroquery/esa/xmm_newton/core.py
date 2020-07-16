@@ -380,12 +380,16 @@ class XMMNewtonClass(BaseQuery):
                     if int(fname_info["X-"], 16) != source_number:
                         continue
                     tar.extract(i, _path)
+                    key = fname_info["I"]
+                    value = os.path.abspath(os.path.join(_path, i.name))
                     if fname_info["T"] == "FBKTSR":
-                        ret[fname_info["I"] + "_bkg"] =\
-                            os.path.abspath(os.path.join(_path, i.name))
+                        key = fname_info["I"] + "_bkg"
+                    if ret.get(key) and type(ret.get(key)) == str:
+                        ret[key] = [ret[key], value]
+                    elif ret.get(key) and type(ret.get(key)) == list:
+                        ret[key].append(value)
                     else:
-                        ret[fname_info["I"]] =\
-                            os.path.abspath(os.path.join(_path, i.name))
+                        ret[key] = value
 
         except FileNotFoundError:
             log.error("File %s not found" % (filename))
