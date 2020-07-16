@@ -385,6 +385,8 @@ class XMMNewtonClass(BaseQuery):
                     if fname_info["T"] == "FBKTSR":
                         key = fname_info["I"] + "_bkg"
                     if ret.get(key) and type(ret.get(key)) == str:
+                        log.warning("More than one file found with the "
+                                    "instrument: %s" % key)
                         ret[key] = [ret[key], value]
                     elif ret.get(key) and type(ret.get(key)) == list:
                         ret[key].append(value)
