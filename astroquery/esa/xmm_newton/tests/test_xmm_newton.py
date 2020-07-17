@@ -149,7 +149,8 @@ class TestXMMNewton():
                 "P0405320501M2S003BGSPEC0053.FTZ",
                 "P0405320501PNS001SRCARF0053.FTZ",
                 "P0405320501M2S003SRCARF0053.FTZ",
-                "P0405320501PNS001SRSPEC0053.FTZ"
+                "P0405320501PNS001SRSPEC0053.FTZ",
+                "P0405320501PNU001SRSPEC0053.FTZ"
             ]
         }
     }
@@ -246,16 +247,27 @@ class TestXMMNewton():
                                    instrument=[])
         assert len(res) == 8
         for k, v in res.items():
-            f = os.path.split(v)
             assert k in _instruments
-            assert f[1] in self._files["0405320501"]["pps"] or \
-                f[1] in self._rmf_files
+            if type(v) == str:
+                f = os.path.split(v)
+                assert f[1] in self._files["0405320501"]["pps"] or \
+                    f[1] in self._rmf_files
+            if type(v) == list:
+                for i in v:
+                    f = os.path.split(i)
+                    assert f[1] in self._files["0405320501"]["pps"] or \
+                        f[1] in self._rmf_files
+
         for ob in self._files:
             assert os.path.isdir(ob)
             for t in self._files[ob]:
                 assert os.path.isdir(os.path.join(ob, t))
                 for s in res:
-                    assert os.path.isfile(res[s])
+                    if type(res[s]) == str:
+                        assert os.path.isfile(res[s])
+                    if type(res[s]) == list:
+                        for f in res[s]:
+                            assert os.path.isfile(f)
 
         # Removing files created in this test
         for ob_name in self._files:

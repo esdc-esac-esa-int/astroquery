@@ -377,16 +377,14 @@ class XMMNewtonClass(BaseQuery):
                     if int(fname_info["X-"], 16) != source_number:
                         continue
                     tar.extract(i, _path)
+                    key = fname_info["I"]
+                    value = os.path.abspath(os.path.join(_path, i.name))
                     if fname_info["T"] == "BGSPEC":
-                        ret[fname_info["I"] + "_bkg"] =\
-                            os.path.abspath(os.path.join(_path, i.name))
+                        key = fname_info["I"] + "_bkg"
                     elif fname_info["T"] == "SRCARF":
-                        ret[fname_info["I"] + "_arf"] =\
-                            os.path.abspath(os.path.join(_path, i.name))
+                        key = fname_info["I"] + "_arf"
                     else:
-                        ret[fname_info["I"]] =\
-                            os.path.abspath(os.path.join(_path, i.name))
-                        with fits.open(ret[fname_info["I"]]) as hdul:
+                        with fits.open(value) as hdul:
                             for ext in hdul:
                                 if ext.name != "SPECTRUM":
                                     continue
@@ -416,6 +414,16 @@ class XMMNewtonClass(BaseQuery):
                                     f.write(response.content)
                                     ret[fname_info["I"] + "_rmf"] =\
                                         rsp_filename
+
+                    if ret.get(key) and type(ret.get(key)) == str:
+                        log.warning("More than one file found with the "
+                                    "instrument: %s" % key)
+                        ret[key] = [ret[key], value]
+                    elif ret.get(key) and type(ret.get(key)) == list:
+                        ret[key].append(value)
+                    else:
+                        ret[key] = value
+
         except FileNotFoundError:
             log.error("File %s not found" % (filename))
             return {}
