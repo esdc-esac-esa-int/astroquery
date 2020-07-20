@@ -345,6 +345,10 @@ class XMMNewtonClass(BaseQuery):
         -----
         The filenames will contain the source number in hexadecimal,
         as this is the convention used by the pipeline.
+
+        The structure and the content of the extracted compressed FITS files
+        are described in details in the Pipeline Products Description
+        [XMM-SOC-GEN-ICD-0024](https://xmm-tools.cosmos.esa.int/external/xmm_obs_info/odf/data/docs/XMM-SOC-GEN-ICD-0024.pdf).
         """
         _instrument = ["M1", "M2", "PN", "EP"]
         _product_type = ["SRSPEC", "BGSPEC", "SRCARF"]
