@@ -95,6 +95,8 @@ class XMMNewtonClass(BaseQuery):
         If verbose returns the filename
         """
 
+        filename = filename.split('.')[0]
+
         link = self.data_aio_url + "obsno=" + observation_id
 
         link = link + "".join("&{0}={1}".format(key, val)
