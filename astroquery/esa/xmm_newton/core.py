@@ -266,5 +266,43 @@ class XMMNewtonClass(BaseQuery):
         else:
             return columns
 
+    def get_product_from_4xmm_catalogue(self, *, target_name=None,
+                                        ra=None, dec=None, radius=None, path="", **kwargs):
+        """
+        """
+        if not target_name and (not ra or not dec):
+            raise Exception("Input parameters needed")
+
+        # 4XMM catalogue table
+        xsa_table = "xsa.v_epic_source_cat"
+        obs_id_col = "observation_id"
+        target_name_col = "iauname"
+        equatorial_coor_col = "epic_source_cat_equatorial_spoint"
+        if target_name is not None:
+            query = "select %s from %s where %s like '%s';"%(obs_id_col,
+                                                             xsa_table,
+                                                             target_name_col,
+                                                             target_name)
+        else:
+            if not radius:
+                radius = 1.0
+            query = ("select %s from %s "
+                     "where 1=contains(%s, circle('ICRS', %f, %f, %f));"
+                     %(obs_id_col,
+                       xsa_table,
+                       equatorial_coor_col,
+                       ra,
+                       dec,
+                       radius))
+        table = self.query_xsa_tap(query)
+        if obs_id_col not in table.colnames:
+            raise Exception("No observations retrieved")
+        for ob in table[obs_id_col]:
+            self.download_data(ob.decode('utf-8'), **kwargs)
+        return table
+
+        
+            
+
 
 XMMNewton = XMMNewtonClass()
