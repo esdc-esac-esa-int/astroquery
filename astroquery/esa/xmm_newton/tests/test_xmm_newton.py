@@ -11,6 +11,7 @@ Created on 4 Sept. 2019
 """
 
 import pytest
+import os
 
 from ..core import XMMNewtonClass
 from ..tests.dummy_tap_handler import DummyXMMNewtonTapHandler
@@ -84,3 +85,19 @@ class TestXMMNewton():
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         xsa.get_columns("table", only_names=True, verbose=True)
         dummyTapHandler.check_call("get_columns", parameters2)
+
+    @pytest.mark.remote_data
+    def test_get_product_from_4xmm_catalogue_by_target(self):
+        params = {'target_name': "4XMM J122934.7+015657",
+                  'filename': "tarfile",
+                  'level': "PPS",
+                  'extension': "FTZ",
+                  'path': ""}
+        obs_id_col = "observation_id"
+        xsa = XMMNewtonClass()
+        obs = xsa.get_product_from_4xmm_catalogue(**params)
+        assert obs_id_col in obs.colnames
+        for ob in obs[obs_id_col]:
+            fname = "%s-%s.tar" % (params['filename'], ob.decode('utf-8'))
+            assert os.path.isfile(fname)
+            os.remove(fname)

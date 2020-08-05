@@ -12,6 +12,7 @@ Created on 3 Sept 2019
 
 """
 import re
+import os
 from ...utils.tap.core import TapPlus
 from ...query import BaseQuery
 import shutil
@@ -267,11 +268,35 @@ class XMMNewtonClass(BaseQuery):
             return columns
 
     def get_product_from_4xmm_catalogue(self, *, target_name=None,
-                                        ra=None, dec=None, radius=None, path="", **kwargs):
-        """
+                                        ra=None, dec=None, radius=None,
+                                        filename="",
+                                        path="", **kwargs):
+        """Downloads the products from a given 4XMM Catalogue target
+
+        Parameters
+        ----------
+        target_name : string, optional, default None
+            The name of the target
+        ra : float, optional, default None
+            The Right Ascension coordinate of the target
+        dec : float, optional, default None
+            The Declination coordinate of the target
+        radius : float, optional, default None
+            The radius to query the target
+        filename : string, optional, default ""
+            A prefix for the downloaded products
+        path : string, optional, default ""
+            A specific path to download the products
+
+        Returns
+        -------
+        A astropy.table.table.Table containing the observation ids
+        of the given target
         """
         if not target_name and (not ra or not dec):
-            raise Exception("Input parameters needed")
+            raise Exception(("Input parameters needed, "
+                             "please provide the name "
+                             "or the equatorial coordinates of the target"))
 
         # 4XMM catalogue table
         xsa_table = "xsa.v_epic_source_cat"
@@ -279,30 +304,39 @@ class XMMNewtonClass(BaseQuery):
         target_name_col = "iauname"
         equatorial_coor_col = "epic_source_cat_equatorial_spoint"
         if target_name is not None:
-            query = "select %s from %s where %s like '%s';"%(obs_id_col,
-                                                             xsa_table,
-                                                             target_name_col,
-                                                             target_name)
+            query = ("select %s from %s "
+                     "where %s like '%s';" % (obs_id_col,
+                                              xsa_table,
+                                              target_name_col,
+                                              target_name))
         else:
             if not radius:
                 radius = 1.0
             query = ("select %s from %s "
                      "where 1=contains(%s, circle('ICRS', %f, %f, %f));"
-                     %(obs_id_col,
-                       xsa_table,
-                       equatorial_coor_col,
-                       ra,
-                       dec,
-                       radius))
+                     % (obs_id_col,
+                        xsa_table,
+                        equatorial_coor_col,
+                        ra,
+                        dec,
+                        radius))
         table = self.query_xsa_tap(query)
         if obs_id_col not in table.colnames:
             raise Exception("No observations retrieved")
         for ob in table[obs_id_col]:
-            self.download_data(ob.decode('utf-8'), **kwargs)
+            if filename != "":
+                fname = filename + "-" + ob.decode('utf-8')
+                if path != "" and os.path.isdir(path):
+                    fname = os.path.join(path, fname)
+                self.download_data(ob.decode('utf-8'),
+                                   filename=fname, **kwargs)
+            else:
+                if path != "" and os.path.isdir(path):
+                    fname = os.path.join(path, ob.decode('utf-8'))
+                    self.download_data(ob.decode('utf-8'),
+                                       filename=fname, **kwargs)
+                self.download_data(ob.decode('utf-8'), **kwargs)
         return table
-
-        
-            
 
 
 XMMNewton = XMMNewtonClass()
