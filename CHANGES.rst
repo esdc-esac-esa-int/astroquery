@@ -10,6 +10,30 @@ esa/hubble
 - Module added to query eHST TAP based on a set of specific criteria and
   asynchronous jobs are now supported. [#1723]
 
+SVO FPS
+^^^^^^^
+
+- Module added to access the Spanish Virtual Observatory Filter Profile List [#1498]
+
+Splatalogue
+^^^^^^^^^^^
+
+- The Splatalogue ID querying is now properly cached in the `astropy` cache
+  directory (Issue [#423]) The scraping function has also been updated to reflect
+  the Splatalogue webpage. [#1772]
+
+UKIDSS
+^^^^^^
+
+- Updated to ``UKIDSSDR11PLUS`` as the default version [#1767]
+
+alma
+^^^^
+
+- The archive query interface has been deprecated in favour of
+  VirtualObservatory (VO) services such as TAP, ObsCore etc. The alma
+  library has been updated accordingly. [#1689]
+
 
 0.4.1 (2020-06-19)
 ==================
