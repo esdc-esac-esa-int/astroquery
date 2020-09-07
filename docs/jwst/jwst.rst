@@ -680,7 +680,7 @@ It is possible to use a file where the credentials are stored:
   >>> from astroquery.jwst import Jwst
   >>> Jwst.login(credentials_file='my_credentials_file')
 
-MAST tokens can also be implemented in command line functions:
+MAST tokens can also be used in command line functions:
 
 .. code-block:: python
 
