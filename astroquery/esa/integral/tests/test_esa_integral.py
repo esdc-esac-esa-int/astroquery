@@ -24,6 +24,13 @@ from astropy.table.table import Table
 import shutil
 
 
+class Response():
+    text = None
+
+    def __init__(self, text):
+        self.text = text
+
+
 def data_path(filename):
     data_dir = os.path.join(os.path.dirname(__file__), 'data')
     return os.path.join(data_dir, filename)
@@ -34,7 +41,11 @@ def get_mockreturn(method, request, url, *args, **kwargs):
     response = data_path(file)
     print("response " + response)
     shutil.copy(response + '.test', response)
-    return response
+    f = open(response, "r")
+    response = f.read()
+    f.close()
+    r = Response(response)
+    return r
 
 
 @pytest.fixture(autouse=True)
@@ -91,6 +102,7 @@ class TestESAIntegral():
         isla = IntegralClass(self.get_dummy_tap_handler())
         isla.search_target(name=parameters['name'],
                           verbose=parameters['verbose'])
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']

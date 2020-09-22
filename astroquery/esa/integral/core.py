@@ -153,12 +153,12 @@ class IntegralClass(BaseQuery):
             parameters.append("starttime == '{}'".format(starttime))
 
         query = "select * from ila.cons_observation"
-        
+
         if parameters:
             query += " where ({})".format(" and ".join(parameters))
-            
+
         query += " order by obsid"
-        
+
         if verbose:
             log.info(query)
 
@@ -177,7 +177,7 @@ class IntegralClass(BaseQuery):
                           outputformat="votable", verbose=False):
         """
         Launches a synchronous or asynchronous job to query the isla tap
-        using scw_id, obs_id, rev_id and prop_id as criteria to create 
+        using scw_id, obs_id, rev_id and prop_id as criteria to create
         and execute the associated query.
 
         Parameters
@@ -204,17 +204,17 @@ class IntegralClass(BaseQuery):
 
         parameters = {}
         if scwid is not None:
-            parameters["scwid"]=scwid
+            parameters["scwid"] = scwid
         if obsid is not None:
-            parameters["obsid"]=obsid
+            parameters["obsid"] = obsid
         if revid is not None:
-            parameters["REVID"]=revid
+            parameters["REVID"] = revid
         if propid is not None:
-            parameters["PROPID"]=propid
-        parameters["RETRIEVAL_TYPE"]="SCW"
+            parameters["PROPID"] = propid
+        parameters["RETRIEVAL_TYPE"] = "SCW"
 
         response = None
-        
+
         if self._data is not None:
             response = self._request('GET', self._data, save=True, cache=False,
                                  params=parameters)
@@ -252,7 +252,7 @@ class IntegralClass(BaseQuery):
         -------
         A table object
         """
-                
+
         if asyncjob:
             job = self._tap.launch_job_async(query=query,
                                              output_file=filename,
@@ -338,39 +338,32 @@ class IntegralClass(BaseQuery):
             url = "https://ila.esac.esa.int/tap/servlet/target-resolver?"\
                   "TARGET_NAME={}&RESOLVER_TYPE=ALL&FORMAT=json".format(targetname)
             response = self._request('GET', url)
-            
-            if "Response" not in str(response):
-                f = open(response, "r")
-                contents = f.read()
-                f.close()
-            else:
-                contents = response.text
-                
-            if "TARGET NOT FOUND" not in contents:                    
-                output = json.loads(contents)
+
+            if "TARGET NOT FOUND" not in response.text:
+                output = json.loads(response.text)
                 ra = output['objects'][0]['raDegrees']
                 dec = output['objects'][0]['decDegrees']
-                p = { 'ra': ra, "dec": dec }
+                p = {'ra': ra, "dec": dec}
             else:
-                log.info (response.text)
+                log.info(response.text)
                 p = None
 
         if verbose:
-            log.info (p)
+            log.info(p)
 
         return p
-    
+
     def __get_target_filter(self, targetname):
-        filter=""
-        if targetname is not None:           
+        filter = ""
+        if targetname is not None:
             position = self.get_position(targetname)
             if position is not None:
                 ra = position['ra']
                 dec = position['dec']
                 if ra is not None or dec is not None:
-                    filter = "1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{},{},1))".format(ra,dec)
+                    filter = "1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{},{},1))".format(ra, dec)
         return filter
-        
+
     def __getCoordInput(self, value, msg):
         if not (isinstance(value, str) or isinstance(value,
                                                      commons.CoordClasses)):
@@ -406,7 +399,5 @@ class IntegralClass(BaseQuery):
             raise ValueError("One of the lists is empty or there are "
                              "elements that are not strings")
 
-    def __isFile(self, f):
-        return isinstance(f,file) if sys.version_info[0] == 2 else hasattr(f, 'read')        
 
 Integral = IntegralClass()
