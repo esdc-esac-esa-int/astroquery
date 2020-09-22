@@ -15,7 +15,7 @@ from astroquery.utils.tap.model.taptable import TapTableMeta
 from astroquery.utils.tap.model.job import Job
 
 
-class DummyHubbleTapHandler(object):
+class DummyIntegralTapHandler(object):
 
     def __init__(self, method, parameters):
         self.__invokedMethod = method
@@ -86,25 +86,69 @@ class DummyHubbleTapHandler(object):
         self._parameters['dump_to_file'] = dump_to_file
         self._parameters['upload_resource'] = upload_resource
         self._parameters['upload_table_name'] = upload_table_name
-        return Job(True)
+        return Job(False)
 
-    def query_criteria(self, calibration_level=None,
-                          data_product_type=None, intent=None,
-                          obs_collection=None, instrument_name=None,
-                          filters=None, async_job=False, output_file=None,
-                          output_format="votable", verbose=False):
-        self.__invokedMethod = 'query_criteria'
-        self._parameters['calibration_level'] = calibration_level
-        self._parameters['data_product_type'] = data_product_type
-        self._parameters['intent'] = intent
-        self._parameters['obs_collection'] = obs_collection
-        self._parameters['instrument_name'] = instrument_name
-        self._parameters['filters'] = filters
-        self._parameters['async_job'] = async_job
-        self._parameters['output_file'] = output_file
-        self._parameters['output_format'] = output_format
+    def search_metadata(self, targetname=None, piname=None,
+               revno=None, srcname=None,
+               obsid=None, starttime=None, endtime=None,
+               asyncjob=True, filename=None,
+               outputformat="votable",
+               getquery=False, verbose=False):
+        self.__invokedMethod = 'search_metadata'
+        self._parameters['targetname'] = targetname
+        self._parameters['piname'] = piname
+        self._parameters['revno'] = revno
+        self._parameters['srcname'] = srcname
+        self._parameters['obsid'] = obsid
+        self._parameters['starttime'] = starttime
+        self._parameters['endtime'] = endtime
+        self._parameters['asyncjob'] = asyncjob
+        self._parameters['filename'] = filename
+        self._parameters['outputformat'] = outputformat
+        self._parameters['getquery'] = getquery
         self._parameters['verbose'] = verbose
-        return Job(True)
+        return Job(False)
+
+    def data_download(self, scwid=None,
+                          obsid=None, revid=None,
+                          propid=None, asyncjob=True,
+                          filename=None,
+                          outputformat="votable", verbose=False):
+        self.__invokedMethod = 'data_download'
+        self._parameters['scwid'] = scwid
+        self._parameters['obsid'] = obsid
+        self._parameters['revid'] = revid
+        self._parameters['propid'] = propid
+        self._parameters['asyncjob'] = asyncjob
+        self._parameters['filename'] = filename
+        self._parameters['outputformat'] = outputformat
+        self._parameters['verbose'] = verbose
+        return Job(False)
+
+    def query_tap(self, query, asyncjob=False, filename=None,
+                      outputformat="votable", verbose=False):
+        self.__invokedMethod = 'query_tap'
+        self._parameters['query'] = query
+        self._parameters['asyncjob'] = asyncjob
+        self._parameters['filename'] = filename
+        self._parameters['outputformat'] = outputformat
+        self._parameters['verbose'] = verbose
+        return Job(False)
+
+    def get_position(self, targetname, verbose=False):
+        self.__invokedMethod = 'get_position'
+        self._parameters['targetname'] = targetname
+        self._parameters['verbose'] = verbose
+        return Job(False)
+
+    def search_target(self, name, filename=None, outputformat='votable',
+                     verbose=False):
+        self.__invokedMethod = 'search_target'
+        self._parameters['name'] = name
+        self._parameters['filename'] = filename
+        self._parameters['outputformat'] = outputformat
+        self._parameters['verbose'] = verbose
+        return Job(False)
 
     def get_tables(self, only_names=True, verbose=False):
         self.__invokedMethod = 'get_tables'

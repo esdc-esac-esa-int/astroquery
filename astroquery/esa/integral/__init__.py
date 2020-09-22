@@ -15,7 +15,7 @@ from astropy import config as _config
 
 class Conf(_config.ConfigNamespace):
     """
-    Configuration parameters for `astroquery.esa.hubble`.
+    Configuration parameters for `astroquery.esa.integral`.
     """
     TIMEOUT = 60
 
@@ -23,4 +23,4 @@ conf = Conf()
 
 from .core import Integral, IntegralClass
 
-__all__ = ['Integral', 'IntegralClass', 'Conf', 'conf']
+__all__ = ['Integral', 'ntegralClass', 'Conf', 'conf']

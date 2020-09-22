@@ -24,13 +24,16 @@ from astroquery.utils.tap.model import modelutils
 from astroquery.query import BaseQuery
 from astropy.table import Table
 from six import BytesIO
+import sys
 import shutil
 import os
+import io
 import time
 import json
 
 from . import conf
 from astropy import log
+from http.client import HTTPResponse
 
 __all__ = ['Integral', 'IntegralClass']
 
@@ -51,6 +54,7 @@ class IntegralClass(BaseQuery):
             self._data = "https://ila.esac.esa.int/tap/data"
         else:
             self._tap = tap_handler
+            self._data = None
 
     def login(self, verbose=False):
         self._tap.login_gui(verbose)
@@ -87,8 +91,8 @@ class IntegralClass(BaseQuery):
                revno=None, srcname=None,
                obsid=None, starttime=None, endtime=None,
                asyncjob=True, filename=None,
-               outputformat="votable", verbose=False,
-               getquery=False):
+               outputformat="votable", getquery=False,
+               verbose=False):
         """
         Launches a synchronous or asynchronous job to query the isla tap
         using different fields as criteria to create and execute the
@@ -118,11 +122,11 @@ class IntegralClass(BaseQuery):
             If this parameter is not provided, the jobid is used instead
         output_format : str, optional, default 'votable'
             results format
-        verbose : bool, optional, default 'False'
-            flag to display information about the process
         get_query : bool, optional, default 'False'
             flag to return the query associated to the criteria as the result
             of this function.
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
 
         Returns
         -------
@@ -168,9 +172,9 @@ class IntegralClass(BaseQuery):
 
     def data_download(self, scwid=None,
                           obsid=None, revid=None,
-                          propid=None, async_job=True,
+                          propid=None, asyncjob=True,
                           filename=None,
-                          output_format="votable", verbose=False):
+                          outputformat="votable", verbose=False):
         """
         Launches a synchronous or asynchronous job to query the isla tap
         using scw_id, obs_id, rev_id and prop_id as criteria to create 
@@ -182,13 +186,13 @@ class IntegralClass(BaseQuery):
         obsid : str, optional
         revid : str, optional
         propid : str, optional
-        async_job : bool, optional, default 'True'
+        asyncjob : bool, optional, default 'True'
             executes the query (job) in asynchronous/synchronous mode (default
             synchronous)
         filename : str, optional, default None
             file name where the results are saved if dumpToFile is True.
             If this parameter is not provided, 'download.tar' is used instead
-        output_format : str, optional, default 'votable'
+        outputformat : str, optional, default 'votable'
             results format
         verbose : bool, optional, default 'False'
             flag to display information about the process
@@ -209,17 +213,21 @@ class IntegralClass(BaseQuery):
             parameters["PROPID"]=propid
         parameters["RETRIEVAL_TYPE"]="SCW"
 
-        response = self._request('GET', self._data, save=True, cache=False,
+        response = None
+        
+        if self._data is not None:
+            response = self._request('GET', self._data, save=True, cache=False,
                                  params=parameters)
 
         if verbose:
-            log.info(self.data_url)
+            log.info(self._data)
             log.info(parameters)
 
         if filename is None:
             filename = "isla_download_{}.tar".format(str(time.time()))
 
-        shutil.move(response, filename)
+        if response is not None:
+            shutil.move(response, filename)
 
     def query_tap(self, query, asyncjob=False, filename=None,
                       outputformat="votable", verbose=False):
@@ -314,7 +322,7 @@ class IntegralClass(BaseQuery):
 
         if columns is None:
             raise ValueError("table name specified is not found in "
-                             "EHST TAP service")
+                             "Integral TAP service")
 
         if onlynames is True:
             columnnames = []
@@ -330,13 +338,22 @@ class IntegralClass(BaseQuery):
             url = "https://ila.esac.esa.int/tap/servlet/target-resolver?"\
                   "TARGET_NAME={}&RESOLVER_TYPE=ALL&FORMAT=json".format(targetname)
             response = self._request('GET', url)
-            if "TARGET NOT FOUND" not in response.text:                    
-                output = json.loads(response.text)
+            
+            if "Response" not in str(response):
+                f = open(response, "r")
+                contents = f.read()
+                f.close()
+            else:
+                contents = response.text
+                
+            if "TARGET NOT FOUND" not in contents:                    
+                output = json.loads(contents)
                 ra = output['objects'][0]['raDegrees']
                 dec = output['objects'][0]['decDegrees']
                 p = { 'ra': ra, "dec": dec }
             else:
                 log.info (response.text)
+                p = None
 
         if verbose:
             log.info (p)
@@ -347,10 +364,11 @@ class IntegralClass(BaseQuery):
         filter=""
         if targetname is not None:           
             position = self.get_position(targetname)
-            ra = position['ra']
-            dec = position['dec']
-            if ra is not None or dec is not None:
-                filter = "1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{},{},1))".format(ra,dec)
+            if position is not None:
+                ra = position['ra']
+                dec = position['dec']
+                if ra is not None or dec is not None:
+                    filter = "1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{},{},1))".format(ra,dec)
         return filter
         
     def __getCoordInput(self, value, msg):
@@ -387,5 +405,8 @@ class IntegralClass(BaseQuery):
         else:
             raise ValueError("One of the lists is empty or there are "
                              "elements that are not strings")
+
+    def __isFile(self, f):
+        return isinstance(f,file) if sys.version_info[0] == 2 else hasattr(f, 'read')        
 
 Integral = IntegralClass()
