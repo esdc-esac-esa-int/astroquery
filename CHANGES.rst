@@ -47,6 +47,8 @@ esa/hubble
 
 - Module added to query eHST TAP based on a set of specific criteria and
   asynchronous jobs are now supported. [#1723]
+- Cone search module allows the user to save the result in local storage. [#1855]
+- Module added to perform a cone search based on a set of criteria. [#1855]
 
 esa/xmm_newton
 ^^^^^^^^^^^^^^
