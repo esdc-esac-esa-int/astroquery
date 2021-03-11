@@ -1122,7 +1122,7 @@ class JwstClass(object):
             max_cal_level = job.get_results()["calibrationlevel"][0]
             for row in job.get_results():
                 if(row["calibrationlevel"] == max_cal_level):
-                    planeids.append(row["planeid"].decode('utf-8'))
+                    planeids.append(JwstClass.get_decoded_string(row["planeid"]))
             return planeids, max_cal_level
         except Exception as e:
             raise ValueError("This observation_id does not exist in "
@@ -1206,7 +1206,7 @@ class JwstClass(object):
             query_members = "select m.members from {} m where m.observationid"\
                       "='{}'".format(self.JWST_MAIN_TABLE, observation_id)
             job = self.__jwsttap.launch_job(query=query_members)
-            oids = job.get_results()["members"][0].decode("utf-8").\
+            oids = JwstClass.get_decoded_string(job.get_results()["members"][0]).\
                 replace("caom:JWST/", "").split(" ")
         return oids
 
@@ -1267,12 +1267,12 @@ class JwstClass(object):
             query_artifactid = "select * from {} a where a.filename = "\
                 "'{}'".format(self.JWST_ARTIFACT_TABLE, file_name)
             job = self.__jwsttap.launch_job(query=query_artifactid)
-            return job.get_results()['artifactid'][0].decode("utf-8")
+            return JwstClass.get_decoded_string(job.get_results()['artifactid'][0])
         else:
             query_filename = "select * from {} a where a.artifactid = "\
                 "'{}'".format(self.JWST_ARTIFACT_TABLE, artifact_id)
             job = self.__jwsttap.launch_job(query=query_filename)
-            return job.get_results()['filename'][0].decode("utf-8")
+            return JwstClass.get_decoded_string(job.get_results()['filename'][0])
 
     def __check_product_input(self, artifact_id, file_name):
         if artifact_id is None and file_name is None:
@@ -1567,6 +1567,14 @@ class JwstClass(object):
             output = input_file
         os.rename(output_decompressed_file, output)
         return output
+
+    @staticmethod
+    def get_decoded_string(str):
+        try:
+            return str.decode('utf-8')
+            # return str
+        except:
+            return str
 
 
 Jwst = JwstClass()
