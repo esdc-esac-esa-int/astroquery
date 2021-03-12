@@ -38,7 +38,7 @@ from . import conf
 from .data_access import JwstDataHandler
 
 from builtins import isinstance
-from astroquery.jwst.token import TokenDialog
+from astroquery.esa.jwst.token import TokenDialog
 
 __all__ = ['Jwst', 'JwstClass']
 
