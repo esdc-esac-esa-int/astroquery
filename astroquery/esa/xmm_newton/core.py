@@ -35,6 +35,8 @@ class XMMNewtonClass(BaseQuery):
     data_url = conf.DATA_ACTION
     data_aio_url = conf.DATA_ACTION_AIO
     metadata_url = conf.METADATA_ACTION
+    uls_ra_dec_url = conf.ULS_RA_DEC_ACTION
+    uls_target_url = conf.ULS_TARGET_ACTION
     TIMEOUT = conf.TIMEOUT
 
     def __init__(self, tap_handler=None):
@@ -773,6 +775,86 @@ class XMMNewtonClass(BaseQuery):
                                              instrument))
 
         return ret
+
+    def get_upper_limits(self, ra, dec, filename, cache=False, verbose=False):
+        """Gets upper limits (ULS) for a specific position and stored it in 'filename'
+
+        Examples:
+
+        Extracting all instruments:
+            result = XMM.get_upper_limits(ra=330.21750000000003, dec=83.63308333)
+
+        Parameters
+        ----------
+        ra : double, mandatory
+            Right Ascension
+        dec : double, mandatory
+            Declination
+        filename : string, mandatory
+            Name of the file in which the ULSs will be stored
+        verbose : bool, optional, default 'False'
+            Flag to display information about the process
+
+        Returns
+        -------
+        A file containing a json with ULS for the position
+        """
+        link = self.uls_ra_dec_url + "ra=" + ra + "&dec=" + dec
+
+        if verbose:
+            log.info(link)
+
+        # we can cache this HEAD request - the _download_file one will check
+        # the file size and will never cache
+        response = self._request('HEAD', link, save=False, cache=cache)
+        self._download_file(link, filename, head_safe=True, cache=cache)
+
+        if verbose:
+            log.info("Wrote {0} to {1}".format(link, filename))
+
+    def get_target_position(self, targetname, verbose=False):
+        """Gets position (ra and dec) for a specific target name
+
+        Examples:
+
+        Extracting all instruments:
+            result = XMM.get_target_position(targetname="m31")
+
+        Parameters
+        ----------
+        targetname : string, mandatory
+            Name of the target used to search ULSs
+        verbose : bool, optional, default 'False'
+            Flag to display information about the process
+
+        Returns
+        -------
+        ra and dec for the target name
+        """
+        link = self.uls_target_url + "TARGET_NAME=" + targetname
+
+        if verbose:
+            log.info(link)
+
+        # we can cache this HEAD request - the _download_file one will check
+        # the file size and will never cache
+        response = self._request('GET', link, save=False, cache=False)
+
+        if verbose:
+            log.info(str(response.text))
+
+        contents = response.text
+        pieces = contents.split('\t')
+        if verbose:
+            log.info(str(pieces))
+
+        dec = pieces[1]
+        ra = pieces[2]
+        if verbose:
+            log.info("ra = " + ra)
+            log.info("dec = " + dec)
+
+        return ra, dec
 
 
 XMMNewton = XMMNewtonClass()

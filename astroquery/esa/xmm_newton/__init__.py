@@ -27,6 +27,13 @@ class Conf(_config.ConfigNamespace):
                                          "nxsa-sl/servlet/"
                                          "metadata-action?",
                                          "Main url for retriving XSA metadata")
+    ULS_RA_DEC_ACTION = _config.ConfigItem("http://nxsa.esac.esa.int/"
+                                         "nxsa-sl/servlet/"
+                                         "get-uls?",
+                                         "Main url for retriving ULS by ra and dec")
+    ULS_TARGET_ACTION = _config.ConfigItem("http://nxsa.esac.esa.int/"
+                                         "nxsa-sl/servlet/target-resolver?",
+                                         "Main url for retriving ULS by target name")
     TIMEOUT = 60
 
 

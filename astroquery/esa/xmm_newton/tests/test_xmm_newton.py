@@ -510,3 +510,8 @@ class TestXMMNewton():
                        % (_tarname, _invalid_source_number,
                           _default_instrument))
         os.remove(_tarname)
+
+    def test_get_target_position(self, capsys):
+        xsa = XMMNewtonClass()
+        ra, dec = xsa.get_target_position('m31')
+        assert ra == 41.26875 and dec == 10.68470833
