@@ -21,6 +21,9 @@ from astropy.coordinates import SkyCoord
 from astropy.utils.diff import report_diff_values
 from astroquery.utils.tap.core import TapPlus
 
+import os.path
+from os import path
+
 from ..core import XMMNewtonClass
 from ..tests.dummy_tap_handler import DummyXMMNewtonTapHandler
 from ..tests.dummy_handler import DummyHandler
@@ -511,7 +514,50 @@ class TestXMMNewton():
                           _default_instrument))
         os.remove(_tarname)
 
-    def test_get_target_position(self, capsys):
-        xsa = XMMNewtonClass()
-        ra, dec = xsa.get_target_position('m31')
-        assert ra == 41.26875 and dec == 10.68470833
+    def test_download_data(self):
+        parameters = {'observation_id': "0112880801",
+                      'level': "ODF",
+                      'filename': 'file',
+                      'verbose': False}
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        xsa.download_data(**parameters)
+
+    def test_download_data_single_file(self):
+        parameters = {'observation_id': "0762470101",
+                      'level': "PPS",
+                      'name': 'OBSMLI',
+                      'filename': 'single',
+                      'instname': 'OM',
+                      'extension': 'FTZ',
+                      'verbose': False}
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        xsa.download_data(**parameters)
+
+    def test_get_postcard(self):
+        parameters = {'observation_id': "0112880801",
+                      'image_type': "OBS_EPIC",
+                      'filename': None,
+                      'verbose': False}
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        xsa.get_postcard(**parameters)
+
+    def test_get_postcard_filename(self):
+        parameters = {'observation_id': "0112880801",
+                      'image_type': "OBS_EPIC",
+                      'filename': "test",
+                      'verbose': False}
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        xsa.get_postcard(**parameters)
+
+    def test_get_epic_spectra(self):
+        _tarname = "tarfile.tar"
+        _source_number = 83
+        _instruments = ["M1", "M1_arf", "M1_bkg", "M1_rmf",
+                        "M2", "M2_arf", "M2_bkg", "M2_rmf",
+                        "PN", "PN_arf", "PN_bkg", "PN_rmf"]
+        self._create_tar(_tarname, self._files)
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        res = xsa.get_epic_spectra(_tarname, _source_number,
+                                   instrument=[])
+        assert len(res) == 0
+        os.remove(_tarname)

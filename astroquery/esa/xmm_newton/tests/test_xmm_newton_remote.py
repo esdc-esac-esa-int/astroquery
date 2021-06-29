@@ -27,62 +27,6 @@ from ..core import XMMNewtonClass
 class TestXMMNewtonRemote():
 
     @pytest.mark.remote_data
-    def test_download_data(self):
-        parameters = {'observation_id': "0112880801",
-                      'level': "ODF",
-                      'filename': 'file',
-                      'verbose': False}
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        xsa.download_data(**parameters)
-
-    @pytest.mark.remote_data
-    def test_download_data_single_file(self):
-        parameters = {'observation_id': "0762470101",
-                      'level': "PPS",
-                      'name': 'OBSMLI',
-                      'filename': 'single',
-                      'instname': 'OM',
-                      'extension': 'FTZ',
-                      'verbose': False}
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        xsa.download_data(**parameters)
-
-    @pytest.mark.remote_data
-    def test_get_postcard(self):
-        parameters = {'observation_id': "0112880801",
-                      'image_type': "OBS_EPIC",
-                      'filename': None,
-                      'verbose': False}
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        xsa.get_postcard(**parameters)
-
-    @pytest.mark.remote_data
-    def test_get_postcard_filename(self):
-        parameters = {'observation_id': "0112880801",
-                      'image_type': "OBS_EPIC",
-                      'filename': "test",
-                      'verbose': False}
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        xsa.get_postcard(**parameters)
-
-    @pytest.mark.remote_data
-    def test_get_epic_spectra(self):
-        _tarname = "tarfile.tar"
-        _source_number = 83
-        _instruments = ["M1", "M1_arf", "M1_bkg", "M1_rmf",
-                        "M2", "M2_arf", "M2_bkg", "M2_rmf",
-                        "PN", "PN_arf", "PN_bkg", "PN_rmf"]
-        self._create_tar(_tarname, self._files)
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        res = xsa.get_epic_spectra(_tarname, _source_number,
-                                   instrument=[])
-        assert len(res) == 8
-        # Removing files created in this test
-        for ob_name in self._files:
-            shutil.rmtree(ob_name)
-        os.remove(_tarname)
-
-    @pytest.mark.remote_data
     def test_get_epic_metadata(self):
         tap_url = "http://nxsadev.esac.esa.int/tap-server/tap/"
         target_name = "4XMM J122934.7+015657"
@@ -125,3 +69,15 @@ class TestXMMNewtonRemote():
                                                c.dec.degree,
                                                radius))
         assert report_diff_values(slew_source, table)
+
+    @pytest.mark.remote_data
+    def test_get_target_position(self, capsys):
+        xsa = XMMNewtonClass()
+        ra, dec = xsa.get_target_position('m31')
+        assert ra == '41.26875' and dec == '10.68470833'
+
+    @pytest.mark.remote_data
+    def test_get_upper_limits(self, capsys):
+        xsa = XMMNewtonClass()
+        result = xsa.get_upper_limits(ra='41.26875', dec='10.68470833')
+        assert result != ''

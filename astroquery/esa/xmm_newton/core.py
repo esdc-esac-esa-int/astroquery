@@ -776,8 +776,9 @@ class XMMNewtonClass(BaseQuery):
 
         return ret
 
-    def get_upper_limits(self, ra, dec, filename, cache=False, verbose=False):
+    def get_upper_limits(self, ra, dec, filename=None, cache=False, verbose=False):
         """Gets upper limits (ULS) for a specific position and stored it in 'filename'
+        or returned if filename is not set
 
         Examples:
 
@@ -790,14 +791,15 @@ class XMMNewtonClass(BaseQuery):
             Right Ascension
         dec : double, mandatory
             Declination
-        filename : string, mandatory
+        filename : string, optional
             Name of the file in which the ULSs will be stored
         verbose : bool, optional, default 'False'
             Flag to display information about the process
 
         Returns
         -------
-        A file containing a json with ULS for the position
+        A file containing a json with ULS for the position or the content
+        if filename is not set
         """
         link = self.uls_ra_dec_url + "ra=" + ra + "&dec=" + dec
 
@@ -806,11 +808,15 @@ class XMMNewtonClass(BaseQuery):
 
         # we can cache this HEAD request - the _download_file one will check
         # the file size and will never cache
-        response = self._request('HEAD', link, save=False, cache=cache)
-        self._download_file(link, filename, head_safe=True, cache=cache)
+        if filename is not None:
+            response = self._request('HEAD', link, save=False, cache=cache)
+            self._download_file(link, filename, head_safe=True, cache=cache)
 
-        if verbose:
-            log.info("Wrote {0} to {1}".format(link, filename))
+            if verbose:
+                log.info("Wrote {0} to {1}".format(link, filename))
+        else:
+            response = self._request('GET', link, save=False, cache=cache)
+            return response.content
 
     def get_target_position(self, targetname, verbose=False):
         """Gets position (ra and dec) for a specific target name

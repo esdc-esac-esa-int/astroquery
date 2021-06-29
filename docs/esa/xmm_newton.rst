@@ -158,6 +158,55 @@ The EPIC metadata can be found in four tables in the XSA TAP:
 
 This will return the metadata within the four TAP tables in four `~astropy.table.Table` for the given target.
 
+--------------------------------------------------
+8. Getting the position (ra, dec) of a target name 
+--------------------------------------------------
+
+This function retrieves the position for a given target.
+
+The target must be defined with its target name.
+
+.. code-block:: python
+
+  >>> from astroquery.esa.xmm_newton import XMMNewton
+  >>>
+  >>> ra, dec = XMMNewton.get_target_position(targetname='M31', verbose=True)
+  INFO: http://nxsa.esac.esa.int/nxsa-sl/servlet/target-resolver?TARGET_NAME=M31 [astroquery.esa.xmm_newton.core]
+  INFO: M31	10.68470833	41.26875	92ms
+   [astroquery.esa.xmm_newton.core]
+  INFO: ['M31', '10.68470833', '41.26875', '92ms\n'] [astroquery.esa.xmm_newton.core]
+  INFO: ra = 41.26875 [astroquery.esa.xmm_newton.core]
+  INFO: dec = 10.68470833 [astroquery.esa.xmm_newton.core]
+  >>> ra
+  '41.26875'
+  >>> dec
+  '10.68470833'
+  >>>
+
+------------------------------------------------
+9. Getting Upper Limits for a position (ra, dec)
+------------------------------------------------
+
+This function retrieves in json the upper limits for a position.
+
+.. code-block:: python
+
+  >>> from astroquery.esa.xmm_newton import XMMNewton
+  >>>
+  >>> ra, dec = XMMNewton.get_target_position(targetname='M31', verbose=True)
+  INFO: http://nxsa.esac.esa.int/nxsa-sl/servlet/target-resolver?TARGET_NAME=M31 [astroquery.esa.xmm_newton.core]
+  INFO: M31	10.68470833	41.26875	92ms
+   [astroquery.esa.xmm_newton.core]
+  INFO: ['M31', '10.68470833', '41.26875', '92ms\n'] [astroquery.esa.xmm_newton.core]
+  INFO: ra = 41.26875 [astroquery.esa.xmm_newton.core]
+  INFO: dec = 10.68470833 [astroquery.esa.xmm_newton.core]
+  >>> ra
+  '41.26875'
+  >>> dec
+  '10.68470833'
+  >>>
+  >>> XMMNewton.get_upper_limits(ra=ra, dec=dec, filename='upper_limits.json', verbose=True)
+
 Reference/API
 =============
 
