@@ -26,6 +26,8 @@ from astroquery import log
 from astropy.coordinates import SkyCoord
 from ...exceptions import LoginError
 
+import json
+
 
 __all__ = ['XMMNewton', 'XMMNewtonClass']
 
@@ -38,6 +40,20 @@ class XMMNewtonClass(BaseQuery):
     uls_ra_dec_url = conf.ULS_RA_DEC_ACTION
     uls_target_url = conf.ULS_TARGET_ACTION
     TIMEOUT = conf.TIMEOUT
+
+    EPN_OPEN_ECF =  [9.6304, 1.1213, 4.1236]
+    EPN_THIN_ECF = [7.3866, 1.1086, 3.3243]
+    EPN_MEDIUM_ECF = [7.0298, 1.0992, 3.1924]
+    EPN_THICK_ECF = [5.4091, 1.056, 2.5928]
+    EMOS1_OPEN_ECF = [2.3808, 0.3883, 1.0916]
+    EMOS1_THIN_ECF = [1.929, 0.3832, 0.929]
+    EMOS1_MEDIUM_ECF = [1.8531, 0.3797, 0.900]
+    EMOS1_THICK_ECF = [1.5301, 0.3672, 0.7779]
+    EMOS2_OPEN_ECF = [2.3905, 0.3965, 1.1003]
+    EMOS2_THIN_ECF = [1.9322, 0.3919, 0.9358]
+    EMOS2_MEDIUM_ECF = [1.8548, 0.3881, 0.906]
+    EMOS2_THICK_ECF = [1.5301, 0.3749, 0.7829]
+    ECF_FACTOR = 10**-11
 
     def __init__(self, tap_handler=None):
         super(XMMNewtonClass, self).__init__()
@@ -806,17 +822,141 @@ class XMMNewtonClass(BaseQuery):
         if verbose:
             log.info(link)
 
-        # we can cache this HEAD request - the _download_file one will check
-        # the file size and will never cache
-        if filename is not None:
-            response = self._request('HEAD', link, save=False, cache=cache)
-            self._download_file(link, filename, head_safe=True, cache=cache)
+        response = self._request('GET', link, save=False, cache=cache)
+        json_data = response.content
 
-            if verbose:
-                log.info("Wrote {0} to {1}".format(link, filename))
+        loaded_json = json.loads(json_data)
+        new_json = []
+
+        for x in loaded_json:
+            x_transformed = str(x).replace("\'", "\"")
+            x_transformed = str(x_transformed).replace("None", "\"None\"")
+
+            loaded_node = json.loads(x_transformed)
+            for n in loaded_node:
+                print("%s: %s" % (n, str(loaded_node[n])))
+
+            instrument = loaded_node['instrum'].upper()
+            filt = loaded_node['filt'].upper()
+            band8_flag = loaded_node['band8_flags']
+
+            band6_ul_sigma1 = loaded_node['band6_ul_sigma1']
+            band7_ul_sigma1 = loaded_node['band7_ul_sigma1']
+            band8_ul_sigma1 = loaded_node['band8_ul_sigma1']
+
+            band6_ul_sigma2 = loaded_node['band6_ul_sigma2']
+            band7_ul_sigma2 = loaded_node['band7_ul_sigma2']
+            band8_ul_sigma2 = loaded_node['band8_ul_sigma2']
+
+            band6_ul_sigma3 = loaded_node['band6_ul_sigma3']
+            band7_ul_sigma3 = loaded_node['band7_ul_sigma3']
+            band8_ul_sigma3 = loaded_node['band8_ul_sigma3']
+
+            if band8_flag != 0:
+                continue
+
+            FACTOR = self.ECF_FACTOR
+            ECF = None
+            if instrument == 'PN':
+                if filt == 'OPEN':
+                    ECF = self.EPN_OPEN_ECF
+                elif filt == 'THIN1':
+                    ECF = self.EPN_THIN_ECF
+                elif filt == 'MEDIUM':
+                    ECF = self.EPN_MEDIUM_ECF
+                elif filt == 'THICK':
+                    ECF = self.EPN_THICK_ECF
+                else:
+                    ECF = None
+
+            elif instrument == 'M1':
+                if filt == 'OPEN':
+                    ECF = self.EMOS1_OPEN_ECF
+                elif filt == 'THIN1':
+                    ECF = self.EMOS1_THIN_ECF
+                elif filt == 'MEDIUM':
+                    ECF = self.EMOS1_MEDIUM_ECF
+                elif filt == 'THICK':
+                    ECF = self.EMOS1_THICK_ECF
+                else:
+                    ECF = None
+            elif instrument == 'M2':
+                if filt == 'OPEN':
+                    ECF = self.EMOS2_OPEN_ECF
+                elif filt == 'THIN1':
+                    ECF = self.EMOS2_THIN_ECF
+                elif filt == 'MEDIUM':
+                    ECF = self.EMOS2_MEDIUM_ECF
+                elif filt == 'THICK':
+                    ECF = self.EMOS2_THICK_ECF
+                else:
+                    ECF = None
+            else:
+                ECF = None
+
+            band6_flux_sigma1 = None
+            band7_flux_sigma1 = None
+            band8_flux_sigma1 = None
+
+            band6_flux_sigma2 = None
+            band7_flux_sigma2 = None
+            band8_flux_sigma2 = None
+
+            band6_flux_sigma3 = None
+            band7_flux_sigma3 = None
+            band8_flux_sigma3 = None
+
+            if ECF is not None:
+                if band6_ul_sigma1 is not None:
+                    band6_flux_sigma1 = FACTOR*band6_ul_sigma1/ECF[0]
+
+                if band7_ul_sigma1 is not None:
+                    band7_flux_sigma1 = FACTOR*band7_ul_sigma1/ECF[1]
+
+                if band8_ul_sigma1 is not None:
+                    band8_flux_sigma1 = FACTOR*band8_ul_sigma1/ECF[2]
+
+                if band6_ul_sigma2 is not None:
+                    band6_flux_sigma2 = FACTOR*band6_ul_sigma2/ECF[0]
+
+                if band7_ul_sigma2 is not None:
+                    band7_flux_sigma2 = FACTOR*band7_ul_sigma2/ECF[1]
+
+                if band8_ul_sigma2 is not None:
+                    band8_flux_sigma2 = FACTOR*band8_ul_sigma2/ECF[2]
+
+                if band6_ul_sigma3 is not None:
+                    band6_flux_sigma3 = FACTOR*band6_ul_sigma3/ECF[0]
+
+                if band7_ul_sigma3 is not None:
+                    band7_flux_sigma3 = FACTOR*band7_ul_sigma3/ECF[1]
+
+                if band8_ul_sigma3 is not None:
+                    band8_flux_sigma3 = FACTOR*band8_ul_sigma3/ECF[2]
+
+            loaded_node['band6_flux_sigma1'] = band6_flux_sigma1
+            loaded_node['band7_flux_sigma1'] = band7_flux_sigma1
+            loaded_node['band8_flux_sigma1'] = band8_flux_sigma1
+
+            loaded_node['band6_flux_sigma2'] = band6_flux_sigma2
+            loaded_node['band7_flux_sigma2'] = band7_flux_sigma2
+            loaded_node['band8_flux_sigma2'] = band8_flux_sigma2
+
+            loaded_node['band6_flux_sigma3'] = band6_flux_sigma3
+            loaded_node['band7_flux_sigma3'] = band7_flux_sigma3
+            loaded_node['band8_flux_sigma3'] = band8_flux_sigma3
+
+            new_node = loaded_node
+
+            new_json.append(new_node)
+
+        new_data = json.dumps(new_json)
+        if filename is not None:
+            with open(filename, 'w') as f:
+                f.write(str(new_data))
+            f.close()
         else:
-            response = self._request('GET', link, save=False, cache=cache)
-            return response.content
+            return new_data
 
     def get_target_position(self, targetname, verbose=False):
         """Gets position (ra and dec) for a specific target name
@@ -854,8 +994,8 @@ class XMMNewtonClass(BaseQuery):
         if verbose:
             log.info(str(pieces))
 
-        dec = pieces[1]
-        ra = pieces[2]
+        dec = pieces[2]
+        ra = pieces[1]
         if verbose:
             log.info("ra = " + ra)
             log.info("dec = " + dec)

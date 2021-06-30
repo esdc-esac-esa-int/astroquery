@@ -74,10 +74,10 @@ class TestXMMNewtonRemote():
     def test_get_target_position(self, capsys):
         xsa = XMMNewtonClass()
         ra, dec = xsa.get_target_position('m31')
-        assert ra == '41.26875' and dec == '10.68470833'
+        assert ra == '10.68470833' and dec == '41.26875'
 
     @pytest.mark.remote_data
     def test_get_upper_limits(self, capsys):
         xsa = XMMNewtonClass()
-        result = xsa.get_upper_limits(ra='41.26875', dec='10.68470833')
+        result = xsa.get_upper_limits(ra='10.68470833', dec='41.26875')
         assert result != ''
