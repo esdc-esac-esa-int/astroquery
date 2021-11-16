@@ -41,7 +41,7 @@ class XMMNewtonClass(BaseQuery):
         super(XMMNewtonClass, self).__init__()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="http://nxsadev.esac.esa.int"
+            self._tap = TapPlus(url="http://nxsa.esac.esa.int"
                                     "/tap-server/tap/")
         else:
             self._tap = tap_handler
