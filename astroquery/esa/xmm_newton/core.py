@@ -12,6 +12,7 @@ Created on 3 Sept 2019
 
 """
 import re
+from getpass import getpass
 from ...utils.tap.core import TapPlus
 from ...query import BaseQuery
 import shutil
@@ -21,7 +22,7 @@ import tarfile
 import os
 
 from astropy.io import fits
-from . import conf
+from . import conf, config
 from astroquery import log
 from astropy.coordinates import SkyCoord
 from ...exceptions import LoginError
@@ -41,20 +42,14 @@ class XMMNewtonClass(BaseQuery):
         super(XMMNewtonClass, self).__init__()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="http://nxsa.esac.esa.int"
-                                    "/tap-server/tap/")
+            self._tap = TapPlus(url="https://nxsa.esac.esa.int"
+                                    "/tap-server/tap")
         else:
             self._tap = tap_handler
         self._rmf_ftp = str("http://sasdev-xmm.esac.esa.int/pub/ccf/constituents/extras/responses/")
 
-    def login(self, verbose=False):
-        self._tap.login_gui(verbose)
-
-    def logout(self, verbose=False):
-        self._tap.logout(verbose)
-
     def download_data(self, observation_id, *, filename=None, verbose=False,
-                      cache=True, **kwargs):
+                      cache=True, prop=False, username=None, password=None, **kwargs):
         """
         Download data from XMM-Newton
 
@@ -113,6 +108,18 @@ class XMMNewtonClass(BaseQuery):
 
         link = link + "".join("&{0}={1}".format(key, val)
                               for key, val in kwargs.items())
+        if config.aiocredentials["user"] != "" and config.aiocredentials["password"] != "":
+            username = config.aiocredentials["user"]
+            password = config.aiocredentials["password"]
+
+        if prop:
+            if username is None and password is None:
+                username = input("Username: ")
+                password = getpass("Password: ")
+                link = link + "&AIOUSER=" + username + "&AIOPWD=" + password
+            else:
+                link = link + "&AIOUSER=" + username + "&AIOPWD=" + password
+
 
         if verbose:
             log.info(link)
@@ -124,10 +131,12 @@ class XMMNewtonClass(BaseQuery):
         # Get original extension
         if 'Content-Type' in response.headers and 'text' not in response.headers['Content-Type']:
             _, params = cgi.parse_header(response.headers['Content-Disposition'])
-        else:
-            if response.status_code == 401:
-                error = "Data protected by proprietary rights. Please check your credentials"
-                raise LoginError(error)
+        elif response.status_code == 401:
+            error = "Data protected by proprietary rights. Please check your credentials"
+            raise LoginError(error)
+        elif 'Content-Type' not in response.headers:
+            error = "Incorrect credentials"
+            raise LoginError(error)
         response.raise_for_status()
 
         r_filename = params["filename"]

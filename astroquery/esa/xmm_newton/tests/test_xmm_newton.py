@@ -31,11 +31,11 @@ from tarfile import is_tarfile
 class TestXMMNewton():
 
     def get_dummy_tap_handler(self):
-        parameterst = {'query': "select top 10 * from v_public_observations",
+        parameters = {'query': "select top 10 * from v_public_observations",
                        'output_file': "test2.vot",
                        'output_format': "votable",
                        'verbose': False}
-        dummyTapHandler = DummyXMMNewtonTapHandler("launch_job", parameterst)
+        dummyTapHandler = DummyXMMNewtonTapHandler("launch_job", parameters)
         return dummyTapHandler
 
     def test_query_xsa_tap(self):

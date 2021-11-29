@@ -1,0 +1,4 @@
+aiocredentials = {
+    "user": "",
+    "password": ""
+}
