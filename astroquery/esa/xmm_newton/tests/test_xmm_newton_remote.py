@@ -199,21 +199,7 @@ class TestXMMNewtonRemote():
     def test_download_proprietary_data_incorrect_credentials(self):
         parameters = {'observation_id': "0762470101",
                       'prop': 'True',
-                      'username': 'Test',
-                      'password': 'Test',
-                      'level': "PPS",
-                      'name': 'OBSMLI',
-                      'filename': 'single',
-                      'instname': 'OM',
-                      'extension': 'FTZ',
-                      'verbose': False}
-        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
-        xsa.download_data(**parameters)
-
-    @pytest.mark.remote_data
-    @pytest.mark.xfail(raises=LoginError)
-    def test_download_proprietary_data_without_credentials(self):
-        parameters = {'observation_id': "0883780101",
+                      'credentials_file': "astroquery/esa/xmm_newton/tests/my_config.ini",
                       'level': "PPS",
                       'name': 'OBSMLI',
                       'filename': 'single',
