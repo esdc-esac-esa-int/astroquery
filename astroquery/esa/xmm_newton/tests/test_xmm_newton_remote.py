@@ -10,7 +10,6 @@ Created on 4 Sept. 2019
 import pytest
 from astroquery.exceptions import LoginError
 
-import sys
 import tarfile
 import os
 import errno

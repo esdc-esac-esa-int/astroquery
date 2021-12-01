@@ -11,22 +11,14 @@ Created on 4 Sept. 2019
 """
 from unittest.mock import patch
 
-import pytest
-
-import sys
 import tarfile
 import os
 import errno
 import shutil
-from astropy.coordinates import SkyCoord
-from astropy.utils.diff import report_diff_values
-from astroquery.utils.tap.core import TapPlus
 
 from ..core import XMMNewtonClass
 from ..tests.dummy_tap_handler import DummyXMMNewtonTapHandler
 from ..tests.dummy_handler import DummyHandler
-from fileinput import filename
-from tarfile import is_tarfile
 
 
 class mockResponse:
