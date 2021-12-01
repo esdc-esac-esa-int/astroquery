@@ -43,8 +43,7 @@ class XMMNewtonClass(BaseQuery):
         self.configuration = configparser.ConfigParser()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="https://nxsa.esac.esa.int"
-                                    "/tap-server/tap")
+            self._tap = TapPlus(url="https://nxsa.esac.esa.int/tap-server/tap")
         else:
             self._tap = tap_handler
         self._rmf_ftp = str("http://sasdev-xmm.esac.esa.int/pub/ccf/constituents/extras/responses/")
@@ -115,7 +114,7 @@ class XMMNewtonClass(BaseQuery):
         # If the user wants to access proprietary data, ask them for there credentials
         if prop:
             username, password = self._get_username_and_password(credentials_file)
-            link = link + "&AIOUSER=" + username + "&AIOPWD=" + password
+            link = f"{link}&AIOUSER={username}&AIOPWD={password}"
 
         if verbose:
             log.info(link)
@@ -132,7 +131,7 @@ class XMMNewtonClass(BaseQuery):
         self._download_file(link, filename, head_safe=True, cache=cache)
 
         if verbose:
-            log.info("Wrote {0} to {1}".format(link, filename))
+            log.info(f"Wrote {link} to {filename}")
         log.setLevel(previouslevel)
 
     def get_postcard(self, observation_id, *, image_type="OBS_EPIC",
@@ -184,12 +183,12 @@ class XMMNewtonClass(BaseQuery):
         else:
             filename = observation_id + ".png"
 
-        log.info("Copying file to {0}...".format(filename))
+        log.info(f"Copying file to {filename}...")
 
         shutil.move(local_filepath, filename)
 
         if verbose:
-            log.info("Wrote {0} to {1}".format(link, filename))
+            log.info(f"Wrote {link} to {filename}")
 
         return filename
 
@@ -271,8 +270,7 @@ class XMMNewtonClass(BaseQuery):
                 break
 
         if columns is None:
-            raise ValueError("table name specified is not found in "
-                             "XSA TAP service")
+            raise ValueError("table name specified is not found in XSA TAP service")
 
         if only_names:
             return [c.name for c in columns]
@@ -280,7 +278,7 @@ class XMMNewtonClass(BaseQuery):
             return columns
 
     def _create_link(self, observation_id, **kwargs):
-        link = self.data_aio_url + "obsno=" + observation_id
+        link = f"{self.data_aio_url}obsno={observation_id}"
         link = link + "".join("&{0}={1}".format(key, val)
                               for key, val in kwargs.items())
         return link

@@ -9,7 +9,7 @@ European Space Agency (ESA)
 
 Created on 4 Sept. 2019
 """
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
