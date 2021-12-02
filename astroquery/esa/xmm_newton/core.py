@@ -165,7 +165,7 @@ class XMMNewtonClass(BaseQuery):
         params = {'RETRIEVAL_TYPE': 'POSTCARD',
                   'OBSERVATION_ID': observation_id,
                   'OBS_IMAGE_TYPE': image_type,
-                  'PROTOCOL': 'HTTP'}
+                  'PROTOCOL': 'HTTPS'}
 
         link = self.data_url + "".join("&{0}={1}".format(key, val)
                                        for key, val in params.items())

@@ -221,7 +221,7 @@ class TestXMMNewtonRemote():
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         xsa.download_data(**parameters)
 
-"""
+
     @pytest.mark.remote_data
     def test_get_epic_spectra(self):
         _tarname = "tarfile.tar"
@@ -233,9 +233,4 @@ class TestXMMNewtonRemote():
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         res = xsa.get_epic_spectra(_tarname, _source_number,
                                    instrument=[])
-        assert len(res) == 8
-        # Removing files created in this test
-        for ob_name in self._files:
-            shutil.rmtree(ob_name)
-        os.remove(_tarname)
-"""
+        assert len(res) == 0

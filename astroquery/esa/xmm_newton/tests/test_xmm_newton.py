@@ -11,6 +11,7 @@ Created on 4 Sept. 2019
 """
 from unittest.mock import patch
 
+import pytest
 import tarfile
 import os
 import errno
@@ -19,9 +20,10 @@ import shutil
 from ..core import XMMNewtonClass
 from ..tests.dummy_tap_handler import DummyXMMNewtonTapHandler
 from ..tests.dummy_handler import DummyHandler
+from astroquery.exceptions import LoginError
 
 
-class mockResponse:
+class mockResponse():
     headers = {'Date': 'Wed, 24 Nov 2021 13:43:50 GMT',
                'Server': 'Apache/2.4.6 (Red Hat Enterprise Linux) OpenSSL/1.0.2k-fips',
                'Content-Disposition': 'inline; filename="0560181401.tar.gz"',
@@ -527,6 +529,25 @@ class TestXMMNewton():
         mock_request.return_value = mockResponse
         params = xsa._request_link("https://nxsa.esac.esa.int/nxsa-sl/servlet/data-action-aio?obsno=0560181401", None)
         assert params == {'filename': '0560181401.tar.gz'}
+
+    @pytest.mark.xfail(raises=LoginError)
+    @patch('astroquery.query.BaseQuery._request')
+    def test_request_link_protected(self, mock_request):
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        dummyclass = mockResponse
+        dummyclass.headers = {}
+        mock_request.return_value = dummyclass
+        xsa._request_link("https://nxsa.esac.esa.int/nxsa-sl/servlet/data-action-aio?obsno=0560181401", None)
+
+    @pytest.mark.xfail(raises=LoginError)
+    @patch('astroquery.query.BaseQuery._request')
+    def test_request_link_incorrect_credentials(self, mock_request):
+        xsa = XMMNewtonClass(self.get_dummy_tap_handler())
+        dummyclass = mockResponse
+        dummyclass.headers = {}
+        dummyclass.status_code = 10
+        mock_request.return_value = dummyclass
+        xsa._request_link("https://nxsa.esac.esa.int/nxsa-sl/servlet/data-action-aio?obsno=0560181401", None)
 
     def test_get_username_and_password(self):
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
