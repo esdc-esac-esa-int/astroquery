@@ -20,8 +20,6 @@ import cgi
 from pathlib import Path
 import tarfile
 import os
-from astroquery import log
-import configparser
 
 from astropy.io import fits
 from . import conf, config
@@ -29,10 +27,12 @@ from astroquery import log
 from astropy.coordinates import SkyCoord
 from ...exceptions import LoginError
 
+
 __all__ = ['XMMNewton', 'XMMNewtonClass']
 
 
 class XMMNewtonClass(BaseQuery):
+
     data_url = conf.DATA_ACTION
     data_aio_url = conf.DATA_ACTION_AIO
     metadata_url = conf.METADATA_ACTION
@@ -40,7 +40,6 @@ class XMMNewtonClass(BaseQuery):
 
     def __init__(self, tap_handler=None):
         super(XMMNewtonClass, self).__init__()
-        self.configuration = configparser.ConfigParser()
 
         if tap_handler is None:
             self._tap = TapPlus(url="https://nxsa.esac.esa.int/tap-server/tap")
@@ -49,7 +48,7 @@ class XMMNewtonClass(BaseQuery):
         self._rmf_ftp = str("http://sasdev-xmm.esac.esa.int/pub/ccf/constituents/extras/responses/")
 
     def download_data(self, observation_id, *, filename=None, verbose=False,
-                      cache=True, prop=False, credentials_file=None, **kwargs):
+                      cache=True, prop=False, username=None, password=None, **kwargs):
         """
         Download data from XMM-Newton
 
@@ -165,7 +164,7 @@ class XMMNewtonClass(BaseQuery):
         params = {'RETRIEVAL_TYPE': 'POSTCARD',
                   'OBSERVATION_ID': observation_id,
                   'OBS_IMAGE_TYPE': image_type,
-                  'PROTOCOL': 'HTTPS'}
+                  'PROTOCOL': 'HTTP'}
 
         link = self.data_url + "".join("&{0}={1}".format(key, val)
                                        for key, val in params.items())
