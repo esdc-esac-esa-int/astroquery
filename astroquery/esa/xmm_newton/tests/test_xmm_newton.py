@@ -6,7 +6,11 @@ European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
 Created on 4 Sept. 2019
 """
+<<<<<<< HEAD
 from unittest.mock import patch
+=======
+from unittest.mock import patch, MagicMock
+>>>>>>> 40576ad4 (xmm_newton-1.1_issue1093 Refactored the download data method and added the corresponding tests)
 
 import pytest
 import tarfile
@@ -20,7 +24,11 @@ from ..tests.dummy_handler import DummyHandler
 from astroquery.exceptions import LoginError
 
 
+<<<<<<< HEAD
 class mockResponse():
+=======
+class mockResponse:
+>>>>>>> 40576ad4 (xmm_newton-1.1_issue1093 Refactored the download data method and added the corresponding tests)
     headers = {'Date': 'Wed, 24 Nov 2021 13:43:50 GMT',
                'Server': 'Apache/2.4.6 (Red Hat Enterprise Linux) OpenSSL/1.0.2k-fips',
                'Content-Disposition': 'inline; filename="0560181401.tar.gz"',
@@ -31,8 +39,13 @@ class mockResponse():
     @staticmethod
     def raise_for_status():
         pass
+<<<<<<< HEAD
 
 
+=======
+
+
+>>>>>>> 40576ad4 (xmm_newton-1.1_issue1093 Refactored the download data method and added the corresponding tests)
 class TestXMMNewton():
     def get_dummy_tap_handler(self):
         parameters = {'query': "select top 10 * from v_public_observations",
@@ -527,6 +540,7 @@ class TestXMMNewton():
         params = xsa._request_link("https://nxsa.esac.esa.int/nxsa-sl/servlet/data-action-aio?obsno=0560181401", None)
         assert params == {'filename': '0560181401.tar.gz'}
 
+<<<<<<< HEAD
     @pytest.mark.xfail(raises=LoginError)
     @patch('astroquery.query.BaseQuery._request')
     def test_request_link_protected(self, mock_request):
@@ -546,6 +560,8 @@ class TestXMMNewton():
         mock_request.return_value = dummyclass
         xsa._request_link("https://nxsa.esac.esa.int/nxsa-sl/servlet/data-action-aio?obsno=0560181401", None)
 
+=======
+>>>>>>> 40576ad4 (xmm_newton-1.1_issue1093 Refactored the download data method and added the corresponding tests)
     def test_get_username_and_password(self):
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         username, password = xsa._get_username_and_password("astroquery/esa/xmm_newton/tests/my_config.ini")
