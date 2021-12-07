@@ -113,7 +113,7 @@ class XMMNewtonClass(BaseQuery):
         reveals the url being sent which in turn reveals the users username and password
         """
         previouslevel = log.getEffectiveLevel()
-        log.setLevel(50)
+        log.setLevel(21)
 
         # create url to access the aio
         link = self._create_link(observation_id, **kwargs)
@@ -130,7 +130,6 @@ class XMMNewtonClass(BaseQuery):
         params = self._request_link(link, cache)
         r_filename = params["filename"]
         suffixes = Path(r_filename).suffixes
-        print(suffixes)
 
         # get desired filename
         filename = self._create_filename(filename, observation_id, suffixes)
