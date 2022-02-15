@@ -36,11 +36,22 @@ class EuclidClass(TapPlus):
 
     ROW_LIMIT = conf.ROW_LIMIT
 
-    def __init__(self, tap_plus_handler=None):
-        if tap_plus_handler is None:
-            self.__taphandler = TapPlus(url="https://eas.esac.esa.int/tap-server/tap")
-        else:
-            self.__taphandler = tap_plus_handler
+    def __init__(self, tap_plus_conn_handler=None,
+                 datalink_handler=None,
+                 euclid_tap_server='https://eas.esac.esa.int/',
+                 euclid_data_server='https://eas.esac.esa.int/',
+                 tap_server_context="tap-server",
+                 data_server_context="sas-dd",
+                 verbose=False):
+        super(EuclidClass, self).__init__(url=euclid_tap_server,
+                                        server_context=tap_server_context,
+                                        tap_context="tap",
+                                        upload_context="Upload",
+                                        table_edit_context="TableTool",
+                                        data_context="data",
+                                        datalink_context="datalink",
+                                        connhandler=tap_plus_conn_handler,
+                                        verbose=verbose)
 
     def load_tables(self, only_names=False, include_shared_tables=False,
                     verbose=False):
@@ -524,10 +535,13 @@ class EuclidClass(TapPlus):
             return
         u = self._TapPlus__user
         p = self._TapPlus__pwd
+
         try:
             log.info("Login to Euclid data server")
+            """
             TapPlus.login(self.__taphandler, user=u, password=p,
                           verbose=verbose)
+            """
         except HTTPError as err:
             log.error("Error logging in data server")
             log.error("Logging out from TAP server")
