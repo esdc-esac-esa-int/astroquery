@@ -23,9 +23,9 @@ from . import conf
 
 __all__ = ['Euclid', 'EuclidClass']
 
-MAIN_TABLE = "public.kids_dr4"
-MAIN_TABLE_RA = "raj2000"
-MAIN_TABLE_DEC = "decj2000"
+MAIN_TABLE = "sascat_sc8.mer_final_cat_sc8"
+MAIN_TABLE_RA = "right_ascension"
+MAIN_TABLE_DEC = "declination"
 
 
 class EuclidClass(TapPlus):
@@ -69,7 +69,7 @@ class EuclidClass(TapPlus):
         -------
         A list of table objects
         """
-        return self.__taphandler.load_tables(only_names,
+        return TapPlus.load_tables(only_names,
                                           include_shared_tables,
                                           verbose)
 
@@ -86,7 +86,7 @@ class EuclidClass(TapPlus):
         -------
         A table object
         """
-        return self.__taphandler.load_table(table, verbose)
+        return TapPlus.load_table(table, verbose)
 
     def launch_job(self, query, name=None, output_file=None,
                         output_format="votable", verbose=False,
@@ -115,19 +115,20 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
-        return self.__taphandler.launch_job(query,
-                                              name=name,
-                                              output_file=output_file,
-                                              output_format=output_format,
-                                              verbose=verbose,
-                                              dump_to_file=dump_to_file,
-                                              upload_resource=upload_resource,
-                                              upload_table_name=upload_table_name)
+        return TapPlus.launch_job(self, query,
+                                  name=name,
+                                  output_file=output_file,
+                                  output_format=output_format,
+                                  verbose=verbose,
+                                  dump_to_file=dump_to_file,
+                                  upload_resource=upload_resource,
+                                  upload_table_name=upload_table_name)
 
     def launch_job_async(self, query, name=None, output_file=None,
                          output_format="votable", verbose=False,
                          dump_to_file=False, background=False,
-                         upload_resource=None, upload_table_name=None):
+                         upload_resource=None, upload_table_name=None,
+                         autorun=True):
         """Launches an asynchronous job
         TAP & TAP+
         Parameters
@@ -154,7 +155,7 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
-        return self.__taphandler.launch_job_async(query,
+        return TapPlus.launch_job_async(self, query,
                                                name=name,
                                                output_file=output_file,
                                                output_format=output_format,
@@ -162,7 +163,8 @@ class EuclidClass(TapPlus):
                                                dump_to_file=dump_to_file,
                                                background=background,
                                                upload_resource=upload_resource,
-                                               upload_table_name=upload_table_name)
+                                               upload_table_name=upload_table_name,
+                                               autorun=autorun)
 
     def load_async_job(self, jobid=None, name=None, verbose=False):
         """Loads an asynchronous job
@@ -179,7 +181,7 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
-        return self.__taphandler.load_async_job(jobid, name, verbose)
+        return TapPlus.load_async_job(self, jobid, name, verbose)
 
     
     def search_async_jobs(self, jobfilter=None, verbose=False):
@@ -195,7 +197,7 @@ class EuclidClass(TapPlus):
         -------
         A list of Job objects
         """
-        return self.__taphandler.search_async_jobs(jobfilter, verbose)
+        return TapPlus.search_async_jobs(self, jobfilter, verbose)
 
     def list_async_jobs(self, verbose=False):
         """Returns all the asynchronous jobs
@@ -208,7 +210,7 @@ class EuclidClass(TapPlus):
         -------
         A list of Job objects
         """
-        return self.__taphandler.list_async_jobs(verbose)
+        return TapPlus.list_async_jobs(self, verbose)
 
     def __query_object(self, coordinate, radius=None, width=None, height=None,
                        async_job=False, verbose=False):
@@ -255,13 +257,13 @@ class EuclidClass(TapPlus):
                 + str(heightDeg.value)+"))=1 \
                 ORDER BY dist ASC"
             if async_job:
-                job = self.__taphandler.launch_job_async(query, verbose=verbose)
+                job = self.launch_job_async(query, verbose=verbose)
             else:
-                job = self.__taphandler.launch_job(query, verbose=verbose)
+                job = self.launch_job(query, verbose=verbose)
         return job.get_results()
 
     def query_object(self, coordinate, radius=None, width=None, height=None,
-                     verbose=False):
+                     verbose=False, columns=[]):
         """Launches a job
         TAP & TAP+
         Parameters
@@ -285,10 +287,11 @@ class EuclidClass(TapPlus):
                                  width,
                                  height,
                                  async_job=False,
-                                 verbose=verbose)
+                                 verbose=verbose,
+                                 columns=columns)
 
     def query_object_async(self, coordinate, radius=None, width=None,
-                           height=None, verbose=False):
+                           height=None, verbose=False, columns=[]):
         """Launches a job (async)
         TAP & TAP+
         Parameters
@@ -314,7 +317,8 @@ class EuclidClass(TapPlus):
                                  width,
                                  height,
                                  async_job=True,
-                                 verbose=verbose)
+                                 verbose=verbose,
+                                 columns=columns)
 
     def __cone_search(self, coordinate, radius, table_name=MAIN_TABLE,
                       ra_column_name=MAIN_TABLE_RA,
@@ -385,18 +389,18 @@ class EuclidClass(TapPlus):
                               'dec_column': dec_column_name, 'columns': columns, 'ra': ra, 'dec': dec,
                               'radius': radiusDeg, 'table_name': table_name})
         if async_job:
-            return self.__taphandler.launch_job_async(query=query,
-                                                      output_file=output_file,
-                                                      output_format=output_format,
-                                                      verbose=verbose,
-                                                      dump_to_file=dump_to_file,
-                                                      background=background)
+            return self.launch_job_async(query=query,
+                                         output_file=output_file,
+                                         output_format=output_format,
+                                         verbose=verbose,
+                                         dump_to_file=dump_to_file,
+                                         background=background)
         else:
-            return self.__taphandler.launch_job(query=query,
-                                                output_file=output_file,
-                                                output_format=output_format,
-                                                verbose=verbose,
-                                                dump_to_file=dump_to_file)
+            return self.launch_job(query=query,
+                                   output_file=output_file,
+                                   output_format=output_format,
+                                   verbose=verbose,
+                                   dump_to_file=dump_to_file)
 
     def cone_search(self, coordinate, radius=None,
                     table_name=MAIN_TABLE,
@@ -494,7 +498,7 @@ class EuclidClass(TapPlus):
         verbose : bool, optional, default 'False'
             flag to display information about the process
         """
-        return self.__taphandler.remove_jobs(jobs_list)
+        return TapPlus.remove_jobs(self, jobs_list)
 
     def save_results(self, job, verbose=False):
         """Saves job results
@@ -506,7 +510,7 @@ class EuclidClass(TapPlus):
         verbose : bool, optional, default 'False'
             flag to display information about the process
         """
-        return self.__taphandler.save_results(job, verbose)
+        return TapPlus.save_results(self, job, verbose)
 
     def login(self, user=None, password=None, credentials_file=None,
               verbose=False):
@@ -580,7 +584,19 @@ class EuclidClass(TapPlus):
         verbose : bool, optional, default 'False'
             flag to display information about the process
         """
-        return self.__taphandler.logout(verbose)
+        try:
+            TapPlus.logout(self, verbose=verbose)
+        except HTTPError as err:
+            log.error("Error logging out TAP server")
+            return
+        log.info("Euclid TAP server logout OK")
+        try:
+            """
+            TapPlus.logout(self.__eucliddata, verbose=verbose)
+            """
+            log.info("Euclid data server logout OK")
+        except HTTPError as err:
+            log.error("Error logging out data server")
 
     def __checkQuantityInput(self, value, msg):
         if not (isinstance(value, str) or isinstance(value, units.Quantity)):
