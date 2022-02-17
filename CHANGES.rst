@@ -4,6 +4,10 @@
 New Tools and Services
 ----------------------
 
+gaia
+^^^^
+- New method, rename_table, which allows the user to rename table and column names
+
 
 Service fixes and enhancements
 ------------------------------
@@ -30,6 +34,9 @@ gaia
   ``astroquery.gaia.Gaia`` no longer ignore their ``columns`` argument when
   ``radius`` is specified. [#2249]
 
+- Enhanced methods 'launch_job' and 'launch_job_async' to avoid issues with the name provided by the user for the
+  output file when the results are returned by the TAP in compressed format.
+
 mast
 ^^^^
 
@@ -46,6 +53,7 @@ sdss
 - Fix ``query_crossid`` for spectral data and DR17. [#2258, #2304]
 
 - Fix ``query_crossid`` to be able to query larger list of coordinates. [#2305]
+
 
 
 Infrastructure, Utility and Other Changes and Additions
