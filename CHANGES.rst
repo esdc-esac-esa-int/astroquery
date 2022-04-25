@@ -10,6 +10,13 @@ hsa
 
 - New module to access ESA Herschel mission. [#2122]
 
+
+gaia
+^^^^
+
+- New notification system. From now on, users of the Astroquery/Gaia module will be notified in case there is a
+planned or an un-planed downtime of the Gaia Archive. [#2376]
+
 Service fixes and enhancements
 ------------------------------
 
@@ -17,6 +24,13 @@ casda
 ^^^^^
 
 - Add the ability to produce 2D and 3D cutouts from ASKAP images and cubes. [#2366]
+
+gaia
+^^^^
+
+- Method 'load_data' has changed the default value of the parameter 'valid_data' to 'False'.
+With this change the epoch photometry service will return all data associated to a given source.
+This update also mimics the behaviour of the current Gaia Archive UI. [#2376]
 
 
 Infrastructure, Utility and Other Changes and Additions
