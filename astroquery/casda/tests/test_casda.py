@@ -462,3 +462,18 @@ def test_args_to_payload_combined():
     assert payload['CHANNEL'] == '17 23'
     assert set(payload.keys()) == set(['CHANNEL', 'POS'])
 
+
+def test_download_file(patch_get):
+    urls = ['https://ingest.pawsey.org/bucket_name/path/askap_img.fits?security=stuff',
+            'http://casda.csiro.au/download/web/111-000-111-000/askap_img.fits.checksum',
+            'https://ingest.pawsey.org.au/casda-prd-as110-01/dc52217/primary_images/RACS-DR1_0000%2B18A.fits?security=stuff']
+    casda = Casda('user', 'password')
+
+    # skip the actual downloading of the file
+    download_mock = MagicMock()
+    casda._download_file = download_mock
+
+    filenames = casda.download_files(urls)
+    assert filenames[0].endswith('askap_img.fits')
+    assert filenames[1].endswith('askap_img.fits.checksum')
+    assert filenames[2].endswith('RACS-DR1_0000+18A.fits')
