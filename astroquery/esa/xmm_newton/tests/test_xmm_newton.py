@@ -560,4 +560,8 @@ class TestXMMNewton():
     def test_create_filename_Not_None(self):
         xsa = XMMNewtonClass(self.get_dummy_tap_handler())
         filename = xsa._create_filename("Test", "0560181401", ['.tar', '.gz'])
+<<<<<<< HEAD
         assert filename == "Test.tar.gz"
+=======
+        assert filename == "Test.tar.gz"
+>>>>>>> 045469fe (NXSAPCR-1091: Added functionality to download proprietary data)

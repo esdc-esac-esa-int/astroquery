@@ -24,7 +24,7 @@ from astroquery import log
 import configparser
 
 from astropy.io import fits
-from . import conf
+from . import conf, config
 from astroquery import log
 from astropy.coordinates import SkyCoord
 from ...exceptions import LoginError
@@ -43,14 +43,13 @@ class XMMNewtonClass(BaseQuery):
         self.configuration = configparser.ConfigParser()
 
         if tap_handler is None:
-        	self._tap = TapPlus(url="https://nxsa.esac.esa.int"
-                                    "/tap-server/tap")
+            self._tap = TapPlus(url="https://nxsa.esac.esa.int/tap-server/tap")
         else:
             self._tap = tap_handler
         self._rmf_ftp = str("http://sasdev-xmm.esac.esa.int/pub/ccf/constituents/extras/responses/")
 
     def download_data(self, observation_id, *, filename=None, verbose=False,
-                      cache=True, prop=False, credentials_file=None, **kwargs):
+                      cache=True, prop=False, username=None, password=None, **kwargs):
         """
         Download data from XMM-Newton
 
@@ -114,7 +113,7 @@ class XMMNewtonClass(BaseQuery):
         reveals the url being sent which in turn reveals the users username and password
         """
         previouslevel = log.getEffectiveLevel()
-        log.setLevel(21)
+        log.setLevel(50)
 
         # create url to access the aio
         link = self._create_link(observation_id, **kwargs)
@@ -131,6 +130,7 @@ class XMMNewtonClass(BaseQuery):
         params = self._request_link(link, cache)
         r_filename = params["filename"]
         suffixes = Path(r_filename).suffixes
+        print(suffixes)
 
         # get desired filename
         filename = self._create_filename(filename, observation_id, suffixes)
