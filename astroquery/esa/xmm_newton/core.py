@@ -14,16 +14,17 @@ Created on 3 Sept 2019
 import re
 from getpass import getpass
 from ...utils.tap.core import TapPlus
-from ...query import BaseQuery, QueryWithLogin
+from ...query import BaseQuery
 import shutil
 import cgi
 from pathlib import Path
 import tarfile
 import os
+from astroquery import log
 import configparser
 
 from astropy.io import fits
-from . import conf
+from . import conf, config
 from astroquery import log
 from astropy.coordinates import SkyCoord
 from ...exceptions import LoginError
@@ -42,7 +43,8 @@ class XMMNewtonClass(BaseQuery):
         self.configuration = configparser.ConfigParser()
 
         if tap_handler is None:
-            self._tap = TapPlus(url="https://nxsa.esac.esa.int/tap-server/tap")
+            self._tap = TapPlus(url="https://nxsa.esac.esa.int"
+                                    "/tap-server/tap")
         else:
             self._tap = tap_handler
         self._rmf_ftp = str("http://sasdev-xmm.esac.esa.int/pub/ccf/constituents/extras/responses/")
@@ -101,16 +103,23 @@ class XMMNewtonClass(BaseQuery):
             file format, optional, by default all formats
             values: ASC, ASZ, FTZ, HTM, IND, PDF, PNG
 
+
         Returns
         -------
         None if not verbose. It downloads the observation indicated
         If verbose returns the filename
         """
+        """
+        Here we change the log level so that it is above 20, this is to stop a log.debug in query.py. this debug
+        reveals the url being sent which in turn reveals the users username and password
+        """
+        previouslevel = log.getEffectiveLevel()
+        log.setLevel(21)
 
         # create url to access the aio
         link = self._create_link(observation_id, **kwargs)
 
-        # If the user wants to access proprietary data, ask them for their credentials
+        # If the user wants to access proprietary data, ask them for there credentials
         if prop:
             username, password = self._get_username_and_password(credentials_file)
             link = f"{link}&AIOUSER={username}&AIOPWD={password}"
@@ -122,23 +131,16 @@ class XMMNewtonClass(BaseQuery):
         params = self._request_link(link, cache)
         r_filename = params["filename"]
         suffixes = Path(r_filename).suffixes
+        print(suffixes)
 
         # get desired filename
         filename = self._create_filename(filename, observation_id, suffixes)
-        """
-        If prop we change the log level so that it is above 20, this is to stop a log.debug (line 431) in query.py.
-        This debug reveals the url being sent which in turn reveals the users username and password
-        """
-        if prop:
-            previouslevel = log.getEffectiveLevel()
-            log.setLevel(21)
-            self._download_file(link, filename, head_safe=True, cache=cache)
-            log.setLevel(previouslevel)
-        else:
-            self._download_file(link, filename, head_safe=True, cache=cache)
+
+        self._download_file(link, filename, head_safe=True, cache=cache)
 
         if verbose:
             log.info(f"Wrote {link} to {filename}")
+        log.setLevel(previouslevel)
 
     def get_postcard(self, observation_id, *, image_type="OBS_EPIC",
                      filename=None, verbose=False):
@@ -306,15 +308,14 @@ class XMMNewtonClass(BaseQuery):
         return params
 
     def _get_username_and_password(self, credentials_file):
-        if credentials_file is not None:
+        if credentials_file != None:
             self.configuration.read(credentials_file)
-            xmm_username = self.configuration.get("xmm_newton", "username")
-            password = self.configuration.get("xmm_newton", "password")
+            username = self.configuration.get('user', 'username')
+            password = self.configuration.get('user', 'password')
         else:
-            xmm_username = input("Username: ")
-            password, password_from_keyring = QueryWithLogin._get_password(self, service_name="xmm_newton",
-                                                                           username=xmm_username, reenter=False)
-        return xmm_username, password
+            username = input("Username: ")
+            password = getpass("Password: ")
+        return username, password
 
     def _create_filename(self, filename, observation_id, suffixes):
         if filename is not None:
@@ -615,9 +616,9 @@ class XMMNewtonClass(BaseQuery):
             Tables containing the metadata of the target
         """
         if not target_name and not coordinates:
-            raise ValueError("Input parameters needed, "
-                             "please provide the name "
-                             "or the coordinates of the target")
+            raise Exception("Input parameters needed, "
+                            "please provide the name "
+                            "or the coordinates of the target")
 
         epic_source = {"table": "xsa.v_epic_source",
                        "column": "epic_source_equatorial_spoint"}
@@ -635,7 +636,7 @@ class XMMNewtonClass(BaseQuery):
             c = SkyCoord.from_name(target_name, parse=True)
 
         if type(c) is not SkyCoord:
-            raise TypeError("The coordinates must be an "
+            raise Exception("The coordinates must be an "
                             "astroquery.coordinates.SkyCoord object")
         if not radius:
             radius = 0.1
