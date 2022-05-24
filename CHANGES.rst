@@ -25,6 +25,11 @@ gaia
 - Method 'load_data' now has the parameter 'valid_data' set to False by default.
 With this change the epoch photometry service returns all data associated to a given source. [#2376]
 
+casda
+^^^^^
+
+- Add the ability to produce 2D and 3D cutouts from ASKAP images and cubes. [#2366]
+
 Infrastructure, Utility and Other Changes and Additions
 -------------------------------------------------------
 
