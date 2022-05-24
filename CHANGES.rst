@@ -6,8 +6,7 @@ New Tools and Services
 gaia
 ^^^^
 
-- TAP notifications service is now available for Gaia. If there is notification for the users,
-e.g planned or unplanned downtimes of the Gaia Archive, etc. [#2376]
+- TAP notifications service is now available for Gaia. If there is notification for the users, e.g planned or unplanned downtimes of the Gaia Archive, etc. [#2376]
 
 hsa
 ^^^
@@ -22,8 +21,7 @@ Service fixes and enhancements
 gaia
 ^^^^
 
-- Method 'load_data' now has the parameter 'valid_data' set to False by default.
-With this change the epoch photometry service returns all data associated to a given source. [#2376]
+- Method 'load_data' now has the parameter 'valid_data' set to False by default. With this change the epoch photometry service returns all data associated to a given source. [#2376]
 
 casda
 ^^^^^
