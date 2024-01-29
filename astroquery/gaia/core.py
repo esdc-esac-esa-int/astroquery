@@ -899,7 +899,7 @@ class GaiaClass(TapPlus):
 
         Returns
         -------
-        Boolean indicating if the specified user is valid
+        A Job object
         """
         if radius < 0.1 or radius > 10.0:
             raise ValueError(f"Invalid radius value. Found {radius}, valid range is: 0.1 to 10.0")
