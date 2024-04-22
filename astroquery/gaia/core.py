@@ -496,7 +496,7 @@ class GaiaClass(TapPlus):
         sky_coord_old = sky_coord
 
         if epoch_prop:
-            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE)
+            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE.split('.')[0].upper())
             if epoch is not None:
                 sky_coord = sky_coord.apply_space_motion(new_obstime=epoch)
             if verbose:
@@ -670,7 +670,7 @@ class GaiaClass(TapPlus):
         sky_coord_old = sky_coord
 
         if epoch_prop:
-            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE)
+            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE.split('.')[0].upper())
             if epoch is not None:
                 sky_coord = sky_coord.apply_space_motion(new_obstime=epoch)
             if verbose:
@@ -1133,6 +1133,18 @@ class GaiaClass(TapPlus):
         -------
         A dictionary: key, the table name, and value, a _CoordSysItem object with all the values from the DB.
         """
+
+        #id | equinox | epoch | system | xml_output |
+        #-----------+-------+--------+------+----------+
+        #GAIADR1     | | J2015.   | ICRS | |
+        #GAIADR3     | | J2016.0  | ICRS | |
+        #ICRS_2010   | | J2010.0  | ICRS | |
+        #HIP         | | J1991.25 | ICRS | |
+        #ICRS        | |          | ICRS | |
+        #ICRS_2000   | | J2000.   | ICRS | |
+        #GAIADR2     | | J2015.5  | ICRS | |
+        #CATWISE2020 | | J2015.4  | ICRS | |
+        #GAIADR4     | | J2017.5  | ICRS | |
 
         query = "SELECT id, epoch, equinox, system FROM tap_config.coord_sys"
 
