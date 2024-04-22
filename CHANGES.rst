@@ -42,6 +42,8 @@ gaia
 - Include table size in the class TapTableMeta returned by the functions load_tables and load_table, in the class Tap.
   [#2970]
 
+- Functions cone_search_async, cone_search, query_object_async and query_object include an option to epoch propagate the input source.
+  [#2970]
 
 jplhorizons
 ^^^^^^^^^^^

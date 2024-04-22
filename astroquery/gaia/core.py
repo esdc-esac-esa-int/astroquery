@@ -48,6 +48,7 @@ class GaiaClass(TapPlus):
     VALID_DATALINK_RETRIEVAL_TYPES = conf.VALID_DATALINK_RETRIEVAL_TYPES
     VALID_LINKING_PARAMETERS = conf.VALID_LINKING_PARAMETERS
     GAIA_MESSAGES = "notification?action=GetNotifications"
+    _coord_sys_ref = dict()
 
     def __init__(self, *, tap_plus_conn_handler=None,
                  datalink_handler=None,
@@ -464,13 +465,14 @@ class GaiaClass(TapPlus):
         return self.__gaiadata.get_datalinks(ids=ids, linking_parameter=final_linking_parameter, verbose=verbose)
 
     def __query_object(self, coordinate, *, radius=None, width=None, height=None,
-                       async_job=False, verbose=False, columns=()):
+                       async_job=False, verbose=False, columns=(), epoch_prop=False):
         """Launches a job
         TAP & TAP+
 
         Parameters
         ----------
-        coordinate : str or astropy.coordinate, mandatory
+        coordinate : str (a parsable as an `astropy.coordinates` object or a name that is resolvable) or
+        astropy.coordinates, mandatory
             coordinates center point
         radius : str or astropy.units if no 'width' nor 'height' are provided
             radius (deg)
@@ -490,13 +492,23 @@ class GaiaClass(TapPlus):
         -------
         The job results (astropy.table).
         """
-        coord = self.__getCoordInput(coordinate, "coordinate")
+        sky_coord = self.__getCoordInput(coordinate, "coordinate")
+        sky_coord_old = sky_coord
+
+        if epoch_prop:
+            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE)
+            if epoch is not None:
+                sky_coord = sky_coord.apply_space_motion(new_obstime=epoch)
+            if verbose:
+                log.info(
+                    f"Source {coordinate} propagated to epoch {epoch}: {sky_coord_old.to_string()} --> "
+                    f"{sky_coord.to_string()}")
 
         if radius is not None:
-            job = self.__cone_search(coord, radius, async_job=async_job,
+            job = self.__cone_search(sky_coord, radius, async_job=async_job,
                                      verbose=verbose, columns=columns)
         else:
-            raHours, dec = commons.coord_to_radec(coord)
+            raHours, dec = commons.coord_to_radec(sky_coord)
             ra = raHours * 15.0  # Converts to degrees
             widthQuantity = self.__getQuantityInput(width, "width")
             heightQuantity = self.__getQuantityInput(height, "height")
@@ -543,14 +555,15 @@ class GaiaClass(TapPlus):
         return job.get_results()
 
     def query_object(self, coordinate, *, radius=None, width=None, height=None,
-                     verbose=False, columns=()):
+                     verbose=False, columns=(), epoch_prop=False):
         """Launches a synchronous cone search for the input search radius or the box on the sky, sorted by angular
         separation
         TAP & TAP+
 
         Parameters
         ----------
-        coordinate : str or astropy.coordinates, mandatory
+        coordinate : str (a parsable as an `astropy.coordinates` object or a name that is resolvable) or
+        astropy.coordinates, mandatory
             coordinates center point
         radius : str or astropy.units if no 'width'/'height' are provided
             radius (deg)
@@ -562,6 +575,8 @@ class GaiaClass(TapPlus):
             flag to display information about the process
         columns: list, optional, default ()
             if empty, all columns will be selected
+        epoch_prop : bool, optional, default 'False'
+            the coordinate is epoch propagated to the reference epoch of the table ``MAIN_GAIA_TABLE``
 
         Returns
         -------
@@ -569,17 +584,18 @@ class GaiaClass(TapPlus):
         """
         return self.__query_object(coordinate, radius=radius,
                                    width=width, height=height, async_job=False,
-                                   verbose=verbose, columns=columns)
+                                   verbose=verbose, columns=columns, epoch_prop=epoch_prop)
 
     def query_object_async(self, coordinate, *, radius=None, width=None,
-                           height=None, verbose=False, columns=()):
+                           height=None, verbose=False, columns=(), epoch_prop=False):
         """Launches an asynchronous cone search for the input search radius or the box on the sky, sorted by angular
         separation
         TAP & TAP+
 
         Parameters
         ----------
-        coordinate : str or astropy.coordinates, mandatory
+        coordinate : str (a parsable as an `astropy.coordinates` object or a name that is resolvable) or
+        astropy.coordinates, mandatory
             coordinates center point
         radius : str or astropy.units if no 'width'/'height' are provided
             radius
@@ -591,6 +607,8 @@ class GaiaClass(TapPlus):
             flag to display information about the process
         columns: list, optional, default ()
             if empty, all columns will be selected
+        epoch_prop : bool, optional, default 'False'
+            the coordinate is epoch propagated to the reference epoch of the table ``MAIN_GAIA_TABLE``
 
         Returns
         -------
@@ -598,7 +616,7 @@ class GaiaClass(TapPlus):
         """
         return self.__query_object(coordinate, radius=radius, width=width,
                                    height=height, async_job=True, verbose=verbose,
-                                   columns=columns)
+                                   columns=columns, epoch_prop=epoch_prop)
 
     def __cone_search(self, coordinate, radius, *, table_name=None,
                       ra_column_name=MAIN_GAIA_TABLE_RA,
@@ -607,13 +625,14 @@ class GaiaClass(TapPlus):
                       background=False,
                       output_file=None, output_format="votable_gzip", verbose=False,
                       dump_to_file=False,
-                      columns=()):
+                      columns=(), epoch_prop=False):
         """Cone search sorted by distance
         TAP & TAP+
 
         Parameters
         ----------
-        coordinate : astropy.coordinate, mandatory
+        coordinate : str (a parsable as an `astropy.coordinates` object or a name that is resolvable) or
+        astropy.coordinates, mandatory
             coordinates center point
         radius : astropy.units, mandatory
             radius
@@ -640,14 +659,26 @@ class GaiaClass(TapPlus):
             if True, the results are saved in a file instead of using memory
         columns: list, optional, default ()
             if empty, all columns will be selected
-
+        epoch_prop : bool, optional, default 'False'
+            the coordinate is epoch propagated to the reference epoch of the table ``MAIN_GAIA_TABLE``
         Returns
         -------
         A Job object
         """
         radiusDeg = None
-        coord = self.__getCoordInput(coordinate, "coordinate")
-        raHours, dec = commons.coord_to_radec(coord)
+        sky_coord = self.__getCoordInput(coordinate, "coordinate")
+        sky_coord_old = sky_coord
+
+        if epoch_prop:
+            epoch = self.__get_parsed_ref(self.MAIN_GAIA_TABLE)
+            if epoch is not None:
+                sky_coord = sky_coord.apply_space_motion(new_obstime=epoch)
+            if verbose:
+                log.info(
+                    f"Source {coordinate} propagated to epoch {epoch}: {sky_coord_old.to_string()} --> "
+                    f"{sky_coord.to_string()}")
+
+        raHours, dec = commons.coord_to_radec(sky_coord)
         ra = raHours * 15.0  # Converts to degrees
         if radius is not None:
             radiusDeg = Angle(self.__getQuantityInput(radius, "radius")).to_value(u.deg)
@@ -701,13 +732,14 @@ class GaiaClass(TapPlus):
                     output_file=None,
                     output_format="votable_gzip", verbose=False,
                     dump_to_file=False,
-                    columns=()):
+                    columns=(), epoch_prop=False):
         """Cone search sorted by distance (sync.)
         TAP & TAP+
 
         Parameters
         ----------
-        coordinate : str or astropy.coordinate, mandatory
+        coordinate : str (a parsable as an `astropy.coordinates` object or a name that is resolvable) or
+        astropy.coordinates, mandatory
             coordinates center point
         radius : str or astropy.units, mandatory
             radius
@@ -728,7 +760,8 @@ class GaiaClass(TapPlus):
             if True, the results are saved in a file instead of using memory
         columns: list, optional, default ()
             if empty, all columns will be selected
-
+        epoch_prop : bool, optional, default 'False'
+            the coordinate is epoch propagated to the reference epoch of the table ``MAIN_GAIA_TABLE``
         Returns
         -------
         A Job object
@@ -743,7 +776,7 @@ class GaiaClass(TapPlus):
                                   output_file=output_file,
                                   output_format=output_format,
                                   verbose=verbose,
-                                  dump_to_file=dump_to_file, columns=columns)
+                                  dump_to_file=dump_to_file, columns=columns, epoch_prop=epoch_prop)
 
     def cone_search_async(self, coordinate, *, radius=None,
                           table_name=None,
@@ -751,7 +784,7 @@ class GaiaClass(TapPlus):
                           dec_column_name=MAIN_GAIA_TABLE_DEC,
                           background=False,
                           output_file=None, output_format="votable_gzip",
-                          verbose=False, dump_to_file=False, columns=()):
+                          verbose=False, dump_to_file=False, columns=(), epoch_prop=False):
         """Cone search sorted by distance (async)
         TAP & TAP+
 
@@ -782,7 +815,8 @@ class GaiaClass(TapPlus):
             if True, the results are saved in a file instead of using memory
         columns: list, optional, default ()
             if empty, all columns will be selected
-
+        epoch_prop : bool, optional, default 'False'
+            the coordinate is epoch propagated to the reference epoch of the table ``MAIN_GAIA_TABLE``
         Returns
         -------
         A Job object
@@ -797,7 +831,7 @@ class GaiaClass(TapPlus):
                                   output_file=output_file,
                                   output_format=output_format,
                                   verbose=verbose,
-                                  dump_to_file=dump_to_file, columns=columns)
+                                  dump_to_file=dump_to_file, columns=columns, epoch_prop=epoch_prop)
 
     def __checkQuantityInput(self, value, msg):
         if not (isinstance(value, str) or isinstance(value, units.Quantity)):
@@ -825,8 +859,7 @@ class GaiaClass(TapPlus):
                                                      commons.CoordClasses)):
             raise ValueError(f"{msg} must be either a string or astropy.coordinates")
         if isinstance(value, str):
-            c = commons.parse_coordinates(value)
-            return c
+            return commons.parse_coordinates(value)
         else:
             return value
 
@@ -1051,6 +1084,80 @@ class GaiaClass(TapPlus):
 
         except OSError:
             print("Status messages could not be retrieved")
+
+    def __get_parsed_ref(self, ref_table: str):
+        """Get the reference epoch for the input table name
+        Parameters
+        ----------
+        ref_table : str, optional
+            the gaia table name. For example, 'gaiadr3.gaia_source'
+
+        Returns
+        -------
+        The epoch associated to the gaia table
+
+        """
+
+        if (ref_table is None) or (not (ref_table and ref_table.strip())):
+            return None
+
+        # The coordinate system references are loaded once per instance
+        if not self._coord_sys_ref:
+            self._coord_sys_ref = self.__load_coord_sys_refs()
+
+        item = self._coord_sys_ref.get(ref_table)
+        if item is None:
+            return None
+
+        value = item.epoch
+        if (value is None) or (not (value and value.strip())) or ("2000" == value):
+            return None
+        else:
+            if value.endswith("."):
+                value = value[:-1]
+            if value[0].isalpha():
+                return value[1:]
+            else:
+                return value
+
+    def __load_coord_sys_refs(self, *, verbose=False):
+        """ Load all the relevant information from the tabla tap_config.coord_sys
+
+
+        Parameters
+        ----------
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
+
+        Returns
+        -------
+        A dictionary: key, the table name, and value, a _CoordSysItem object with all the values from the DB.
+        """
+
+        query = "SELECT id, epoch, equinox, system FROM tap_config.coord_sys"
+
+        job = self.launch_job(query, output_format='csv', verbose=verbose)
+        coord_sys_ref = dict()
+        for row in job.get_results():
+            db_id = row['id']
+            coord_sys_item = self._CoordSysItem(db_id, row['equinox'], row['epoch'], row['system'])
+            coord_sys_ref[db_id] = coord_sys_item
+
+        if verbose:
+            for value in coord_sys_ref.values():
+                print(value)
+
+        return coord_sys_ref
+
+    class _CoordSysItem:
+        def __init__(self, db_id, db_equinox, db_epoch, db_system):
+            self.id = db_id
+            self.equinox = db_equinox
+            self.epoch = db_epoch
+            self.system = db_system
+
+        def __str__(self):
+            return self.id + ", equinox: " + self.equinox + ", epoch: " + self.epoch + ", system: " + self.system
 
 
 Gaia = GaiaClass()

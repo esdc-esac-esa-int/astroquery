@@ -64,7 +64,7 @@ def parse_coordinates(coordinates):
     """
     if isinstance(coordinates, str):
         try:
-            c = SkyCoord(coordinates, frame="icrs")
+            sky_coord = SkyCoord(coordinates, frame="icrs")
             warnings.warn("Coordinate string is being interpreted as an "
                           "ICRS coordinate.", InputWarning)
 
@@ -77,24 +77,24 @@ def parse_coordinates(coordinates):
             if ((ASTROPY_LT_5_0 and isinstance(err.args[1], u.UnitsError))
                     or (not ASTROPY_LT_5_0 and isinstance(err.__context__, u.UnitsError))):
                 try:
-                    c = SkyCoord(coordinates, unit="deg", frame="icrs")
+                    sky_coord = SkyCoord(coordinates, unit="deg", frame="icrs")
                     warnings.warn("Coordinate string is being interpreted as an "
                                   "ICRS coordinate provided in degrees.", InputWarning)
 
                 except ValueError:
-                    c = SkyCoord.from_name(coordinates, frame="icrs")
+                    sky_coord = SkyCoord.from_name(coordinates, frame="icrs")
             else:
-                c = SkyCoord.from_name(coordinates, frame="icrs")
+                sky_coord = SkyCoord.from_name(coordinates, frame="icrs")
 
     elif isinstance(coordinates, CoordClasses):
         if hasattr(coordinates, 'frame'):
-            c = coordinates
+            sky_coord = coordinates
         else:
             # Convert the "frame" object into a SkyCoord
-            c = SkyCoord(coordinates)
+            sky_coord = SkyCoord(coordinates)
     else:
         raise TypeError("Argument cannot be parsed as a coordinate")
-    return c
+    return sky_coord
 
 
 def coord_to_radec(coordinate):
