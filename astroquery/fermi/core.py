@@ -1,6 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Download of Fermi LAT (Large Area Telescope) data"""
-from __future__ import print_function
+
 import re
 import requests
 import time
@@ -21,8 +21,8 @@ class FermiLATClass(BaseQuery):
     """
 
     request_url = conf.url
-    result_url_re = re.compile('The results of your query may be found at '
-                               '<a href="(https://fermi.gsfc.nasa.gov/.*?)"')
+    result_url_re = re.compile(r'The results of your query may be found at '
+                               r'<a href="(https://fermi\.gsfc\.nasa\.gov/.*?)"')
     TIMEOUT = conf.timeout
 
     def query_object_async(self, *args, **kwargs):
@@ -53,7 +53,7 @@ class FermiLATClass(BaseQuery):
 
         return result_url
 
-    def _parse_args(self, name_or_coords, searchradius='', obsdates='',
+    def _parse_args(self, name_or_coords, *, searchradius='', obsdates='',
                     timesys='Gregorian', energyrange_MeV='',
                     LATdatatype='Photon', spacecraftdata=True):
         """
@@ -91,7 +91,7 @@ class FermiLATClass(BaseQuery):
 
         return payload
 
-    def _parse_result(self, result, verbose=False, **kwargs):
+    def _parse_result(self, result, *, verbose=False, **kwargs):
         """
         Use get_fermilat_datafile to download a result URL
         """
@@ -116,29 +116,29 @@ def _fermi_format_coords(c):
     return "{0:0.5f},{1:0.5f}".format(c.ra.degree, c.dec.degree)
 
 
-class GetFermilatDatafile(object):
+class GetFermilatDatafile:
     """
     TODO: document
     TODO: Fail with useful failure messages on genuine failures
     (this doesn't need to be implemented as a class)
     """
 
-    fitsfile_re = re.compile('<a href="(.*?)">Available</a>')
-    fitsfile_re = re.compile('wget (https://fermi.gsfc.nasa.gov/FTP/fermi/data/lat/queries/[A-Za-z0-9_]*.fits)')
+    fitsfile_re = re.compile(r'<a href="(.*?)">Available</a>')
+    fitsfile_re = re.compile(r'wget (https://fermi\.gsfc\.nasa\.gov/FTP/fermi/data/lat/queries/[A-Za-z0-9_]*.fits)')
     # wget https://fermi.gsfc.nasa.gov/FTP/fermi/data/lat/queries/L1809182001077FA3883F37_SC00.fits
 
     TIMEOUT = conf.retrieval_timeout
 
     check_frequency = 1  # minutes
 
-    def __call__(self, result_url, check_frequency=1, verbose=False):
+    def __call__(self, result_url, *, check_frequency=1, verbose=False):
         self.result_url = result_url
 
         page_loaded = False
 
         elapsed_time = 0
 
-        while not(page_loaded):
+        while not (page_loaded):
             page_loaded = fitsfile_urls = self._check_page()
             if page_loaded:
                 # don't wait an extra N minutes for success

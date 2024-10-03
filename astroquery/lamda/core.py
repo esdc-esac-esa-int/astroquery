@@ -1,13 +1,15 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import os
 import json
-from astropy import table
-from astropy import log
-from astropy.utils.console import ProgressBar
-from bs4 import BeautifulSoup
-from six.moves import urllib_parse as urlparse
+import platform
 import re
 import warnings
+from urllib import parse as urlparse
+
+from astropy import table
+from astroquery import log
+from astropy.utils.console import ProgressBar
+from bs4 import BeautifulSoup
 
 from ..exceptions import InvalidQueryError
 from ..query import BaseQuery
@@ -39,11 +41,11 @@ class LamdaClass(BaseQuery):
     url = "http://home.strw.leidenuniv.nl/~moldata/datafiles/{0}.dat"
 
     def __init__(self, **kwargs):
-        super(LamdaClass, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.moldict_path = os.path.join(self.cache_location,
                                          "molecules.json")
 
-    def _get_molfile(self, mol, cache=True, timeout=None):
+    def _get_molfile(self, mol, *, cache=True, timeout=None):
         """
         """
         if mol not in self.molecule_dict:
@@ -63,7 +65,7 @@ class LamdaClass(BaseQuery):
         with open(outfilename, 'w') as f:
             f.write(molreq.text)
 
-    def query(self, mol, return_datafile=False, cache=True, timeout=None):
+    def query(self, mol, *, return_datafile=False, cache=True, timeout=None):
         """
         Query the LAMDA database.
 
@@ -72,6 +74,10 @@ class LamdaClass(BaseQuery):
         mol : string
             Molecule or atom designation. For a list of valid designations see
             the :meth:`print_mols` method.
+
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -105,10 +111,17 @@ class LamdaClass(BaseQuery):
         tables = parse_lamda_lines(datafile)
         return tables
 
-    def get_molecules(self, cache=True):
+    def get_molecules(self, *, cache=True):
         """
         Scrape the list of valid molecules
+
+        Parameters
+        ----------
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
         """
+
         if cache and hasattr(self, '_molecule_dict'):
             return self._molecule_dict
         elif cache and os.path.isfile(self.moldict_path):
@@ -120,7 +133,7 @@ class LamdaClass(BaseQuery):
         response = self._request('GET', main_url, cache=cache)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content)
+        soup = BeautifulSoup(response.content, features="html5lib")
 
         links = soup.find_all('a', href=True)
         datfile_urls = [url
@@ -150,7 +163,7 @@ class LamdaClass(BaseQuery):
 
         return self._molecule_dict
 
-    def _find_datfiles(self, url, base_url, raise_for_status=False):
+    def _find_datfiles(self, url, base_url, *, raise_for_status=False):
 
         myurl = _absurl_from_url(url, base_url)
         if 'http' not in myurl:
@@ -164,7 +177,7 @@ class LamdaClass(BaseQuery):
             # assume this URL does not contain data b/c it does not exist
             return []
 
-        soup = BeautifulSoup(response.content)
+        soup = BeautifulSoup(response.content, features="html5lib")
 
         links = soup.find_all('a', href=True)
 
@@ -214,9 +227,6 @@ def write_lamda_datafile(filename, tables):
     tables: tuple
         Tuple of Tables ({rateid: coll_table}, rad_table, mol_table)
     """
-    import platform
-    import sys
-
     collrates, radtransitions, enlevels = tables
 
     levels_hdr = ("""! MOLECULE
@@ -250,10 +260,7 @@ def write_lamda_datafile(filename, tables):
     coll_part_hdr = re.sub('^ +', '', coll_part_hdr, flags=re.MULTILINE)
 
     if platform.system() == 'Windows':
-        if sys.version_info[0] >= 3:
-            stream = open(filename, 'w', newline='')
-        else:
-            stream = open(filename, 'wb')
+        stream = open(filename, 'w', newline='')
     else:
         stream = open(filename, 'w')
 
@@ -372,9 +379,9 @@ def parse_lamda_lines(data):
     coll_tables = {collider_ids[collider]: None for collider in collrates}
     for collider in collrates:
         collname = collider_ids[collider]
-        coll_table_names = (['Transition', 'Upper', 'Lower'] +
-                            ['C_ij(T={0:d})'.format(tem) for tem in
-                             meta_coll[collname]["temperatures"]])
+        coll_table_names = (['Transition', 'Upper', 'Lower']
+                            + ['C_ij(T={0:d})'.format(tem) for tem in
+                               meta_coll[collname]["temperatures"]])
         coll_table_columns = [table.Column(name=name, data=data)
                               for name, data in zip(coll_table_names,
                                                     zip(*collrates[collider]))]

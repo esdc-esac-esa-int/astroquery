@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 import os.path
 import warnings
@@ -8,10 +8,14 @@ from ..utils.process_asyncs import async_to_sync
 from ..query import BaseQuery
 from . import conf
 from . load_species_table import species_lookuptable
+from astropy.utils.decorators import deprecated
 
 __doctest_skip__ = ['VamdcClass.*']
 
 
+@deprecated('0.4.2', 'the vamdc astroquery module relies on an unmaintained library and is'
+            'considered deprecated until completely refactored or upstream'
+            'is stablised.')
 @async_to_sync
 class VamdcClass(BaseQuery):
 
@@ -19,7 +23,7 @@ class VamdcClass(BaseQuery):
     CACHE_LOCATION = conf.cache_location
 
     def __init__(self, doimport=True):
-        super(VamdcClass, self).__init__()
+        super().__init__()
 
         if not doimport:
             # this is a hack to allow the docstrings to be produced without

@@ -14,55 +14,103 @@ Created on 30 jun. 2016
 
 
 """
-
+import gzip
 import io
+import json
+import sys
+import warnings
+
+import numpy as np
+
 from astropy import units as u
 from astropy.table import Table as APTable
-import six
+from astropy.table.table import Table
+from astropy.utils.exceptions import AstropyWarning
 
 
 def util_create_string_from_buffer(buffer):
-    if six.PY2:
-        # 2.7
-        return ''.join(x.encode('utf-8') for x in buffer)
-    else:
-        # 3.0
-        return ''.join(map(str, buffer))
+    return ''.join(map(str, buffer))
 
 
-def read_http_response(response, outputFormat, correct_units=True):
-    astropyFormat = get_suitable_astropy_format(outputFormat)
-    if six.PY2:
-        # 2.7
-        result = APTable.read(response, format=astropyFormat)
-    else:
-        # 3.0
-        # If we want to use astropy.table, we have to read the data
-        data = io.BytesIO(response.read())
-        result = APTable.read(data, format=astropyFormat)
+def read_http_response(response, output_format, *, correct_units=True, use_names_over_ids=False):
+    astropy_format = get_suitable_astropy_format(output_format)
+
+    # If we want to use astropy.table, we have to read the data
+    data = io.BytesIO(response.read())
+
+    try:
+        if astropy_format == 'votable':
+            result = APTable.read(io.BytesIO(gzip.decompress(data.read())), format=astropy_format,
+                                  use_names_over_ids=use_names_over_ids)
+        else:
+            result = APTable.read(io.BytesIO(gzip.decompress(data.read())), format=astropy_format)
+
+    except OSError:
+        # data is not a valid gzip file by BadGzipFile.
+
+        if output_format == 'json':
+
+            # Set the file’s current position
+            data.seek(0)
+            data_json = json.load(data)
+
+            if data_json.get('data') and data_json.get('metadata'):
+
+                column_name = []
+                for name in data_json['metadata']:
+                    column_name.append(name['name'])
+
+                result = Table(rows=data_json['data'], names=column_name, masked=True)
+
+                for v in data_json['metadata']:
+                    col_name = v['name']
+                    result[col_name].unit = v['unit']
+                    result[col_name].description = v['description']
+                    result[col_name].meta = {'metadata': v}
+
+            else:
+                result = APTable.read(data, format=astropy_format)
+
+        elif astropy_format == 'votable':
+            result = APTable.read(data, format=astropy_format, use_names_over_ids=use_names_over_ids)
+        else:
+            with warnings.catch_warnings():
+                # Capturing the warning and converting the objid column to int64 is necessary for consistency as
+                # it was convereted to string on systems with defaul integer int32 due to an overflow.
+                if sys.platform.startswith('win'):
+                    warnings.filterwarnings("ignore", category=AstropyWarning,
+                                            message=r'OverflowError converting to IntType in column.*')
+                result = APTable.read(data, format=astropy_format)
+                if 'solution_id' in result.columns:
+                    result['solution_id'] = result['solution_id'].astype(np.uint64)
 
     if correct_units:
-        for cn in result.colnames:
-            col = result[cn]
-            if isinstance(col.unit, u.UnrecognizedUnit):
-                try:
-                    col.unit = u.Unit(col.unit.name.replace(".", " ").replace("'", ""))
-                except Exception as ex:
-                    pass
-            elif isinstance(col.unit, str):
-                col.unit = col.unit.replace(".", " ").replace("'", "")
+        modify_unrecognized_table_units(result)
 
     return result
 
 
-def get_suitable_astropy_format(outputFormat):
-    if "csv" == outputFormat:
-        return "ascii.csv"
-    return outputFormat
+def get_suitable_astropy_format(output_format):
+    if 'ecsv' == output_format:
+        return 'ascii.ecsv'
+    elif 'csv' == output_format:
+        return 'ascii.csv'
+    elif 'votable_plain' == output_format or 'votable_gzip' == output_format:
+        return 'votable'
+    elif 'json' == output_format:
+        return 'pandas.json'
+    return output_format
 
 
-def read_file_content(filePath):
-    fileHandler = open(filePath, 'r')
-    fileContent = fileHandler.read()
-    fileHandler.close()
-    return fileContent
+def modify_unrecognized_table_units(table):
+    """Modifies the units of an input table column in place
+    """
+    for cn in table.colnames:
+        col = table[cn]
+        if isinstance(col.unit, u.UnrecognizedUnit):
+            try:
+                col.unit = u.Unit(col.unit.name.replace(".", " ").replace("'", ""))
+            except Exception:
+                pass
+        elif isinstance(col.unit, str):
+            col.unit = col.unit.replace(".", " ").replace("'", "")

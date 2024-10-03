@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 import pytest
 
@@ -19,9 +19,9 @@ class TestVista:
     @pytest.mark.dependency(name='vsa_up')
     def test_is_vsa_up(self):
         try:
-            vista._request("GET", "http://horus.roe.ac.uk:8080/vdfs/VgetImage_form.jsp")
+            vista._request("GET", "http://vsa.roe.ac.uk:8080/vdfs/VgetImage_form.jsp")
         except Exception as ex:
-            pytest.xfail("VISTA appears to be down.  Exception was: {0}".format(ex))
+            pytest.fail("VISTA appears to be down.  Exception was: {0}".format(ex))
 
     @pytest.mark.dependency(depends=["vsa_up"])
     def test_get_images(self):

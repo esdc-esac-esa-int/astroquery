@@ -40,7 +40,7 @@ __all__ = ['VOSBase', 'VOSCatalog', 'VOSDatabase', 'get_remote_catalog_db',
 __dbversion__ = 1
 
 
-class VOSBase(object):
+class VOSBase:
     """
     Base class for VO catalog and database.
 
@@ -99,7 +99,7 @@ class VOSCatalog(VOSBase):
     _compulsory_keys = ('title', 'url')
 
     def __init__(self, tree):
-        super(VOSCatalog, self).__init__(tree)
+        super().__init__(tree)
 
         for key in self._compulsory_keys:
             if key not in self._tree:
@@ -187,7 +187,7 @@ class VOSDatabase(VOSBase):
         if 'catalogs' not in tree:
             raise VOSError("Invalid VO service catalog database")
 
-        super(VOSDatabase, self).__init__(tree)
+        super().__init__(tree)
         self._catalogs = tree['catalogs']
 
         if self.version > __dbversion__:  # pragma: no cover
@@ -300,14 +300,14 @@ class VOSDatabase(VOSBase):
         """
         return self._match_pattern(list(self._catalogs), pattern, sort)
 
-    def list_catalogs_by_url(self, pattern=None, sort=True):
+    def list_catalogs_by_url(self, *, pattern=None, sort=True):
         """Like :meth:`list_catalogs` but using access URL."""
         out_arr = self._match_pattern(list(self._url_keys), pattern, sort)
 
         # Discard URL that maps to nothing
         return [a for a in out_arr if len(self._url_keys[a]) > 0]
 
-    def add_catalog(self, name, cat, allow_duplicate_url=False):
+    def add_catalog(self, name, cat, *, allow_duplicate_url=False):
         """
         Add a catalog to database.
 
@@ -440,7 +440,7 @@ class VOSDatabase(VOSBase):
 
         return db
 
-    def to_json(self, filename, overwrite=False):
+    def to_json(self, filename, *, overwrite=False):
         """
         Write database content to a JSON file.
 
@@ -527,7 +527,7 @@ class VOSDatabase(VOSBase):
         return cls(tree)
 
     @classmethod
-    def from_registry(cls, registry_url, timeout=60, **kwargs):
+    def from_registry(cls, registry_url, *, timeout=60, **kwargs):
         """
         Create a database of VO services from VO registry URL.
 
@@ -566,7 +566,7 @@ class VOSDatabase(VOSBase):
         # Download registry as VO table
         with data_conf.set_temp('remote_timeout', timeout):
             with get_readable_fileobj(registry_url, **kwargs) as fd:
-                tab_all = parse_single_table(fd, pedantic=False)
+                tab_all = parse_single_table(fd, verify='warn')
 
         # Registry must have these fields
         compulsory_fields = ['res_title', 'access_url']
@@ -597,19 +597,12 @@ class VOSDatabase(VOSBase):
                     cur_title = arr['res_title']
                     title_counter[cur_title] += 1  # Starts with 1
 
-                    if isinstance(cur_title, bytes):  # ASTROPY_LT_4_1
-                        cur_key = title_fmt.format(cur_title.decode('utf-8'),
-                                                   title_counter[cur_title])
-                    else:
-                        cur_key = title_fmt.format(cur_title,
-                                                   title_counter[cur_title])
+                    cur_key = title_fmt.format(cur_title, title_counter[cur_title])
 
                 # Special handling of title and access URL,
                 # otherwise no change.
                 if field == 'access_url':
                     s = unescape_all(arr['access_url'])
-                    if isinstance(s, bytes):  # ASTROPY_LT_4_1
-                        s = s.decode('utf-8')
                     cur_cat['url'] = s
                 elif field == 'res_title':
                     cur_cat['title'] = arr[field]
@@ -635,7 +628,7 @@ class VOSDatabase(VOSBase):
         return db
 
 
-def get_remote_catalog_db(dbname, cache=True, verbose=True):
+def get_remote_catalog_db(dbname, *, cache=True, verbose=True):
     """
     Get a database of VO services (which is a JSON file) from a remote
     location.
@@ -707,7 +700,7 @@ def _get_catalogs(service_type, catalog_db, **kwargs):
     return catalogs
 
 
-def _vo_service_request(url, pedantic, kwargs, cache=True, verbose=False):
+def _vo_service_request(url, pedantic, kwargs, *, cache=True, verbose=False):
     """
     This is called by :func:`call_vo_service`.
 
@@ -728,7 +721,8 @@ def _vo_service_request(url, pedantic, kwargs, cache=True, verbose=False):
     parsed_url = url + '&'.join(query)
     with get_readable_fileobj(parsed_url, encoding='binary', cache=cache,
                               show_progress=verbose) as req:
-        tab = table.parse(req, filename=parsed_url, pedantic=pedantic)
+        pedantic = 'exception' if pedantic else 'warn'
+        tab = table.parse(req, filename=parsed_url, verify=pedantic)
 
     return vo_tab_parse(tab, url, kwargs)
 
@@ -751,7 +745,7 @@ def vo_tab_parse(tab, url, kwargs):
 
     Returns
     -------
-    out_tab : `astropy.io.votable.tree.Table`
+    out_tab : `astropy.io.votable.tree.TableElement`
 
     Raises
     ------
@@ -863,7 +857,7 @@ def call_vo_service(service_type, catalog_db=None, pedantic=None,
 
     Returns
     -------
-    obj : `astropy.io.votable.tree.Table`
+    obj : `astropy.io.votable.tree.TableElement`
         First table from first successful VO service request.
 
     Raises

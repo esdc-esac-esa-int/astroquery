@@ -8,30 +8,23 @@ Canadian Astronomy Data Centre
 import pytest
 import os
 import requests
-from datetime import datetime
+from pathlib import Path
+from datetime import datetime, timezone
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy import units as u
+import warnings
 
 from astroquery.cadc import Cadc
-from astropy.utils.exceptions import AstropyDeprecationWarning
 from astroquery.utils.commons import parse_coordinates, FileContainer
 
-try:
-    pyvo_OK = True
-    import pyvo   # noqa
-    from pyvo.auth import authsession
-except ImportError:
-    pyvo_OK = False
-except AstropyDeprecationWarning as e:
-    if str(e) == 'The astropy.vo.samp module has now been moved to astropy.samp':
-        print('AstropyDeprecationWarning: {}'.format(str(e)))
-    else:
-        raise e
+from pyvo.auth import authsession
 
-# to run just one test during development, set this variable to True
-# and comment out the skipif of the single test to run.
-one_test = False
+try:
+    # workaround for https://github.com/astropy/astroquery/issues/2523 to support bs4<4.11
+    from bs4.builder import XMLParsedAsHTMLWarning
+except ImportError:
+    XMLParsedAsHTMLWarning = None
 
 # Skip the very slow tests to avoid timeout errors
 skip_slow = True
@@ -40,8 +33,6 @@ skip_slow = True
 @pytest.mark.remote_data
 class TestCadcClass:
     # now write tests for each method here
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_get_collections(self):
         cadc = Cadc()
         result = cadc.get_collections()
@@ -61,15 +52,19 @@ class TestCadcClass:
         assert 'Infrared' in result['DAO']['Bands']
         assert 'Optical' in result['DAO']['Bands']
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_query_region(self):
         cadc = Cadc()
         result = cadc.query_region('08h45m07.5s +54d18m00s', collection='CFHT')
         # do some manipulation of the results. Below it's filtering out based
         # on target name but other manipulations are possible.
         assert len(result) > 0
-        urls = cadc.get_data_urls(result[result['target_name'] == 'Nr3491_1'])
+
+        # Remove this filter when https://github.com/astropy/astroquery/issues/2523 is fixed
+        with warnings.catch_warnings():
+            if XMLParsedAsHTMLWarning:
+                warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            urls = cadc.get_data_urls(result[result['target_name'] == 'Nr3491_1'])
+
         assert len(urls) > 0
         # urls are a subset of the results that match target_name==Nr3491_1
         assert len(result) >= len(urls)
@@ -85,11 +80,10 @@ class TestCadcClass:
         assert len(result) == len(result2[result2['collection'] == 'CFHT'])
 
         # search for a target
-        results = cadc.query_region(SkyCoord.from_name('M31'), radius=0.016)
+        with pytest.warns(UserWarning, match='Radius should be of '):
+            results = cadc.query_region(SkyCoord.from_name('M31'), radius=0.016)
         assert len(results) > 20
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_query_name(self):
         cadc = Cadc()
         result1 = cadc.query_name('M31-B14')
@@ -98,8 +92,6 @@ class TestCadcClass:
         result2 = cadc.query_name('m31-b14')
         assert len(result1) == len(result2)
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_query(self):
         cadc = Cadc()
         result = cadc.exec_sync(
@@ -107,33 +99,29 @@ class TestCadcClass:
         assert 1000 < result[0][0]
 
         # test that no proprietary results are returned when not logged in
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = "select top 1 * from caom2.Plane where " \
                 "metaRelease>'{}'".format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
         result = cadc.exec_sync(query)
         assert len(result) == 0
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
     @pytest.mark.skip('Disabled for now until pyvo starts supporting '
                       'different output formats')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_query_format(self):
         cadc = Cadc()
         query = "select top 1 observationID, collection from caom2.Observation"
         result = cadc.exec_sync(query, output_format='csv')
         print(result)
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
     @pytest.mark.skipif(('CADC_USER' not in os.environ
                         or 'CADC_PASSWD' not in os.environ),
                         reason='Requires real CADC user/password (CADC_USER '
                                'and CADC_PASSWD environment variables)')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_login_with_user_password(self):
         for auth_session in [None, authsession.AuthSession(),
                              requests.Session()]:
             cadc = Cadc(auth_session=auth_session)
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             query = \
                 "select top 1 * from caom2.Plane where metaRelease>'{}'".\
                 format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
@@ -151,16 +139,20 @@ class TestCadcClass:
                 format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
             result = cadc.exec_sync(query)
             assert len(result) == 0
+            # login in again
+            cadc.login(os.environ['CADC_USER'], os.environ['CADC_PASSWD'])
+            query = "select top 1 * from caom2.Plane where metaRelease>'{}'". \
+                format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
+            result = cadc.exec_sync(query)
+            assert len(result) == 1
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
     @pytest.mark.skipif('CADC_CERT' not in os.environ,
                         reason='Requires real CADC certificate (CADC_CERT '
                                'environment variable)')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_login_with_cert(self):
         for auth_session in [requests.Session()]:
             cadc = Cadc(auth_session=auth_session)
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             query = \
                 "select top 1 * from caom2.Plane where metaRelease>'{}'".\
                 format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
@@ -181,43 +173,43 @@ class TestCadcClass:
             result = cadc.exec_sync(query)
             assert len(result) == 0
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
     @pytest.mark.skipif('CADC_CERT' not in os.environ,
                         reason='Requires real CADC certificate (CADC_CERT '
                                'environment variable)')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_authsession(self):
         # repeat previous test
         auth_session = requests.Session()
         auth_session.cert = os.environ['CADC_CERT']
         cadc = Cadc(auth_session=auth_session)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = "select top 1 * from caom2.Plane where " \
                 "metaRelease>'{}'".format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
         result = cadc.exec_sync(query)
         assert len(result) == 1
         annon_session = requests.Session()
         cadc = Cadc(auth_session=annon_session)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         query = "select top 1 * from caom2.Plane where " \
                 "metaRelease>'{}'".format(now.strftime('%Y-%m-%dT%H:%M:%S.%f'))
         result = cadc.exec_sync(query)
         assert len(result) == 0
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_get_images(self):
         cadc = Cadc()
         coords = '08h45m07.5s +54d18m00s'
         radius = 0.005*u.deg
-        images = cadc.get_images(coords, radius, collection='CFHT')
+
+        # Remove this filter when https://github.com/astropy/astroquery/issues/2523 is fixed
+        with warnings.catch_warnings():
+            if XMLParsedAsHTMLWarning:
+                warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            images = cadc.get_images(coords, radius, collection='CFHT')
+
         assert images is not None
 
         for image in images:
             assert isinstance(image, fits.HDUList)
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     @pytest.mark.skipif(skip_slow, reason='Avoid timeout errors')
     def test_get_images_against_AS(self):
         cadc = Cadc()
@@ -251,19 +243,20 @@ class TestCadcClass:
 
         assert len(filtered_resp_urls) == len(image_urls)
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_get_images_async(self):
         cadc = Cadc()
         coords = '01h45m07.5s +23d18m00s'
         radius = '0.05 deg'
-        readable_objs = cadc.get_images_async(coords, radius, collection="CFHT")
+
+        # Remove this filter when https://github.com/astropy/astroquery/issues/2523 is fixed
+        with warnings.catch_warnings():
+            if XMLParsedAsHTMLWarning:
+                warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+            readable_objs = cadc.get_images_async(coords, radius, collection="CFHT")
         assert readable_objs is not None
         for obj in readable_objs:
             assert isinstance(obj, FileContainer)
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_async(self):
         # test async calls
         cadc = Cadc()
@@ -291,8 +284,6 @@ class TestCadcClass:
             assert expected['observationID'][ii] == result['observationID'][ii]
         # job.delete()  # BUG in CADC
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
     def test_list_tables(self):
         cadc = Cadc()
         table_names = cadc.get_tables(only_names=True)
@@ -308,11 +299,10 @@ class TestCadcClass:
         table = cadc.get_table('caom2.Observation')
         assert 'caom2.Observation' == table.name
 
-    @pytest.mark.skipif(one_test, reason='One test mode')
     @pytest.mark.skipif('CADC_CERT' not in os.environ,
                         reason='Requires real CADC certificate (CADC_CERT '
                                'environment variable)')
-    @pytest.mark.skipif(not pyvo_OK, reason='not pyvo_OK')
+    @pytest.mark.xfail(reason='#2325')
     def test_list_jobs(self):
         cadc = Cadc()
         cadc.login(certificate_file=os.environ['CADC_CERT'])
@@ -327,3 +317,20 @@ class TestCadcClass:
         if len(jobs) > 5:
             jobs_subset = cadc.list_async_jobs(last=5)
             assert len(jobs_subset) == 5
+
+    @pytest.mark.xfail(reason='https://github.com/astropy/astroquery/issues/2538')
+    def test_uploads(self, tmp_path):
+        cadc = Cadc()
+        # save a few observations on a local file
+        output_file = Path(tmp_path, 'my_observations.xml')
+        cadc.exec_sync("SELECT TOP 3 observationID FROM caom2.Observation",
+                       output_file=output_file)
+        assert output_file.exists()
+
+        # now use them to join with the remote table
+        results = cadc.exec_sync(
+            "SELECT o.observationID, intent FROM caom2.Observation o JOIN "
+            "tap_upload.test_upload tu ON o.observationID=tu.observationID",
+            uploads={'test_upload': output_file})
+
+        assert len(results) == 3

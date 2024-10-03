@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 from io import BytesIO
 import astropy.units as u
 import astropy.coordinates as coord
@@ -33,7 +33,7 @@ class MagpisClass(BaseQuery):
                "bolocam"]
     maximsize = 1024
 
-    def _args_to_payload(self, coordinates, image_size=1 * u.arcmin,
+    def _args_to_payload(self, coordinates, *, image_size=1 * u.arcmin,
                          survey='bolocam', maximsize=None):
         """
         Fetches image cutouts from MAGPIS surveys.
@@ -61,8 +61,8 @@ class MagpisClass(BaseQuery):
         """
         request_payload = {}
         request_payload["Survey"] = survey
-        c = commons.parse_coordinates(coordinates).transform_to('galactic')
-        ra_dec_str = str(c.l.degree) + ' ' + str(c.b.degree)
+        galactic_coords = commons.parse_coordinates(coordinates).transform_to('galactic')
+        ra_dec_str = str(galactic_coords.l.degree) + ' ' + str(galactic_coords.b.degree)
         request_payload["RA"] = ra_dec_str
         request_payload["Equinox"] = "Galactic"
         request_payload["ImageSize"] = coord.Angle(image_size).arcmin
@@ -71,7 +71,7 @@ class MagpisClass(BaseQuery):
         return request_payload
 
     @prepend_docstr_nosections("\n" + _args_to_payload.__doc__)
-    def get_images(self, coordinates, image_size=1 * u.arcmin,
+    def get_images(self, coordinates, *, image_size=1 * u.arcmin,
                    survey='bolocam', get_query_payload=False):
         """
         get_query_payload : bool, optional
@@ -87,14 +87,14 @@ class MagpisClass(BaseQuery):
                                          get_query_payload=get_query_payload)
         if get_query_payload:
             return response
-        S = BytesIO(response.content)
+        content_buffer = BytesIO(response.content)
         try:
-            return fits.open(S, ignore_missing_end=True)
-        except IOError:
+            return fits.open(content_buffer, ignore_missing_end=True)
+        except OSError:
             raise InvalidQueryError(response.content)
 
     @prepend_docstr_nosections("\n" + _args_to_payload.__doc__)
-    def get_images_async(self, coordinates, image_size=1 * u.arcmin,
+    def get_images_async(self, coordinates, *, image_size=1 * u.arcmin,
                          survey='bolocam', get_query_payload=False):
         """
         get_query_payload : bool, optional
@@ -107,14 +107,14 @@ class MagpisClass(BaseQuery):
             The HTTP response returned from the service
         """
         if survey not in self.surveys:
-            raise InvalidQueryError("Survey must be one of " +
-                                    (",".join(self.list_surveys())))
+            raise InvalidQueryError("Survey must be one of "
+                                    + (",".join(self.list_surveys())))
         request_payload = self._args_to_payload(
             coordinates, image_size=image_size, survey=survey)
         if get_query_payload:
             return request_payload
         response = self._request("POST", url=self.URL, data=request_payload,
-                                 timeout=self.TIMEOUT, verify=False)
+                                 timeout=self.TIMEOUT)
         return response
 
     def list_surveys(self):

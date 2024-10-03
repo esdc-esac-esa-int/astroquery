@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 import os
 import re
@@ -8,15 +8,15 @@ from contextlib import contextmanager
 import numpy.testing as npt
 import astropy.units as u
 import pytest
+from astropy.coordinates import SkyCoord
+from astropy.io.fits.verify import VerifyWarning
 
 from ...import nvas
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 from ...utils import commons
 
-COORDS_GAL = commons.GalacticCoordGenerator(
-    l=49.489, b=-0.37, unit=(u.deg, u.deg))  # ARM 2000
-COORDS_ICRS = commons.ICRSCoordGenerator(
-    "12h29m06.69512s +2d03m08.66276s")  # 3C 273
+COORDS_GAL = SkyCoord(l=49.489 * u.deg, b=-0.37 * u.deg, frame="galactic")  # ARM 2000
+COORDS_ICRS = SkyCoord("12h29m06.69512s +2d03m08.66276s", frame="icrs")  # 3C 273
 
 DATA_FILES = {'image': 'image.imfits',
               'image_search': 'image_results.html'}
@@ -29,10 +29,8 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_post(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(nvas.Nvas, '_request', post_mockreturn)
     return mp
 
@@ -41,17 +39,17 @@ def patch_post(request):
 def patch_parse_coordinates(request):
     def parse_coordinates_mock_return(c):
         return c
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(commons, 'parse_coordinates', parse_coordinates_mock_return)
     return mp
 
 
 def post_mockreturn(method, url, data, timeout, **kwargs):
     filename = data_path(DATA_FILES['image_search'])
-    content = open(filename, 'rb').read()
+    with open(filename, 'rb') as infile:
+        content = infile.read()
     response = MockResponse(content, **kwargs)
     return response
 
@@ -62,15 +60,14 @@ def patch_get_readable_fileobj(request):
     def get_readable_fileobj_mockreturn(filename, **kwargs):
         encoding = kwargs.get('encoding', None)
         if encoding == 'binary':
-            file_obj = open(data_path(DATA_FILES["image"]), 'rb')
+            with open(data_path(DATA_FILES["image"]), 'rb') as file_obj:
+                yield file_obj
         else:
-            file_obj = open(data_path(DATA_FILES["image"]),
-                            "r", encoding=encoding)
-        yield file_obj
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+            with open(data_path(DATA_FILES["image"]), "r", encoding=encoding) as file_obj:
+                yield file_obj
+
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(commons, 'get_readable_fileobj',
                get_readable_fileobj_mockreturn)
     return mp
@@ -86,8 +83,8 @@ def deparse_coordinates(cstr):
 @pytest.mark.parametrize(('coordinates'), [COORDS_GAL, COORDS_ICRS])
 def test_parse_coordinates(coordinates):
     out_str = nvas.core._parse_coordinates(coordinates)
-    new_coords = commons.ICRSCoordGenerator(
-        deparse_coordinates(out_str), unit=(u.hour, u.deg))
+    new_coords = SkyCoord(
+        deparse_coordinates(out_str), unit=(u.hour, u.deg), frame="icrs")
     # if all goes well new_coords and coordinates have same ra and dec
     npt.assert_approx_equal(new_coords.ra.degree,
                             coordinates.transform_to('fk5').ra.degree,
@@ -98,7 +95,8 @@ def test_parse_coordinates(coordinates):
 
 
 def test_extract_image_urls():
-    html_in = open(data_path(DATA_FILES['image_search']), 'r').read()
+    with open(data_path(DATA_FILES['image_search']), 'r') as infile:
+        html_in = infile.read()
     image_list = nvas.core.Nvas.extract_image_urls(html_in)
     assert len(image_list) == 2
 
@@ -112,7 +110,8 @@ def test_get_images_async(patch_post, patch_parse_coordinates):
 
 def test_get_images(patch_post, patch_parse_coordinates,
                     patch_get_readable_fileobj):
-    images = nvas.core.Nvas.get_images(COORDS_GAL, radius='5d0m0s', band='all')
+    with pytest.warns(VerifyWarning, match="Invalid 'BLANK' keyword in header"):
+        images = nvas.core.Nvas.get_images(COORDS_GAL, radius='5d0m0s', band='all')
     assert images is not None
 
 

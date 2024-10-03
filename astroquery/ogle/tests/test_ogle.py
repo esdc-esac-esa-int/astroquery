@@ -5,10 +5,12 @@ import os
 import pytest
 from astropy.coordinates import SkyCoord
 from astropy import units as u
-from ...utils.testing_tools import MockResponse
+from astropy.utils.exceptions import AstropyDeprecationWarning
 
-DATA_FILES = {'gal_0_3': 'gal_0_3.txt',
-              }
+from astroquery.utils.mocks import MockResponse
+
+
+DATA_FILES = {'gal_0_3': 'gal_0_3.txt'}
 
 
 def data_path(filename):
@@ -18,17 +20,16 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_post(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(ogle.Ogle, '_request', post_mockreturn)
     return mp
 
 
 def post_mockreturn(method, url, data, timeout, files=None, **kwargs):
     if files is not None:
-        content = open(data_path(DATA_FILES['gal_0_3']), 'rb').read()
+        with open(data_path(DATA_FILES['gal_0_3']), 'rb') as infile:
+            content = infile.read()
         response = MockResponse(content, **kwargs)
     else:
         raise ValueError("Unsupported post request.")
@@ -58,4 +59,5 @@ def test_ogle_list_values(patch_post):
     coordinates
     """
     co_list = [[0, 0, 0], [3, 3, 3]]
-    ogle.core.Ogle.query_region(coord=co_list)
+    with pytest.warns(AstropyDeprecationWarning):
+        ogle.core.Ogle.query_region(coord=co_list)

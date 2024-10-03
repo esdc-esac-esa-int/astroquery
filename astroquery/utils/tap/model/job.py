@@ -16,21 +16,23 @@ Created on 30 jun. 2016
 """
 
 import time
+from urllib.parse import urlencode
 
+import requests
+from astropy.logger import log
+
+from astroquery.utils.tap import taputils
 from astroquery.utils.tap.model import modelutils
 from astroquery.utils.tap.xmlparser import utils
-from astroquery.utils.tap import taputils
-import requests
-import sys
 
 __all__ = ['Job']
 
 
-class Job(object):
+class Job:
     """Job class
     """
 
-    def __init__(self, async_job, query=None, connhandler=None):
+    def __init__(self, async_job, *, query=None, connhandler=None, use_names_over_ids=False):
         """Constructor
 
         Parameters
@@ -41,6 +43,10 @@ class Job(object):
             Query
         connhandler : TapConn, optional, default None
             Connection handler
+        use_names_over_ids : When `True` use the ``name`` attributes of columns as the
+           names of columns in the `astropy.table.Table` instance.
+           Since names are not guaranteed to be unique, this may cause some columns to be renamed by appending numbers
+           to the end. Otherwise (default), use the ID attributes as the column names.
         """
         # async is a reserved keyword starting python 3.7
         self.async_ = async_job
@@ -51,10 +57,11 @@ class Job(object):
         # phase is actually indended to be private as get_phase is non-trivial
         self._phase = None
         self.outputFile = None
+        self.outputFileUser = None
         self.responseStatus = 0
         self.responseMsg = None
         self.results = None
-        self.__resultInMemory = False    # only used within class
+        self.__resultInMemory = False  # only used within class
         self.failed = False
         self.runid = None
         self.ownerid = None
@@ -72,6 +79,7 @@ class Job(object):
         self.parameters['query'] = query
         # default output format
         self.parameters['format'] = 'votable'
+        self.use_names_over_ids = use_names_over_ids
 
     def set_phase(self, phase):
         """Sets the job phase
@@ -85,7 +93,7 @@ class Job(object):
             raise ValueError("Cannot assign a phase when a job is finished")
         self._phase = phase
 
-    def start(self, verbose=False):
+    def start(self, *, verbose=False):
         """Starts the job (allowed in PENDING phase only)
 
         Parameters
@@ -95,7 +103,7 @@ class Job(object):
         """
         self.__change_phase(phase="RUN", verbose=verbose)
 
-    def abort(self, verbose=False):
+    def abort(self, *, verbose=False):
         """Aborts the job (allowed in PENDING phase only)
 
         Parameters
@@ -105,15 +113,12 @@ class Job(object):
         """
         self.__change_phase(phase="ABORT", verbose=verbose)
 
-    def __change_phase(self, phase, verbose=False):
+    def __change_phase(self, phase, *, verbose=False):
         if self._phase == 'PENDING':
-            context = "async/"+str(self.jobid)+"/phase"
-            args = {
-                "PHASE": str(phase)}
-            data = self.connHandler.url_encode(args)
-            response = self.connHandler.execute_tappost(subcontext=context,
-                                                        data=data,
-                                                        verbose=verbose)
+            context = f"async/{self.jobid}/phase"
+            response = self.connHandler.execute_tappost(
+                subcontext=context, data=urlencode({"PHASE": phase}), verbose=verbose
+            )
             if verbose:
                 print(response.status, response.reason)
                 print(response.getheaders())
@@ -133,10 +138,9 @@ class Job(object):
             self._phase = phase
             return response
         else:
-            raise ValueError("Cannot start a job in phase: " +
-                             str(self._phase))
+            raise ValueError(f"Cannot start a job in phase: {self._phase}")
 
-    def send_parameter(self, name=None, value=None, verbose=False):
+    def send_parameter(self, *, name=None, value=None, verbose=False):
         """Sends a job parameter (allowed in PENDING phase only).
 
         Parameters
@@ -148,12 +152,9 @@ class Job(object):
         """
         if self._phase == 'PENDING':
             # send post parameter/value
-            context = "async/"+str(self.jobid)
-            args = {
-                name: str(value)}
-            data = self.connHandler.url_encode(args)
+            context = f"async/{self.jobid}"
             response = self.connHandler.execute_tappost(subcontext=context,
-                                                        data=data,
+                                                        data=urlencode({name: value}),
                                                         verbose=verbose)
             if verbose:
                 print(response.status, response.reason)
@@ -165,10 +166,9 @@ class Job(object):
                 raise requests.exceptions.HTTPError(errMsg)
             return response
         else:
-            raise ValueError("Cannot start a job in phase: " +
-                             str(self._phase))
+            raise ValueError(f"Cannot start a job in phase: {self._phase}")
 
-    def get_phase(self, update=False):
+    def get_phase(self, *, update=False):
         """Returns the job phase. May optionally update the job's phase.
 
         Parameters
@@ -182,7 +182,7 @@ class Job(object):
         The job phase
         """
         if update:
-            phase_request = "async/"+str(self.jobid)+"/phase"
+            phase_request = f"async/{self.jobid}/phase"
             response = self.connHandler.execute_tapget(phase_request)
 
             self.__last_phase_response_status = response.status
@@ -232,9 +232,9 @@ class Job(object):
         # try load results from file
         # read_results_table_from_file checks whether
         # the file already exists or not
-        outputFormat = self.parameters['format']
+        output_format = self.parameters['format']
         results = modelutils.read_results_table_from_file(self.outputFile,
-                                                          outputFormat)
+                                                          output_format, use_names_over_ids=self.use_names_over_ids)
         if results is not None:
             self.results = results
             return results
@@ -258,7 +258,7 @@ class Job(object):
         self.results = results
         self.__resultInMemory = True
 
-    def save_results(self, verbose=False):
+    def save_results(self, *, verbose=False):
         """Saves job results
         If the job is asynchronous, this method will block until the results
         are available.
@@ -268,31 +268,43 @@ class Job(object):
         verbose : bool, optional, default 'False'
             flag to display information about the process
         """
-        output = self.outputFile
         if self.__resultInMemory:
-            self.results.to_xml(output)
+            if verbose:
+                print(f"Saving results to: {self.outputFile}")
+            self.results.to_xml(self.outputFile)
         else:
             if not self.async_:
                 # sync: cannot access server again
-                print("No results to save")
+                log.info("No results to save")
             else:
                 # Async
-                self.wait_for_job_end(verbose)
+                self.wait_for_job_end(verbose=verbose)
                 response = self.connHandler.execute_tapget(
-                    "async/"+str(self.jobid)+"/results/result")
+                    f"async/{self.jobid}/results/result")
                 if verbose:
                     print(response.status, response.reason)
                     print(response.getheaders())
-                isError = self.connHandler.\
+                isError = self.connHandler. \
                     check_launch_response_status(response,
                                                  verbose,
                                                  200)
                 if isError:
                     print(response.reason)
                     raise Exception(response.reason)
+                if self.outputFileUser is None:
+                    # User did not provide an output
+                    # The output is a temporary one, analyse header
+                    self.outputFile = taputils.get_suitable_output_file(
+                        self.connHandler, True, None, response.getheaders(),
+                        False, self.parameters['format'])
+                    output = self.outputFile
+                else:
+                    output = self.outputFileUser
+                if verbose:
+                    print(f"Saving results to: {output}")
                 self.connHandler.dump_to_file(output, response)
 
-    def wait_for_job_end(self, verbose=False):
+    def wait_for_job_end(self, *, verbose=False):
         """Waits until a job is finished
 
         Parameters
@@ -305,9 +317,9 @@ class Job(object):
         lphase = None
         # execute job if not running
         if self._phase == 'PENDING':
-            print("Job in PENDING phase, sending phase=RUN request.")
+            log.info("Job in PENDING phase, sending phase=RUN request.")
             try:
-                self.start(verbose)
+                self.start(verbose=verbose)
             except Exception as ex:
                 # ignore
                 if verbose:
@@ -318,18 +330,17 @@ class Job(object):
 
             lphase = responseData.upper().strip()
             if verbose:
-                print("Job " + self.jobid + " status: " + lphase)
-            if ("PENDING" != lphase and "QUEUED" != lphase and
-                    "EXECUTING" != lphase):
+                print(f"Job {self.jobid} status: {lphase}")
+            if ("PENDING" != lphase and "QUEUED" != lphase and "EXECUTING" != lphase):
                 break
             # PENDING, QUEUED, EXECUTING, COMPLETED, ERROR, ABORTED, UNKNOWN,
             # HELD, SUSPENDED, ARCHIVED:
             time.sleep(0.5)
         return currentResponse, lphase
 
-    def __load_async_job_results(self, debug=False):
+    def __load_async_job_results(self, *, debug=False):
         wjResponse, phase = self.wait_for_job_end()
-        subContext = "async/" + str(self.jobid) + "/results/result"
+        subContext = f"async/{self.jobid}/results/result"
         resultsResponse = self.connHandler.execute_tapget(subContext)
         # resultsResponse = self.__readAsyncResults(self.__jobid, debug)
         if debug:
@@ -337,14 +348,14 @@ class Job(object):
             print(resultsResponse.getheaders())
 
         resultsResponse = self.__handle_redirect_if_required(resultsResponse,
-                                                             debug)
-        isError = self.connHandler.\
+                                                             verbose=debug)
+        isError = self.connHandler. \
             check_launch_response_status(resultsResponse,
                                          debug,
                                          200)
         self._phase = phase
         if phase == 'ERROR':
-            errMsg = self.get_error(debug)
+            errMsg = self.get_error(verbose=debug)
             raise SystemError(errMsg)
         else:
             if isError:
@@ -354,19 +365,17 @@ class Job(object):
             else:
                 outputFormat = self.parameters['format']
                 results = utils.read_http_response(resultsResponse,
-                                                   outputFormat)
+                                                   outputFormat, use_names_over_ids=self.use_names_over_ids)
                 self.set_results(results)
 
-    def __handle_redirect_if_required(self, resultsResponse, verbose=False):
+    def __handle_redirect_if_required(self, resultsResponse, *, verbose=False):
         # Thanks @emeraldTree24
         numberOfRedirects = 0
-        while ((resultsResponse.status == 303 or
-                resultsResponse.status == 302) and
-                numberOfRedirects < 20):
-            joblocation = self.connHandler.\
+        while ((resultsResponse.status == 303 or resultsResponse.status == 302) and numberOfRedirects < 20):
+            joblocation = self.connHandler. \
                 find_header(resultsResponse.getheaders(), "location")
             if verbose:
-                print("Redirecting to: " + str(joblocation))
+                print(f"Redirecting to: {joblocation}")
             resultsResponse = self.connHandler.execute_tapget(joblocation)
             numberOfRedirects += 1
             if verbose:
@@ -374,7 +383,7 @@ class Job(object):
                 print(resultsResponse.getheaders())
         return resultsResponse
 
-    def get_error(self, verbose=False):
+    def get_error(self, *, verbose=False):
         """Returns the error associated to a job
 
         Parameters
@@ -386,39 +395,33 @@ class Job(object):
         -------
         The job error.
         """
-        subContext = "async/" + str(self.jobid) + "/error"
+        subContext = f"async/{self.jobid}/error"
         resultsResponse = self.connHandler.execute_tapget(subContext)
         # resultsResponse = self.__readAsyncResults(self.__jobid, debug)
         if verbose:
             print(resultsResponse.status, resultsResponse.reason)
             print(resultsResponse.getheaders())
-        if (resultsResponse.status != 200 and
-                resultsResponse.status != 303 and
-                resultsResponse.status != 302):
+        if (resultsResponse.status != 200 and resultsResponse.status != 303 and resultsResponse.status != 302):
             errMsg = taputils.get_http_response_error(resultsResponse)
             print(resultsResponse.status, errMsg)
             raise requests.exceptions.HTTPError(errMsg)
         else:
             if resultsResponse.status == 303 or resultsResponse.status == 302:
                 # get location
-                location = self.connHandler.\
+                location = self.connHandler. \
                     find_header(resultsResponse.getheaders(), "location")
                 if location is None:
-                    raise requests.exceptions.HTTPError("No location found " +
-                                                        "after redirection " +
-                                                        "was received (303)")
+                    raise requests.exceptions.HTTPError("No location found after redirection was received (303)")
                 if verbose:
-                    print("Redirect to %s", location)
+                    print(f"Redirect to {location}")
                 # load
-                relativeLocation = self.__extract_relative_location(location,
-                                                                    self.jobid)
-                relativeLocationSubContext = "async/" + str(self.jobid) +\
-                    "/" + str(relativeLocation)
-                response = self.connHandler.\
+                relativeLocation = self.__extract_relative_location(location, self.jobid)
+                relativeLocationSubContext = f"async/{self.jobid}/{relativeLocation}"
+                response = self.connHandler. \
                     execute_tapget(relativeLocationSubContext)
                 response = self.__handle_redirect_if_required(response,
-                                                              verbose)
-                isError = self.connHandler.\
+                                                              verbose=verbose)
+                isError = self.connHandler. \
                     check_launch_response_status(response, verbose, 200)
                 if isError:
                     errMsg = taputils.get_http_response_error(resultsResponse)
@@ -433,9 +436,7 @@ class Job(object):
         """Returns whether the job is finished (ERROR, ABORTED, COMPLETED) or not
 
         """
-        if (self._phase == 'ERROR' or
-                self._phase == 'ABORTED' or
-                self._phase == 'COMPLETED'):
+        if (self._phase == 'ERROR' or self._phase == 'ABORTED' or self._phase == 'COMPLETED'):
             return True
         else:
             return False
@@ -465,8 +466,8 @@ class Job(object):
             result = "None"
         else:
             result = self.results.info()
-        return "Jobid: " + str(self.jobid) + \
-            "\nPhase: " + str(self._phase) + \
-            "\nOwner: " + str(self.ownerid) + \
-            "\nOutput file: " + str(self.outputFile) + \
-            "\nResults: " + str(result)
+        return f"Jobid: {self.jobid}" \
+               f"\nPhase: {self._phase}" \
+               f"\nOwner: {self.ownerid}" \
+               f"\nOutput file: {self.outputFile}" \
+               f"\nResults: {result}"

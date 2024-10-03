@@ -3,8 +3,13 @@ Contributing to Astroquery
 The first official release of astroquery occurred in September 2013.
 
 Please see `astropy's contributing guildelines
-<http://www.astropy.org/contribute.html>`__ for a general guide to the
+<https://www.astropy.org/contribute.html>`__ for a general guide to the
 workflow involving git, etc.  Everything below is astroquery-specific.
+
+We strongly encourage draft pull requests to be opened early in development.
+If you are thinking of contributing a new module, please open a pull request
+as soon as you start developing code and mark it as a Draft PR on github.
+
 
 New Features
 ------------
@@ -55,6 +60,17 @@ method is a wrapper around the `requests.request` function that provides
 important astroquery-specific utility, including caching, HTTP header
 generation, progressbars, and local writing-to-disk.
 
+Dependencies
+------------
+New contributions are generally not allowed to bring along additional dependencies.
+
+The astropy ecosystem tools should be used whenever possible.
+For example, `astropy.table` should be used for table handling,
+or `astropy.units` for unit and quantity
+handling.
+
+
+
 .. _astroquery API: docs/api.rst
 .. _template: docs/template.rst
-.. _requests: http://docs.python-requests.org/en/master/
+.. _requests: https://docs.python-requests.org/en/latest/

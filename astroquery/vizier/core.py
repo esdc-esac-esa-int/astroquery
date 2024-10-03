@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 import os
 import warnings
@@ -7,8 +7,8 @@ import json
 import copy
 import re
 
-import six
-from six import BytesIO
+from io import BytesIO
+
 import astropy.units as u
 import astropy.coordinates as coord
 import astropy.table as tbl
@@ -16,24 +16,23 @@ import astropy.utils.data as aud
 from collections import OrderedDict
 import astropy.io.votable as votable
 from astropy.io import ascii, fits
+from pyvo import registry
 
 from ..query import BaseQuery
 from ..utils import commons
 from ..utils import async_to_sync
 from ..utils import schema
 from . import conf
-from ..exceptions import TableParseError
+from ..exceptions import TableParseError, EmptyResponseError
 
 
 __all__ = ['Vizier', 'VizierClass']
-
-__doctest_skip__ = ['VizierClass.*']
 
 
 @async_to_sync
 class VizierClass(BaseQuery):
 
-    _str_schema = schema.Or(*six.string_types)
+    _str_schema = schema.Schema(str)
     _schema_columns = schema.Schema([_str_schema],
                                     error="columns must be a list of strings")
     _schema_ucd = schema.Schema(_str_schema, error="ucd must be string")
@@ -45,7 +44,7 @@ class VizierClass(BaseQuery):
         schema.Or([_str_schema], _str_schema, None),
         error="catalog must be a list of strings or a single string")
 
-    def __init__(self, columns=["*"], column_filters={}, catalog=None,
+    def __init__(self, *, columns=["*"], column_filters={}, catalog=None,
                  keywords=None, ucd="", timeout=conf.timeout,
                  vizier_server=conf.server, row_limit=conf.row_limit):
         """
@@ -60,11 +59,21 @@ class VizierClass(BaseQuery):
             "Unified Content Description" column descriptions.  Specifying
             these will select only catalogs that have columns matching the
             column descriptions defined on the Vizier web pages.
-            See http://vizier.u-strasbg.fr/vizier/vizHelp/1.htx#ucd and
-            http://cds.u-strasbg.fr/w/doc/UCD/
+            See https://vizier.cds.unistra.fr/vizier/vizHelp/1.htx#ucd and
+            https://vizier.cds.unistra.fr/vizier/doc/UCD/
+        vizier_server : string
+            Name of the VizieR mirror to use.
+            (This parameter's default is set from a configuration object.)
+        timeout : number
+            timeout for connecting to server
+            (This parameter's default is set from a configuration object.)
+        row_limit : int
+            Maximum number of rows that will be fetched from the result
+            (set to -1 for unlimited).
+            (This parameter's default is set from a configuration object.)
         """
 
-        super(VizierClass, self).__init__()
+        super().__init__()
         self.columns = columns
         self.column_filters = column_filters
         self.catalog = catalog
@@ -115,7 +124,7 @@ class VizierClass(BaseQuery):
     @property
     def ucd(self):
         """
-        UCD criteria: see http://vizier.u-strasbg.fr/vizier/vizHelp/1.htx#ucd
+        UCD criteria: see https://vizier.cds.unistra.fr/vizier/vizHelp/1.htx#ucd
 
         Examples
         --------
@@ -131,7 +140,7 @@ class VizierClass(BaseQuery):
         """
         Not generally meant to be modified, but there are different valid
         return types supported by Vizier, listed here:
-        http://vizier.u-strasbg.fr/doc/asu-summary.htx
+        https://vizier.cds.unistra.fr/doc/asu-summary.htx
 
         HTML: VizieR
         votable: votable
@@ -153,7 +162,7 @@ class VizierClass(BaseQuery):
             raise TypeError("asu-txt is not and cannot be supported: the "
                             "returned tables are not and cannot be made "
                             "parseable.")
-        return "http://" + self.VIZIER_SERVER + "/viz-bin/" + return_type
+        return "https://" + self.VIZIER_SERVER + "/viz-bin/" + return_type
 
     @property
     def keywords(self):
@@ -168,7 +177,7 @@ class VizierClass(BaseQuery):
     def keywords(self):
         self._keywords = None
 
-    def find_catalogs(self, keywords, include_obsolete=False, verbose=False,
+    def find_catalogs(self, keywords, *, include_obsolete=False, verbose=False,
                       max_catalogs=None, return_type='votable'):
         """
         Search Vizier for catalogs based on a set of keywords, e.g. author name
@@ -177,7 +186,7 @@ class VizierClass(BaseQuery):
         ----------
         keywords : list or string
             List of keywords, or space-separated set of keywords.
-            From `Vizier <http://vizier.u-strasbg.fr/doc/asu-summary.htx>`_:
+            From `Vizier <https://vizier.cds.unistra.fr/doc/asu-summary.htx>`_:
             "names or words of title of catalog. The words are and'ed, i.e.
             only the catalogues characterized by all the words are selected."
         include_obsolete : bool, optional
@@ -196,45 +205,47 @@ class VizierClass(BaseQuery):
         Examples
         --------
         >>> from astroquery.vizier import Vizier
-        >>> catalog_list = Vizier.find_catalogs('Kang W51')
-        >>> print(catalog_list)
-        {u'J/ApJ/706/83': <astropy.io.votable.tree.Resource at 0x108d4d490>,
-         u'J/ApJS/191/232': <astropy.io.votable.tree.Resource at 0x108d50490>}
-        >>> print({k:v.description for k,v in catalog_list.items()})
-        {u'J/ApJ/706/83': u'Embedded YSO candidates in W51 (Kang+, 2009)',
-         u'J/ApJS/191/232': u'CO survey of W51 molecular cloud (Bieging+, 2010)'}
+        >>> catalog_list = Vizier.find_catalogs('Mars') # doctest: +REMOTE_DATA +IGNORE_WARNINGS
+        >>> for k, v in catalog_list.items(): # doctest: +REMOTE_DATA +IGNORE_OUTPUT
+        ...     print(k, ":", v.description)
+        J/A+A/572/A104 : Astrometric obs. of Phobos and Deimos in 1971 (Robert+, 2014)
+        J/A+A/488/361 : Mars Express astrometric observations of Phobos (Willner+, 2008)
+        J/A+A/603/A55 : WISE/NEOWISE Mars-crossing asteroids (Ali-Lagoa+, 2017)
+        J/A+A/545/A144 : Astrometric observations of Deimos (Pasewaldt+, 2012)
+        ...
         """
 
+        # Note to devs: The ASU convention (http://vizier.u-strasbg.fr/doc/asu.html) has
+        # parameters without values. This is a bit different from POST requests that have
+        # key/values pairs. This is why we send a string formatted for ASU instead of a
+        # dictionary in the POST request here.
+
         if isinstance(keywords, list):
-            keywords = " ".join(keywords)
+            keywords = "+".join(keywords)
+        keywords = keywords.replace(" ", "+")
 
-        data_payload = {'-words': keywords, '-meta.all': 1}
-
-        data_payload['-ucd'] = self.ucd
+        data_payload = {'-words': keywords, "-meta": None}
 
         if max_catalogs is not None:
             data_payload['-meta.max'] = max_catalogs
-        response = self._request(
-            method='POST', url=self._server_to_url(return_type=return_type),
-            data=data_payload, timeout=self.TIMEOUT)
 
-        if 'STOP, Max. number of RESOURCE reached' in response.text:
-            raise ValueError("Maximum number of catalogs exceeded.  Try "
-                             "setting max_catalogs to a large number and"
-                             " try again")
+        if include_obsolete:
+            data_payload["-obsolete"] = None
+
+        if self.ucd != "":
+            data_payload["ucd"] = self.ucd
+
+        params = "&".join([k if v is None else f"{k}={v}" for k, v in data_payload.items()])
+
+        response = self._request(method='POST',
+                                 url=self._server_to_url(return_type=return_type),
+                                 data=params, timeout=self.TIMEOUT)
+
         result = self._parse_result(response, verbose=verbose,
                                     get_catalog_names=True)
-
-        # Filter out the obsolete catalogs, unless requested
-        if include_obsolete is False:
-            for key in list(result):
-                for info in result[key].infos:
-                    if (info.name == 'status') and (info.value == 'obsolete'):
-                        del result[key]
-
         return result
 
-    def get_catalogs_async(self, catalog, verbose=False, return_type='votable',
+    def get_catalogs_async(self, catalog, *, verbose=False, return_type='votable',
                            get_query_payload=False):
         """
         Query the Vizier service for a specific catalog
@@ -250,7 +261,7 @@ class VizierClass(BaseQuery):
             Returned if asynchronous method used
         """
 
-        if not isinstance(catalog, six.string_types + (votable.tree.Resource,)):
+        if not isinstance(catalog, (str, votable.tree.Resource)):
             catalog = list(catalog)
         data_payload = self._args_to_payload(catalog=catalog)
         if get_query_payload:
@@ -262,7 +273,86 @@ class VizierClass(BaseQuery):
 
         return response
 
-    def query_object_async(self, object_name, catalog=None, radius=None,
+    def get_catalog_metadata(self, *, catalog=None, get_query_payload=False):
+        """Get a VizieR's catalog metadata.
+
+        Parameters
+        ----------
+        catalog : str, optional
+            The catalog identifier. It usually looks like 'III/55' for big surveys
+            or 'J/ApJ/811/67' for catalogs linked to a published paper. When this
+            parameter is not provided, the function looks for the metadata of the
+            catalog property of the Vizier class instance
+            (`~astroquery.vizier.VizierClass.catalog`).
+        get_query_payload : bool, optional
+            When True, returns the dict of HTTP request parameters. This does not
+            execute the search for metadata.
+
+        Returns
+        -------
+        `~astropy.table.Table`
+            A table with the following columns:
+            - title
+            - authors
+            - abstract (the abstract of the article, modified to explain the data
+            more specifically)
+            - origin_article (the bibcode of the associated article)
+            - webpage (a link to VizieR, contains more information about the catalog)
+            - created (date of creation of the catalog *in VizieR*)
+            - updated (date of the last modification applied to the entry,
+            this is often metadata, with no appearance in the history tap on the
+            webpage but sometimes also data erratum, which will appear in the
+            history tab)
+            - waveband
+            - doi (the catalog doi when it exists)
+
+        Examples
+        --------
+        >>> from astroquery.vizier import Vizier
+        >>> Vizier(catalog="I/324").get_catalog_metadata() # doctest: +REMOTE_DATA
+        <Table length=1>
+                       title                        authors         ... waveband  doi
+                       object                        object         ...  object  object
+        ----------------------------------- ----------------------- ... -------- ------
+        The Initial Gaia Source List (IGSL) Smart R.L.; Nicastro L. ...              --
+
+        >>> from astroquery.vizier import Vizier
+        >>> Vizier.get_catalog_metadata(catalog="J/ApJS/173/185") # doctest: +REMOTE_DATA
+        <Table length=1>
+                          title                    ...              doi
+                          object                   ...              object
+        ------------------------------------------ ... --------------------------------
+        GALEX ultraviolet atlas of nearby galaxies ... doi:10.26093/cds/vizier.21730185
+        """
+        # searches the instance catalog property if the keyword argument is not provided
+        if not catalog:
+            catalog = self.catalog
+        if not catalog:
+            raise ValueError("No catalog name was provided.")
+        query = f"""SELECT TOP 1 res_title as title,
+                creator_seq as authors,
+                res_description as abstract,
+                source_value as origin_article,
+                reference_url as webpage,
+                created, updated,
+                waveband,
+                alt_identifier as doi
+                FROM rr.resource NATURAL LEFT OUTER JOIN rr.capability
+                NATURAL LEFT OUTER JOIN rr.interface
+                NATURAL LEFT OUTER JOIN rr.alt_identifier
+                WHERE ivoid = 'ivo://cds.vizier/{catalog.lower()}'"""
+        metadata = registry.regtap.RegistryQuery(registry.regtap.REGISTRY_BASEURL, query)
+        if get_query_payload:
+            return metadata
+        result = metadata.execute().to_table()
+        if len(result) == 0:
+            raise EmptyResponseError(f"'{catalog}' was not found in VizieR. Valid catalog names "
+                                     "often look like: 'IX/58', 'J/MNRAS/491/215', 'J/ApJS/256/33', etc.")
+        # apply mask if the `alt_identifier` value is not a doi
+        result["doi"].mask = True if "doi:" not in result["doi"][0] else False
+        return result
+
+    def query_object_async(self, object_name, *, catalog=None, radius=None,
                            coordinate_frame=None, get_query_payload=False,
                            return_type='votable', cache=True):
         """
@@ -283,6 +373,9 @@ class VizierClass(BaseQuery):
             `~astroquery.vizier.VizierClass.query_region`, but you can
             specify a coordinate frame here instead (today, J2000, B1975,
             B1950, B1900, B1875, B1855, Galactic, Supergal., Ecl.J2000, )
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -313,13 +406,16 @@ class VizierClass(BaseQuery):
             data=data_payload, timeout=self.TIMEOUT, cache=cache)
         return response
 
-    def query_region_async(self, coordinates, radius=None, inner_radius=None,
+    def query_region_async(self, coordinates, *, radius=None, inner_radius=None,
                            width=None, height=None, catalog=None,
                            get_query_payload=False, cache=True,
-                           return_type='votable', column_filters={}):
+                           return_type='votable', column_filters={},
+                           frame='fk5'):
         """
         Serves the same purpose as `query_region` but only
         returns the HTTP response rather than the parsed result.
+
+        At least one of ``radius`` or ``width`` must be specified.
 
         Parameters
         ----------
@@ -347,6 +443,13 @@ class VizierClass(BaseQuery):
         column_filters: dict, optional
             Constraints on columns of the result. The dictionary contains
             the column name as keys, and the constraints as values.
+        frame : str, optional
+            The frame to use for the request. It should be 'fk5', 'icrs',
+            or 'galactic'. This choice influences the the orientation of
+            box requests.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -354,31 +457,45 @@ class VizierClass(BaseQuery):
             The response of the HTTP request.
 
         """
+        if frame not in ('galactic', 'fk5', 'icrs'):
+            raise ValueError("Only the 'galactic', 'icrs', and 'fk5' frames are supported by VizieR")
         catalog = VizierClass._schema_catalog.validate(catalog)
         center = {}
         columns = []
-        if isinstance(coordinates, (commons.CoordClasses,) + six.string_types):
-            c = commons.parse_coordinates(coordinates).transform_to('fk5')
 
-            if not c.isscalar:
-                pos_list = []
-                for pos in c:
-                    ra_deg = pos.ra.to_string(unit="deg", decimal=True,
-                                              precision=8)
-                    dec_deg = pos.dec.to_string(unit="deg", decimal=True,
-                                                precision=8, alwayssign=True)
-                    pos_list += ["{}{}".format(ra_deg, dec_deg)]
-                center["-c"] = "<<;" + ";".join(pos_list)
-                columns += ["_q"]  # request a reference to the input table
+        # Process coordinates
+        if isinstance(coordinates, (commons.CoordClasses, str)):
+            target = commons.parse_coordinates(coordinates).transform_to(frame)
+
+            if not target.isscalar:
+                center["-c"] = []
+                for pos in target:
+                    if frame == 'galactic':
+                        glon_deg = pos.l.to_string(unit="deg", decimal=True, precision=8)
+                        glat_deg = pos.b.to_string(unit="deg", decimal=True, precision=8,
+                                                   alwayssign=True)
+                        center["-c"] += ["G{}{}".format(glon_deg, glat_deg)]
+                    else:
+                        ra_deg = pos.ra.to_string(unit="deg", decimal=True, precision=8)
+                        dec_deg = pos.dec.to_string(unit="deg", decimal=True,
+                                                    precision=8, alwayssign=True)
+                        center["-c"] += ["{}{}".format(ra_deg, dec_deg)]
+                columns += ["_q"]  # Always request reference to input table
             else:
-                ra = c.ra.to_string(unit='deg', decimal=True, precision=8)
-                dec = c.dec.to_string(unit="deg", decimal=True, precision=8,
-                                      alwayssign=True)
-                center["-c"] = "{ra}{dec}".format(ra=ra, dec=dec)
+                if frame == 'galactic':
+                    glon = target.l.to_string(unit='deg', decimal=True, precision=8)
+                    glat = target.b.to_string(unit="deg", decimal=True, precision=8,
+                                              alwayssign=True)
+                    center["-c"] = "G{glon}{glat}".format(glon=glon, glat=glat)
+                else:
+                    ra = target.ra.to_string(unit='deg', decimal=True, precision=8)
+                    dec = target.dec.to_string(unit="deg", decimal=True, precision=8,
+                                               alwayssign=True)
+                    center["-c"] = "{ra}{dec}".format(ra=ra, dec=dec)
         elif isinstance(coordinates, tbl.Table):
             if (("_RAJ2000" in coordinates.keys()) and ("_DEJ2000" in
                                                         coordinates.keys())):
-                pos_list = []
+                center["-c"] = []
                 sky_coord = coord.SkyCoord(coordinates["_RAJ2000"],
                                            coordinates["_DEJ2000"],
                                            unit=(coordinates["_RAJ2000"].unit,
@@ -388,52 +505,32 @@ class VizierClass(BaseQuery):
                                           precision=8)
                     dec_deg = dec.to_string(unit="deg", decimal=True,
                                             precision=8, alwayssign=True)
-                    pos_list += ["{}{}".format(ra_deg, dec_deg)]
-                center["-c"] = "<<;" + ";".join(pos_list)
-                columns += ["_q"]  # request a reference to the input table
+                    center["-c"] += ["{}{}".format(ra_deg, dec_deg)]
+                columns += ["_q"]  # Always request reference to input table
             else:
                 raise ValueError("Table must contain '_RAJ2000' and "
                                  "'_DEJ2000' columns!")
         else:
             raise TypeError("Coordinates must be one of: string, astropy "
                             "coordinates, or table containing coordinates!")
-        # decide whether box or radius
+
         if radius is not None:
-            # is radius a disk or an annulus?
             if inner_radius is None:
-                radius = coord.Angle(radius)
-                unit, value = _parse_angle(radius)
-                key = "-c.r" + unit
-                center[key] = value
+                _, unit_str, o_radius = _parse_angle(radius)
+                center["-c.r" + unit_str] = str(o_radius)
             else:
-                i_radius = coord.Angle(inner_radius)
-                o_radius = coord.Angle(radius)
-                if i_radius.unit != o_radius.unit:
-                    o_radius = o_radius.to(i_radius.unit)
-                i_unit, i_value = _parse_angle(i_radius)
-                o_unit, o_value = _parse_angle(o_radius)
-                key = "-c.r" + i_unit
-                center[key] = ",".join([str(i_value), str(o_value)])
+                unit, unit_str, i_radius = _parse_angle(inner_radius)
+                o_radius = coord.Angle(radius).to_value(unit)
+                center["-c.r" + unit_str] = f"{i_radius},{o_radius}"
         elif width is not None:
-            # is box a rectangle or square?
-            if height is None:
-                width = coord.Angle(width)
-                unit, value = _parse_angle(width)
-                key = "-c.b" + unit
-                center[key] = "x".join([str(value)] * 2)
-            else:
-                w_box = coord.Angle(width)
-                h_box = coord.Angle(height)
-                if w_box.unit != h_box.unit:
-                    h_box = h_box.to(w_box.unit)
-                w_unit, w_value = _parse_angle(w_box)
-                h_unit, h_value = _parse_angle(h_box)
-                key = "-c.b" + w_unit
-                center[key] = "x".join([str(w_value), str(h_value)])
+            unit, unit_str, w_box = _parse_angle(width)
+            h_box = w_box if height is None else coord.Angle(height).to_value(unit)
+            center["-c.b" + unit_str] = f"{w_box}x{h_box}"
         else:
             raise Exception(
                 "At least one of radius, width/height must be specified")
 
+        # Prepare payload
         data_payload = self._args_to_payload(center=center, columns=columns,
                                              catalog=catalog, column_filters=column_filters)
 
@@ -445,7 +542,7 @@ class VizierClass(BaseQuery):
             data=data_payload, timeout=self.TIMEOUT, cache=cache)
         return response
 
-    def query_constraints_async(self, catalog=None, return_type='votable',
+    def query_constraints_async(self, *, catalog=None, return_type='votable',
                                 cache=True, get_query_payload=False,
                                 **kwargs):
         """
@@ -453,7 +550,7 @@ class VizierClass(BaseQuery):
         keyword/value pairs.
 
         See `the vizier constraints page
-        <http://vizier.cfa.harvard.edu/vizier/vizHelp/cst.htx>`_ for details.
+        <https://vizier.cds.unistra.fr/vizier/vizHelp/syntax.htx>`_ for details.
 
         Parameters
         ----------
@@ -463,6 +560,9 @@ class VizierClass(BaseQuery):
         kwargs : dict
             Any key/value pairs besides "catalog" will be parsed
             as additional column filters.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -473,31 +573,15 @@ class VizierClass(BaseQuery):
         --------
         >>> from astroquery.vizier import Vizier
         >>> # note that glon/glat constraints here *must* be floats
-        >>> result = Vizier.query_constraints(catalog='J/ApJ/723/492/table1',
-        ...                                   GLON='>49.0 & <51.0', GLAT='<0')
-        >>> result[result.keys()[0]].pprint()
-            GRSMC      GLON   GLAT   VLSR  ... RD09 _RA.icrs _DE.icrs
-        ------------- ------ ------ ------ ... ---- -------- --------
-        G049.49-00.41  49.49  -0.41  56.90 ... RD09   290.95    14.50
-        G049.39-00.26  49.39  -0.26  50.94 ... RD09   290.77    14.48
-        G049.44-00.06  49.44  -0.06  62.00 ... RD09   290.61    14.62
-        G049.04-00.31  49.04  -0.31  66.25 ... RD09   290.64    14.15
-        G049.74-00.56  49.74  -0.56  67.95 ... RD09   291.21    14.65
-        G050.39-00.41  50.39  -0.41  41.17 ... RD09   291.39    15.29
-        G050.24-00.61  50.24  -0.61  41.17 ... RD09   291.50    15.06
-        G050.94-00.61  50.94  -0.61  40.32 ... RD09   291.85    15.68
-        G049.99-00.16  49.99  -0.16  46.27 ... RD09   290.97    15.06
-        G049.44-00.06  49.44  -0.06  46.27 ... RD09   290.61    14.62
-        G049.54-00.01  49.54  -0.01  56.05 ... RD09   290.61    14.73
-        G049.74-00.01  49.74  -0.01  48.39 ... RD09   290.71    14.91
-        G049.54-00.91  49.54  -0.91  43.29 ... RD09   291.43    14.31
-        G049.04-00.46  49.04  -0.46  58.60 ... RD09   290.78    14.08
-        G049.09-00.06  49.09  -0.06  46.69 ... RD09   290.44    14.31
-        G050.84-00.11  50.84  -0.11  50.52 ... RD09   291.34    15.83
-        G050.89-00.11  50.89  -0.11  59.45 ... RD09   291.37    15.87
-        G050.44-00.41  50.44  -0.41  64.12 ... RD09   291.42    15.34
-        G050.84-00.76  50.84  -0.76  61.15 ... RD09   291.94    15.52
-        G050.29-00.46  50.29  -0.46  14.81 ... RD09   291.39    15.18
+        >>> result = Vizier(row_limit=3).query_constraints(catalog='J/ApJ/723/492/table1',
+        ...                                   GLON='>49.0 & <51.0', GLAT='<0.0') # doctest: +REMOTE_DATA
+        >>> result[result.keys()[0]].pprint() # doctest: +REMOTE_DATA
+            GRSMC      GLON   GLAT   VLSR   DelV  ... alpha  Note RD09 _RA.icrs _DE.icrs
+                       deg    deg   km / s km / s ...                    deg      deg
+        ------------- ------ ------ ------ ------ ... ------ ---- ---- -------- --------
+        G049.49-00.41  49.49  -0.41  56.90   9.12 ...   0.73    i RD09 290.9536  14.4992
+        G049.39-00.26  49.39  -0.26  50.94   3.51 ...   0.16    i RD09 290.7682  14.4819
+        G049.44-00.06  49.44  -0.06  62.00   3.67 ...   0.17    i RD09 290.6104  14.6203
         """
 
         catalog = VizierClass._schema_catalog.validate(catalog)
@@ -523,7 +607,7 @@ class VizierClass(BaseQuery):
         catalog = kwargs.get('catalog') or self.catalog
 
         if catalog is not None:
-            if isinstance(catalog, six.string_types):
+            if isinstance(catalog, str):
                 body['-source'] = catalog
             elif isinstance(catalog, list):
                 catalog = [item.name if hasattr(item, 'name') else item
@@ -534,6 +618,10 @@ class VizierClass(BaseQuery):
                 body['-source'] = catalog.name
             else:
                 raise TypeError("Catalog must be specified as list, string, or Resource")
+
+        # take row_limit in account
+        body['-out.max'] = self.ROW_LIMIT
+
         # process: columns
         columns = kwargs.get('columns', copy.copy(self.columns))
 
@@ -547,16 +635,13 @@ class VizierClass(BaseQuery):
         # keyword names that can mean 'all'
         alls = ['all', '**']
         if any(x in columns for x in alls):
+            columns_all = True
             for x in alls:
                 if x in columns:
                     columns.remove(x)
-            body['-out.all'] = 2
-        # keyword name that means default columns
-        if '*' in columns:
-            columns.remove('*')
-            columns_default = True
+            body['-out.all'] = None
         else:
-            columns_default = False
+            columns_all = False
 
         # process: columns - identify sorting requests
         columns_out = []
@@ -571,16 +656,23 @@ class VizierClass(BaseQuery):
             else:
                 columns_out += [column]
 
-        if columns_default:
-            body['-out'] = '*'
-        else:
-            body['-out'] = columns_out
+        # calculated keyword names that start with an underscore
+        columns_calc = []
+        for column in columns_out:
+            if column[0] == '_':
+                columns_calc.append(column)
+        for column in columns_calc:
+            columns_out.remove(column)
 
-        if columns_out:
-            body['-out.add'] = ','.join(columns_out)
+        if columns_out and not columns_all:
+            body['-out'] = ','.join(columns_out)
+
+        if columns_calc:
+            body['-out.add'] = ','.join(columns_calc)
 
         if len(sorts_out) > 0:
             body['-sort'] = ','.join(sorts_out)
+
         # process: maximum rows returned
         row_limit = kwargs.get('row_limit') or self.ROW_LIMIT
         if row_limit < 0:
@@ -607,16 +699,28 @@ class VizierClass(BaseQuery):
         if ucd:
             body['-ucd'] = ucd
 
-        # create final script
-        script = "\n".join(["{key}={val}".format(key=key, val=val)
-                            for key, val in body.items()])
-        # add keywords
-        if (not isinstance(self.keywords, property) and
-                self.keywords is not None):
-            script += "\n" + str(self.keywords)
-        return script
+        # create final script starting with keywords
+        script = []
+        if (not isinstance(self.keywords, property)
+                and self.keywords is not None):
+            script += [str(self.keywords)]
+        # add all items that are not lists
+        for key, val in body.items():
+            if type(val) is not list:
+                if val:
+                    script += ["{key}={val}".format(key=key, val=val)]
+                else:
+                    script += [key]
+        # add list at the end
+        for key, val in body.items():
+            if type(val) is list:
+                script += ["{key}=<<====AstroqueryList".format(key=key)]
+                script += val
+                script += ["====AstroqueryList"]
+        # merge result
+        return "\n".join(script)
 
-    def _parse_result(self, response, get_catalog_names=False, verbose=False,
+    def _parse_result(self, response, *, get_catalog_names=False, verbose=False,
                       invalid='warn'):
         """
         Parses the HTTP response to create a `~astropy.table.Table`.
@@ -650,7 +754,7 @@ class VizierClass(BaseQuery):
         """
         if response.content[:5] == b'<?xml':
             try:
-                return parse_vizier_votable(
+                return _parse_vizier_votable(
                     response.content, verbose=verbose, invalid=invalid,
                     get_catalog_names=get_catalog_names)
             except Exception as ex:
@@ -661,10 +765,10 @@ class VizierClass(BaseQuery):
                                       "self.response, and the error in "
                                       "self.table_parse_error. The attempted "
                                       "parsed result is in "
-                                      "self.parsed_result.\n Exception: " +
-                                      str(self.table_parse_error))
+                                      "self.parsed_result.\n Exception: "
+                                      + str(self.table_parse_error))
         elif response.content[:5] == b'#\n#  ':
-            return parse_vizier_tsvfile(response.content, verbose=verbose)
+            return _parse_vizier_tsvfile(response.content, verbose=verbose)
         elif response.content[:6] == b'SIMPLE':
             return fits.open(BytesIO(response.content),
                              ignore_missing_end=True)
@@ -683,19 +787,19 @@ class VizierClass(BaseQuery):
         return self._valid_keyword_dict
 
 
-def parse_vizier_tsvfile(data, verbose=False):
+def _parse_vizier_tsvfile(data, *, verbose=False):
     """
     Parse a Vizier-generated list of tsv data tables into a list of astropy
     Tables.
 
     Parameters
     ----------
-    data : ascii str
-        An ascii string containing the vizier-formatted list of tables
+    data : response content bytes
+       Bytes containing the vizier-formatted list of tables
     """
 
     # http://stackoverflow.com/questions/4664850/find-all-occurrences-of-a-substring-in-python
-    split_indices = [m.start() for m in re.finditer('\n\n#', data)]
+    split_indices = [m.start() for m in re.finditer(b'\n\n#', data)]
     # we want to slice out chunks of the file each time
     split_limits = zip(split_indices[:-1], split_indices[1:])
     tables = [ascii.read(BytesIO(data[a:b]), format='fast_tab', delimiter='\t',
@@ -704,8 +808,8 @@ def parse_vizier_tsvfile(data, verbose=False):
     return tables
 
 
-def parse_vizier_votable(data, verbose=False, invalid='warn',
-                         get_catalog_names=False):
+def _parse_vizier_votable(data, *, verbose=False, invalid='warn',
+                          get_catalog_names=False):
     """
     Given a votable as string, parse it into dict or tables
     """
@@ -715,15 +819,15 @@ def parse_vizier_votable(data, verbose=False, invalid='warn',
     tf = BytesIO(data)
 
     if invalid == 'mask':
-        vo_tree = votable.parse(tf, pedantic=False, invalid='mask')
+        vo_tree = votable.parse(tf, verify='warn', invalid='mask')
     elif invalid == 'warn':
         try:
-            vo_tree = votable.parse(tf, pedantic=False, invalid='exception')
+            vo_tree = votable.parse(tf, verify='warn', invalid='exception')
         except Exception as ex:
             warnings.warn("VOTABLE parsing raised exception: {0}".format(ex))
-            vo_tree = votable.parse(tf, pedantic=False, invalid='mask')
+            vo_tree = votable.parse(tf, verify='warn', invalid='mask')
     elif invalid == 'exception':
-        vo_tree = votable.parse(tf, pedantic=False, invalid='exception')
+        vo_tree = votable.parse(tf, verify='warn', invalid='exception')
     else:
         raise ValueError("Invalid keyword for 'invalid'. "
                          "Must be exception, mask, or warn")
@@ -760,17 +864,15 @@ def _parse_angle(angle):
 
     Returns
     -------
-    (unit, value) : tuple
-        formatted for Vizier.
+    (unit, unit_str, value) : tuple
     """
     angle = coord.Angle(angle)
-    if angle.unit == u.arcsec:
-        unit, value = 's', angle.value
-    elif angle.unit == u.arcmin:
-        unit, value = 'm', angle.value
+    if angle.unit is u.arcsec:
+        return u.arcsec, "s", angle.value
+    elif angle.unit is u.arcmin:
+        return u.arcmin, "m", angle.value
     else:
-        unit, value = 'd', angle.to(u.deg).value
-    return unit, value
+        return u.deg, "d", angle.to_value(u.deg)
 
 
 class VizierKeyword(list):
@@ -797,7 +899,7 @@ class VizierKeyword(list):
 
     @keywords.setter
     def keywords(self, values):
-        if isinstance(values, six.string_types):
+        if isinstance(values, str):
             values = list(values)
         keys = [key.lower() for key in self.keyword_dict]
         values = [val.lower() for val in values]

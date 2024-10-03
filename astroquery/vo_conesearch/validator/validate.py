@@ -6,12 +6,13 @@ import multiprocessing
 import os
 import warnings
 from collections import OrderedDict
+from pathlib import Path
 
 # ASTROPY
 from astropy.io import votable
 from astropy.io.votable.exceptions import E19
 from astropy.io.votable.validator import html, result
-from astropy.logger import log
+from astroquery import log
 from astropy.utils import data
 from astropy.utils.exceptions import AstropyUserWarning
 from astropy.utils.xml.unescaper import unescape_all
@@ -22,7 +23,6 @@ from .exceptions import (ValidationMultiprocessingError,
                          InvalidValidationAttribute)
 from ..exceptions import VOSError
 from ..vos_catalog import VOSDatabase, vo_tab_parse
-from ...utils.commons import ASTROPY_LT_4_1
 from ...utils.timer import timefunc
 
 # Import configurable items declared in __init__.py
@@ -31,8 +31,8 @@ from . import conf
 __all__ = ['check_conesearch_sites']
 
 
-@timefunc(1)
-def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
+@timefunc(num_tries=1)
+def check_conesearch_sites(*, destdir=os.curdir, verbose=True, parallel=True,
                            url_list='default'):
     """
     Validate Cone Search Services.
@@ -72,7 +72,7 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
 
     Raises
     ------
-    IOError
+    OSError
         Invalid destination directory.
 
     timeout
@@ -85,9 +85,9 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
     if url_list == 'default':
         url_list = conf.conesearch_urls
 
-    if (not isinstance(destdir, str) or len(destdir) == 0
+    if (not isinstance(destdir, (str, Path))
             or os.path.exists(destdir) and not os.path.isdir(destdir)):
-        raise IOError('Invalid destination directory')  # pragma: no cover
+        raise OSError('Invalid destination directory')  # pragma: no cover
 
     if not os.path.exists(destdir):
         os.mkdir(destdir)
@@ -128,16 +128,10 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
     # Validate only a subset of the services.
     if url_list is not None:
         # Make sure URL is unique and fixed.
-        if ASTROPY_LT_4_1:
-            url_list = set(map(
-                unescape_all,
-                [cur_url.encode('utf-8') if isinstance(cur_url, str) else cur_url
-                 for cur_url in url_list]))
-        else:
-            url_list = set(map(
-                unescape_all,
-                [cur_url if isinstance(cur_url, str) else cur_url
-                 for cur_url in url_list]))
+        url_list = set(map(
+            unescape_all,
+            [cur_url if isinstance(cur_url, str) else cur_url
+             for cur_url in url_list]))
         uniq_rows = len(url_list)
         url_list_processed = []  # To track if given URL is valid in registry
         if verbose:
@@ -150,48 +144,26 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
     key_lookup_by_url = {}
 
     # Process each catalog in the registry.
-    if ASTROPY_LT_4_1:
-        for cur_key, cur_cat in js_mstr.get_catalogs():
-            cur_url = cur_cat['url'].encode('utf-8')
+    for cur_key, cur_cat in js_mstr.get_catalogs():
+        cur_url = cur_cat['url']
 
-            # Skip if:
-            #   a. not a Cone Search service
-            #   b. not in given subset, if any
-            if ((cur_cat['cap_type'] != b'conesearch')
-                    or (url_list is not None and cur_url not in url_list)):
-                continue
+        # Skip if:
+        #   a. not a Cone Search service
+        #   b. not in given subset, if any
+        if ((cur_cat['cap_type'] != 'conesearch')
+                or (url_list is not None and cur_url not in url_list)):
+            continue
 
-            # Use testQuery to return non-empty VO table with max verbosity.
-            testquery_pars = parse_cs(cur_cat['ivoid'], cur_cat['cap_index'])
-            cs_pars_arr = ['{}={}'.format(key, testquery_pars[key]).encode('utf-8')
-                           for key in testquery_pars]
-            cs_pars_arr += [b'VERB=3']
+        # Use testQuery to return non-empty VO table with max verbosity.
+        testquery_pars = parse_cs(cur_cat['ivoid'], cap_index=cur_cat['cap_index'])
+        cs_pars_arr = ['{}={}'.format(key, testquery_pars[key])
+                       for key in testquery_pars]
+        cs_pars_arr += ['VERB=3']
 
-            # Track the service.
-            key_lookup_by_url[cur_url + b'&'.join(cs_pars_arr)] = cur_key
-            if url_list is not None:
-                url_list_processed.append(cur_url)
-    else:
-        for cur_key, cur_cat in js_mstr.get_catalogs():
-            cur_url = cur_cat['url']
-
-            # Skip if:
-            #   a. not a Cone Search service
-            #   b. not in given subset, if any
-            if ((cur_cat['cap_type'] != 'conesearch')
-                    or (url_list is not None and cur_url not in url_list)):
-                continue
-
-            # Use testQuery to return non-empty VO table with max verbosity.
-            testquery_pars = parse_cs(cur_cat['ivoid'], cur_cat['cap_index'])
-            cs_pars_arr = ['{}={}'.format(key, testquery_pars[key])
-                           for key in testquery_pars]
-            cs_pars_arr += ['VERB=3']
-
-            # Track the service.
-            key_lookup_by_url[cur_url + '&'.join(cs_pars_arr)] = cur_key
-            if url_list is not None:
-                url_list_processed.append(cur_url)
+        # Track the service.
+        key_lookup_by_url[cur_url + '&'.join(cs_pars_arr)] = cur_key
+        if url_list is not None:
+            url_list_processed.append(cur_url)
 
     # Give warning if any of the user given subset is not in the registry.
     if url_list is not None:
@@ -206,10 +178,8 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
 
     all_urls = list(key_lookup_by_url)
     timeout = data.conf.remote_timeout
-    if ASTROPY_LT_4_1:
-        map_args = [(out_dir, url, timeout) for url in all_urls]
-    else:
-        map_args = [(out_dir, url.encode('utf-8'), timeout) for url in all_urls]
+
+    map_args = [(out_dir, url.encode('utf-8'), timeout) for url in all_urls]
 
     # Validate URLs
     if parallel:
@@ -224,20 +194,12 @@ def check_conesearch_sites(destdir=os.curdir, verbose=True, parallel=True,
         mp_list = map(_do_validation, map_args)
 
     # Categorize validation results
-    if ASTROPY_LT_4_1:
-        for r in mp_list:
-            db_key = r['out_db_name']
-            cat_key = key_lookup_by_url[r.url]
-            cur_cat = js_mstr.get_catalog(cat_key)
-            _copy_r_to_cat(r, cur_cat)
-            js_tree[db_key].add_catalog(cat_key, cur_cat)
-    else:
-        for r in mp_list:
-            db_key = r['out_db_name']
-            cat_key = key_lookup_by_url[r.url.decode('utf-8')]
-            cur_cat = js_mstr.get_catalog(cat_key)
-            _copy_r_to_cat(r, cur_cat)
-            js_tree[db_key].add_catalog(cat_key, cur_cat)
+    for r in mp_list:
+        db_key = r['out_db_name']
+        cat_key = key_lookup_by_url[r.url.decode('utf-8')]
+        cur_cat = js_mstr.get_catalog(cat_key)
+        _copy_r_to_cat(r, cur_cat)
+        js_tree[db_key].add_catalog(cat_key, cur_cat)
 
     # Write to HTML
     html_subsets = result.get_result_subsets(mp_list, out_dir)
@@ -301,7 +263,7 @@ def _do_validation(args):
         with warnings.catch_warnings(record=True) as warning_lines:
             try:
                 vo_tab_parse(votable.table.parse(
-                    r.get_vo_xml_path(), pedantic=False), r.url, {})
+                    r.get_vo_xml_path(), verify='warn'), r.url, {})
             except (E19, IndexError, VOSError) as e:  # pragma: no cover
                 lines.append(str(e))
                 nexceptions += 1

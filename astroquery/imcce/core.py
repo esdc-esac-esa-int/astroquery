@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 from collections import OrderedDict
 import warnings
@@ -36,7 +36,7 @@ class MiriadeClass(BaseQuery):
         """
         return self._query_uri
 
-    def get_ephemerides_async(self, targetname, objtype='asteroid',
+    def get_ephemerides_async(self, targetname, *, objtype='asteroid',
                               epoch=None, epoch_step='1d', epoch_nsteps=1,
                               location=500, coordtype=1,
                               timescale='UTC',
@@ -276,7 +276,7 @@ class MiriadeClass(BaseQuery):
 
         return response
 
-    def _parse_result(self, response, verbose=None):
+    def _parse_result(self, response, *, verbose=None):
         """
         Parser for Miriade request results
         """
@@ -426,6 +426,7 @@ class SkybotClass(BaseQuery):
                           coo,
                           rad,
                           epoch,
+                          *,
                           location='500',
                           position_error=120,
                           find_planets=True,
@@ -593,9 +594,9 @@ class SkybotClass(BaseQuery):
                            '-loc': str(location),
                            '-filter': position_error.arcsec,
                            '-objFilter':
-                           str(int(find_asteroids)) +
-                           str(int(find_planets)) +
-                           str(int(find_comets)),
+                           str(int(find_asteroids))
+                           + str(int(find_planets))
+                           + str(int(find_comets)),
                            '-refsys': 'EQJ2000',
                            '-output': 'all',
                            '-mime': 'text'}
@@ -614,7 +615,7 @@ class SkybotClass(BaseQuery):
 
         return response
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         """
         internal wrapper to parse queries
         """

@@ -1,19 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
 
+
+import html
 import re
 
 import astropy.units as u
-import astropy.io.ascii as asciitable
-from six import PY2
+from astropy.table import Table
 
 from ..query import BaseQuery
 from ..utils import async_to_sync, prepend_docstr_nosections
 from . import conf
 from ..exceptions import TableParseError
-
-if not PY2:
-    import html  # html is available in Py3 stdlib, but not in Py2
 
 __all__ = ['Nist', 'NistClass']
 
@@ -66,8 +63,8 @@ class NistClass(BaseQuery):
             The lower wavelength for the spectrum in appropriate units.
         maxwav : `astropy.units.Quantity` object
             The upper wavelength for the spectrum in appropriate units.
-        linename : str, optional
-            The spectrum to fetch. Defaults to "H I"
+        linename : str or iterable of str, optional
+            The spectrum/spectra to fetch. Defaults to "H I"
         energy_level_unit : str, optional
             The energy level units must be one of the following:
             'R', 'Rydberg', 'rydberg', 'cm', 'cm-1', 'EV', 'eV',
@@ -88,17 +85,18 @@ class NistClass(BaseQuery):
 
         """
         request_payload = {}
-        request_payload["spectra"] = kwargs['linename']
+        linename = kwargs["linename"]
+        request_payload["spectra"] = linename if isinstance(linename, str) else "; ".join(linename)
         (min_wav, max_wav, wav_unit) = _parse_wavelength(args[0], args[1])
-        request_payload["low_wl"] = min_wav
-        request_payload["upp_wl"] = max_wav
+        request_payload["low_w"] = min_wav
+        request_payload["upp_w"] = max_wav
         request_payload["unit"] = wav_unit
         request_payload["submit"] = "Retrieve Data"
         request_payload["format"] = 1  # ascii
         request_payload["line_out"] = 0  # All lines
         request_payload["en_unit"] = Nist.energy_level_code[
             kwargs["energy_level_unit"]]
-        request_payload["output"] = 0  # entirely rather than pagewise
+        request_payload["output_type"] = 0  # entirely rather than pagewise
         request_payload["bibrefs"] = 1
         request_payload["show_obs_wl"] = 1
         request_payload["show_calc_wl"] = 1
@@ -122,13 +120,14 @@ class NistClass(BaseQuery):
         request_payload["term_out"] = "on"
         request_payload["enrg_out"] = "on"
         request_payload["J_out"] = "on"
+        request_payload["g_out"] = "on"
         request_payload["page_size"] = 15
         request_payload["remove_js"] = "on"
         request_payload["show_wn"] = 1
         return request_payload
 
     @prepend_docstr_nosections("\n" + _args_to_payload.__doc__)
-    def query_async(self, minwav, maxwav, linename="H I",
+    def query_async(self, minwav, maxwav, *, linename="H I",
                     energy_level_unit='eV', output_order='wavelength',
                     wavelength_type='vacuum', get_query_payload=False):
         """
@@ -148,7 +147,7 @@ class NistClass(BaseQuery):
                                  timeout=Nist.TIMEOUT)
         return response
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         """
         Parses the results from the HTTP response to `astropy.table.Table`.
 
@@ -173,10 +172,8 @@ class NistClass(BaseQuery):
         try:
             table = _strip_blanks(pre)
             table = links_re.sub(r'\1', table)
-            if not PY2:
-                table = html.unescape(table)
-            table = asciitable.read(table, Reader=asciitable.FixedWidth,
-                                    data_start=3, delimiter='|')
+            table = html.unescape(table)
+            table = Table.read(table, format='ascii.fixed_width', data_start=3, delimiter='|')
             return table
         except Exception as ex:
             self.response = response

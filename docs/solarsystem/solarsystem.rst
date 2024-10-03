@@ -16,9 +16,13 @@ The currently available service providers and services are:
 .. toctree::
   :maxdepth: 1
 
-  jpl/jpl.rst
   imcce/imcce.rst
+  jpl/jpl.rst
   mpc/mpc.rst
+  neodys/neodys.rst
+  pds/pds.rst
+
+
 
 Reference/API
 =============

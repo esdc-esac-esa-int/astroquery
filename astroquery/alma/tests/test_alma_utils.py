@@ -1,49 +1,18 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-import numpy as np
 import pytest
-import warnings
 
-from astropy import wcs
+import numpy as np
 from astropy import units as u
+from astropy.coordinates import SkyCoord
+
 try:
-    from pyregion.parser_helper import Shape
-    pyregion_OK = True
+    from regions import CircleSkyRegion
+
+    HAS_REGIONS = True
 except ImportError:
-    pyregion_OK = False
+    HAS_REGIONS = False
 
 from .. import utils
-
-
-@pytest.mark.skipif('not pyregion_OK')
-def test_pyregion_subset():
-    header = dict(naxis=2, crpix1=15, crpix2=15, crval1=0.1, crval2=0.1,
-                  cdelt1=-1. / 3600, cdelt2=1. / 3600., ctype1='GLON-CAR',
-                  ctype2='GLAT-CAR')
-    mywcs = wcs.WCS(header)
-    # circle with radius 10" at 0.1, 0.1
-    shape = Shape('circle', (0.1, 0.1, 10. / 3600.))
-    shape.coord_format = 'galactic'
-    shape.coord_list = (0.1, 0.1, 10. / 3600.)
-    shape.attr = ([], {})
-    data = np.ones([40, 40])
-
-    # The following line raises a DeprecationWarning from pyregion, ignore it
-    with warnings.catch_warnings():
-        warnings.filterwarnings('ignore')
-        (xlo, xhi, ylo, yhi), d = utils.pyregion_subset(shape, data, mywcs)
-
-    # sticky note over check-engine light solution... but this problem is too
-    # large in scope to address here.  See
-    # https://github.com/astropy/astropy/pull/3992
-    assert d.sum() >= 313 & d.sum() <= 315  # VERY approximately pi
-    np.testing.assert_almost_equal(xlo,
-                                   data.shape[0] / 2 - mywcs.wcs.crpix[0] - 1)
-    np.testing.assert_almost_equal(xhi,
-                                   data.shape[0] - mywcs.wcs.crpix[0] - 1)
-    np.testing.assert_almost_equal(ylo,
-                                   data.shape[1] / 2 - mywcs.wcs.crpix[1] - 1)
-    np.testing.assert_almost_equal(yhi,
-                                   data.shape[1] - mywcs.wcs.crpix[1] - 1)
 
 
 frq_sup_str = ('[86.26..88.14GHz,976.56kHz, XX YY] U '
@@ -65,26 +34,66 @@ def approximate_primary_beam_sizes(frq_sup_str=frq_sup_str,
     assert np.all(utils.approximate_primary_beam_sizes(frq_sup_str) == beamsizes)
 
 
-@pytest.mark.remote_data
-@pytest.mark.skipif('not pyregion_OK')
-@pytest.mark.skip('To be fixed later')
-def test_make_finder_chart():
-    import matplotlib
-    matplotlib.use('agg')
-    if matplotlib.get_backend() != 'agg':
-        pytest.xfail("Matplotlib backend was incorrectly set to {0}, could "
-                     "not run finder chart test.".format(matplotlib.get_backend()))
+mosaic_footprint_str = '''Polygon ICRS 266.519781 -28.724666 266.524678 -28.731930 266.536683
+    -28.737784 266.543860 -28.737586 266.549277 -28.733370 266.558133
+    -28.729545 266.560136 -28.724666 266.558845 -28.719605 266.560133
+    -28.694332 266.555234 -28.687069 266.543232 -28.681216 266.536058
+    -28.681414 266.530644 -28.685630 266.521788 -28.689453 266.519784
+    -28.694332 266.521332 -28.699778'''
 
-    result = utils.make_finder_chart('Eta Carinae', 3 * u.arcmin,
-                                     'Eta Carinae')
-    image, catalog, hit_mask_public, hit_mask_private = result
 
-    assert len(catalog) >= 6  # down to 6 on Nov 17, 2016
-    assert 3 in [int(x) for x in hit_mask_public]
-    # Feb 8 2016: apparently the 60s integration hasn't actually been released yet...
-    if 3 in hit_mask_public:
-        assert hit_mask_public[3][256, 256] >= 30.23
-    elif b'3' in hit_mask_public:
-        assert hit_mask_public[b'3'][256, 256] >= 30.23
-    else:
-        raise ValueError("hit_mask keys are not of any known type")
+@pytest.mark.skipif(not HAS_REGIONS, reason="regions is required")
+def test_footprint_to_reg_mosaic(mosaic_footprint_str=mosaic_footprint_str):
+
+    pairs = zip(mosaic_footprint_str.split()[2::2], mosaic_footprint_str.split()[3::2])
+    vertices = [SkyCoord(float(ra) * u.deg, float(dec) * u.deg, frame='icrs')
+                for ra, dec in pairs]
+
+    reg_output = utils.footprint_to_reg(mosaic_footprint_str)
+
+    assert len(reg_output) == 1
+
+    for vertex in vertices:
+        assert vertex in reg_output[0].vertices
+
+
+@pytest.mark.skipif(not HAS_REGIONS, reason="regions is required")
+def test_footprint_to_reg_mosaic_multiple(mosaic_footprint_str=mosaic_footprint_str):
+
+    multiple_mosaic_footprint_str = f"{mosaic_footprint_str} {mosaic_footprint_str}"
+
+    print(multiple_mosaic_footprint_str)
+
+    pairs = zip(mosaic_footprint_str.split()[2::2], mosaic_footprint_str.split()[3::2])
+    vertices = [SkyCoord(float(ra) * u.deg, float(dec) * u.deg, frame='icrs')
+                for ra, dec in pairs]
+
+    reg_output = utils.footprint_to_reg(multiple_mosaic_footprint_str)
+
+    assert len(reg_output) == 2
+
+    for this_region in reg_output:
+
+        for vertex in vertices:
+            assert vertex in this_region.vertices
+
+
+pointing_footprint_str = 'Circle ICRS 266.519781 -28.724666 0.01'
+
+
+@pytest.mark.skipif(not HAS_REGIONS, reason="regions is required")
+def test_footprint_to_reg_pointing(pointing_footprint_str=pointing_footprint_str):
+
+    ra, dec, rad = pointing_footprint_str.split()[2:]
+
+    center = SkyCoord(float(ra) * u.deg, float(dec) * u.deg, frame='icrs')
+
+    actual_reg = CircleSkyRegion(center, radius=float(rad) * u.deg)
+
+    reg_output = utils.footprint_to_reg(pointing_footprint_str)
+
+    assert len(reg_output) == 1
+
+    assert actual_reg.center.ra == reg_output[0].center.ra
+    assert actual_reg.center.dec == reg_output[0].center.dec
+    assert actual_reg.radius == reg_output[0].radius

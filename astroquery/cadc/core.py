@@ -7,47 +7,37 @@ CADC
 Module to query the Canadian Astronomy Data Centre (CADC).
 """
 
-import logging
+from astroquery import log
 import warnings
 import requests
 from numpy import ma
-from six.moves.urllib.parse import urlencode
-from six.moves.urllib_error import HTTPError
+from pathlib import Path
+from urllib.parse import urlencode
+from urllib.error import HTTPError
 
 from ..utils.class_or_instance import class_or_instance
 from ..utils import async_to_sync, commons
-from ..query import BaseQuery
+from ..query import BaseQuery, BaseVOQuery
 from bs4 import BeautifulSoup
-from astropy.utils.exceptions import AstropyDeprecationWarning
-from astroquery.utils.decorators import deprecated
 from astropy import units as u
+from astropy.coordinates import Angle
+import pyvo
+from pyvo.auth import authsession
+
 from . import conf
 
-try:
-    import pyvo
-    from pyvo.auth import authsession
-except ImportError:
-    print('Please install pyvo. astropy.cadc does not work without it.')
-except AstropyDeprecationWarning as e:
-    if str(e) == 'The astropy.vo.samp module has now been moved to astropy.samp':
-        # CADC does not use samp and this only affects Python 2.7
-        print('AstropyDeprecationWarning: {}'.format(str(e)))
-    else:
-        raise e
 
 __all__ = ['Cadc', 'CadcClass']
 
 CADC_COOKIE_PREFIX = 'CADC_SSO'
 
-logger = logging.getLogger(__name__)
-
-# TODO figure out what do to if anything about them. Some might require
+# TODO figure out what to do if anything about them. Some might require
 # fixes on the CADC servers
 warnings.filterwarnings('ignore', module='astropy.io.votable')
 
 
 @async_to_sync
-class CadcClass(BaseQuery):
+class CadcClass(BaseVOQuery, BaseQuery):
     """
     Class for accessing CADC data. Typical usage:
 
@@ -80,8 +70,7 @@ class CadcClass(BaseQuery):
     CADCLOGIN_SERVICE_URI = conf.CADCLOGIN_SERVICE_URI
     TIMEOUT = conf.TIMEOUT
 
-    def __init__(self, url=None, tap_plus_handler=None, verbose=None,
-                 auth_session=None):
+    def __init__(self, *, url=None, auth_session=None):
         """
         Initialize Cadc object
 
@@ -89,8 +78,6 @@ class CadcClass(BaseQuery):
         ----------
         url : str, optional, default 'None;
             a url to use instead of the default
-        tap_plus_handler : deprecated
-        verbose : deprecated
         auth_session: `requests.Session` or `pyvo.auth.authsession.AuthSession`
             A existing authenticated session containing the appropriate
             credentials to be used by the client to communicate with the
@@ -100,22 +87,18 @@ class CadcClass(BaseQuery):
         -------
         Cadc object
         """
-        if tap_plus_handler:
-            raise AttributeError('tap handler no longer supported')
-        if verbose is not None:
-            warnings.warn('verbose deprecated since version 0.4.0')
 
-        super(CadcClass, self).__init__()
+        super().__init__()
         self.baseurl = url
+        # _auth_session contains the credentials that are used by both
+        # the cadc tap and cadc datalink services
         if auth_session:
             self._auth_session = auth_session
         else:
-            self._auth_session = None
+            self._auth_session = authsession.AuthSession()
 
     @property
     def cadctap(self):
-        if not self._auth_session:
-            self._auth_session = authsession.AuthSession()
         if not hasattr(self, '_cadctap'):
             if self.baseurl is None:
                 self.baseurl = get_access_url(self.CADCTAP_SERVICE_URI)
@@ -129,14 +112,21 @@ class CadcClass(BaseQuery):
         return self._cadctap
 
     @property
+    def cadcdatalink(self):
+        if not hasattr(self, '_datalink'):
+            self._datalink = pyvo.dal.adhoc.DatalinkService(
+                self.data_link_url, session=self._auth_session)
+        return self._datalink
+
+    @property
     def data_link_url(self):
         if not hasattr(self, '_data_link_url'):
             self._data_link_url = get_access_url(
                 self.CADCDATALINK_SERVICE_URI,
-                "ivo://ivoa.net/std/DataLink#links-1.0")
+                capability="ivo://ivoa.net/std/DataLink#links-1.0")
         return self._data_link_url
 
-    def login(self, user=None, password=None, certificate_file=None):
+    def login(self, *, user=None, password=None, certificate_file=None):
         """
         login allows user to authenticate to the service. Both user/password
         and https client certificates are supported.
@@ -157,9 +147,9 @@ class CadcClass(BaseQuery):
         # start with a new session
         if not isinstance(self.cadctap._session, (requests.Session,
                                                   authsession.AuthSession)):
-            raise TypeError('Cannot login with user provided session that is '
-                            'not an pyvo.authsession.AuthSession or '
-                            'requests.Session')
+            raise AttributeError('Cannot login with user provided session that is '
+                                 'not an pyvo.authsession.AuthSession or '
+                                 'requests.Session')
         if not certificate_file and not (user and password):
             raise AttributeError('login credentials missing (user/password '
                                  'or certificate)')
@@ -177,7 +167,7 @@ class CadcClass(BaseQuery):
                 self.cadctap._session.cert = certificate_file
         if user and password:
             login_url = get_access_url(self.CADCLOGIN_SERVICE_URI,
-                                       'ivo://ivoa.net/std/UMS#login-0.1')
+                                       capability='ivo://ivoa.net/std/UMS#login-0.1')
             if login_url is None:
                 raise RuntimeError("No login URL")
             # need to login and get a cookie
@@ -193,7 +183,7 @@ class CadcClass(BaseQuery):
             try:
                 response.raise_for_status()
             except Exception as e:
-                logger.error('Logging error: {}'.format(e))
+                log.error('Logging error: {}'.format(e))
                 raise e
             # extract cookie
             cookie = '"{}"'.format(response.text)
@@ -205,30 +195,35 @@ class CadcClass(BaseQuery):
                     self.cadctap._session.cookies.set(
                         CADC_COOKIE_PREFIX, cookie)
 
-    def logout(self, verbose=None):
+    def logout(self):
         """
         Logout. Anonymous access with all the subsequent use of the
         object. Note that the original session is not affected (in case
-        it was passed when the object was first intantiated)
-
-        Parameters
-        ----------
-        verbose : deprecated
-
+        it was passed when the object was first instantiated)
         """
-        if verbose is not None:
-            warnings.warn('verbose deprecated since 0.4.0')
 
-        # the only way to ensure complete logout is to start with a new
-        # session. This is mainly because of certificates. Adding cert
-        # argument to a session already in use does not force it to
-        # re-do the HTTPS hand shake
-        self.cadctap._session = authsession.AuthSession()
-        self.cadctap._session.update_from_capabilities(
-            self.cadctap.capabilities)
+        if isinstance(self._auth_session, pyvo.auth.AuthSession):
+            # Remove the existing credentials (if any)
+            # PyVO should provide this reset credentials functionality
+            # TODO - this should be implemented in PyVO to avoid this deep
+            # intrusion into that package
+            self._auth_session.credentials.credentials = \
+                {key: value for (key, value) in self._auth_session.credentials.credentials.items()
+                    if key == pyvo.auth.securitymethods.ANONYMOUS}
+        elif isinstance(self._auth_session, requests.Session):
+            # the only way to ensure complete logout is to start with a new
+            # session. This is mainly because of certificates. Removing cert
+            # argument to a session already in use does not force it to
+            # re-do the HTTPS hand shake
+            self._auth_session = requests.Session()
+            self.cadctap._session = self._auth_session
+            self.cadcdatalink._session = self._auth_session
+        else:
+            raise RuntimeError(
+                'Do not know how to log out from custom session')
 
     @class_or_instance
-    def query_region_async(self, coordinates, radius=0.016666666666667*u.deg,
+    def query_region_async(self, coordinates, *, radius=0.016666666666667*u.deg,
                            collection=None,
                            get_query_payload=False):
         """
@@ -274,7 +269,7 @@ class CadcClass(BaseQuery):
 
         Parameters
         ----------
-        name: str
+        name : str
                 name of object to query for
 
         Returns
@@ -316,7 +311,7 @@ class CadcClass(BaseQuery):
         return collections
 
     @class_or_instance
-    def get_images(self, coordinates, radius,
+    def get_images(self, coordinates, radius, *,
                    collection=None,
                    get_url_list=False,
                    show_progress=False):
@@ -345,8 +340,8 @@ class CadcClass(BaseQuery):
         str if returning urls).
         """
 
-        filenames = self.get_images_async(coordinates, radius, collection,
-                                          get_url_list, show_progress)
+        filenames = self.get_images_async(coordinates, radius, collection=collection,
+                                          get_url_list=get_url_list, show_progress=show_progress)
 
         if get_url_list:
             return filenames
@@ -356,16 +351,16 @@ class CadcClass(BaseQuery):
         for fn in filenames:
             try:
                 images.append(fn.get_fits())
-            except HTTPError as err:
+            except (requests.exceptions.HTTPError, HTTPError) as err:
                 # Catch HTTPError if user is unauthorized to access file
-                logger.debug(
+                log.debug(
                     "{} - Problem retrieving the file: {}".
                     format(str(err), str(err.url)))
                 pass
 
         return images
 
-    def get_images_async(self, coordinates, radius, collection=None,
+    def get_images_async(self, coordinates, radius, *, collection=None,
                          get_url_list=False, show_progress=False):
         """
         A coordinate-based query function that returns a list of
@@ -438,7 +433,7 @@ class CadcClass(BaseQuery):
             raise AttributeError('Missing query_result argument')
 
         parsed_coordinates = commons.parse_coordinates(coordinates).fk5
-        radius_deg = commons.radius_to_unit(radius, unit='degree')
+        radius_deg = Angle(radius).to_value(u.deg)
         ra = parsed_coordinates.ra.degree
         dec = parsed_coordinates.dec.degree
         cutout_params = {'POS': 'CIRCLE {} {} {}'.format(ra, dec, radius_deg)}
@@ -459,11 +454,11 @@ class CadcClass(BaseQuery):
                             range(0, len(publisher_ids), batch_size)):
             datalink = pyvo.dal.adhoc.DatalinkResults.from_result_url(
                 '{}?{}'.format(self.data_link_url,
-                               urlencode({'ID': pid_sublist}, True)))
+                               urlencode({'ID': pid_sublist}, True)),
+                session=self.cadcdatalink._session)
             for service_def in datalink.bysemantics('#cutout'):
                 access_url = service_def.access_url
-                if isinstance(access_url, bytes):  # ASTROPY_LT_4_1
-                    access_url = access_url.decode('ascii')
+
                 if '/sync' in access_url:
                     service_params = service_def.input_params
                     input_params = {param.name: param.value
@@ -476,7 +471,7 @@ class CadcClass(BaseQuery):
         return result
 
     @class_or_instance
-    def get_data_urls(self, query_result, include_auxiliaries=False):
+    def get_data_urls(self, query_result, *, include_auxiliaries=False):
         """
         Function to map the results of a CADC query into URLs to
         corresponding data that can be later downloaded.
@@ -526,10 +521,13 @@ class CadcClass(BaseQuery):
             datalink = pyvo.dal.adhoc.DatalinkResults.from_result_url(
                 '{}?{}'.format(self.data_link_url,
                                urlencode({'ID': pid_sublist,
-                                          'REQUEST': 'downloads-only'}, True)))
+                                          'REQUEST': 'downloads-only'}, True)),
+                session=self.cadcdatalink._session)
             for service_def in datalink:
-                if service_def.semantics == 'http://www.openadc.org/caom2#pkg':
-                    # pkg is an alternative for downloading multiple
+                if service_def.semantics in ['http://www.opencadc.org/caom2#pkg', '#package']:
+                    # TODO http://www.openadc.org/caom2#pkg has been replaced
+                    # by "package". Removed it after CADC rolls out the change
+                    # package is an alternative for downloading multiple
                     # data files in a tar file as an alternative to separate
                     # downloads. It doesn't make much sense in this case so
                     # filter it out.
@@ -540,7 +538,7 @@ class CadcClass(BaseQuery):
                 result.append(service_def.access_url)
         return result
 
-    def get_tables(self, only_names=False, verbose=None):
+    def get_tables(self, *, only_names=False):
         """
         Gets all public tables
 
@@ -548,21 +546,18 @@ class CadcClass(BaseQuery):
         ----------
         only_names : bool, optional, default False
             True to load table names only
-        verbose : deprecated
 
         Returns
         -------
         A list of table objects
         """
-        if verbose is not None:
-            warnings.warn('verbose deprecated since 0.4.0')
         table_set = self.cadctap.tables
         if only_names:
             return list(table_set.keys())
         else:
             return list(table_set.values())
 
-    def get_table(self, table, verbose=None):
+    def get_table(self, table):
         """
         Gets the specified table
 
@@ -570,22 +565,20 @@ class CadcClass(BaseQuery):
         ----------
         table : str, mandatory
             full qualified table name (i.e. schema name + table name)
-        verbose : deprecated
 
         Returns
         -------
         A table object
         """
-        if verbose is not None:
-            warnings.warn('verbose deprecated since 0.4.0')
         tables = self.get_tables()
         for t in tables:
             if table == t.name:
                 return t
 
-    def exec_sync(self, query, maxrec=None, uploads=None, output_file=None):
+    def exec_sync(self, query, *, maxrec=None, uploads=None, output_file=None,
+                  output_format='votable'):
         """
-        Run a query and return the results or save them in a output_file
+        Run a query and return the results or save them in an output_file
 
         Parameters
         ----------
@@ -593,10 +586,13 @@ class CadcClass(BaseQuery):
             SQL to execute
         maxrec : int
             the maximum records to return. defaults to the service default
-        uploads:
+        uploads :
             Temporary tables to upload and run with the queries
-        output_file: str or file handler:
+        output_file : str, Path, or file handler
             File to save the results to
+        output_format :
+            Format of the output (default is basic). Must be one
+            of the formats supported by `astropy.table`
 
         Returns
         -------
@@ -612,13 +608,18 @@ class CadcClass(BaseQuery):
         result = response.to_table()
         if output_file:
             if isinstance(output_file, str):
-                with open(output_file, 'bw') as f:
-                    f.write(result)
+                fname = output_file
+            elif isinstance(output_file, Path):
+                # Merge this case into the str once astropy is >=5.1
+                fname = str(output_file)
+            elif hasattr(output_file, 'name'):
+                fname = output_file.name
             else:
-                output_file.write(result)
+                raise AttributeError('Not a valid file name, Path, or file handler')
+            result.write(fname, format=output_format, overwrite=True)
         return result
 
-    def create_async(self, query, maxrec=None, uploads=None):
+    def create_async(self, query, *, maxrec=None, uploads=None):
         """
         Creates a TAP job to execute and returns it to the caller. The
         caller then can start the execution and monitor the job.
@@ -656,46 +657,7 @@ class CadcClass(BaseQuery):
         return self.cadctap.submit_job(query, language='ADQL',
                                        uploads=uploads)
 
-    @deprecated('0.4.0', 'Use exec_sync or create_async instead')
-    def run_query(self, query, operation, output_file=None,
-                  output_format="votable", verbose=None,
-                  background=False, upload_resource=None,
-                  upload_table_name=None):
-        """
-        Runs a query
-
-        Parameters
-        ----------
-        query : str, mandatory
-            query to be executed
-        operation : str, mandatory,
-            'sync' or 'async' to run a synchronous or asynchronous job
-        output_file : str, optional, default None
-            file name where the results are saved if dumpToFile is True.
-            If this parameter is not provided, the jobid is used instead
-        output_format : str, optional, default 'votable'
-            results format, 'csv', 'tsv' and 'votable'
-        verbose : deprecated
-        save_to_file : bool, optional, default 'False'
-            if True, the results are saved in a file instead of using memory
-        background : bool, optional, default 'False'
-            when the job is executed in asynchronous mode,
-            this flag specifies whether the execution will wait until results
-            are available
-        upload_resource: str, optional, default None
-            resource to be uploaded to UPLOAD_SCHEMA
-        upload_table_name: str, required if uploadResource is provided,
-            default None
-            resource temporary table name associated to the uploaded resource
-
-        Returns
-        -------
-        A Job object
-        """
-        raise NotImplementedError('No longer supported. '
-                                  'Use exec_sync or create_async instead.')
-
-    def load_async_job(self, jobid, verbose=None):
+    def load_async_job(self, jobid):
         """
         Loads an asynchronous job
 
@@ -703,49 +665,43 @@ class CadcClass(BaseQuery):
         ----------
         jobid : str, mandatory
             job identifier
-        verbose : deprecated
 
         Returns
         -------
         A Job object
         """
-        if verbose is not None:
-            warnings.warn('verbose deprecated since 0.4.0')
 
         return pyvo.dal.AsyncTAPJob('{}/async/{}'.format(
-            self.cadctap.baseurl, jobid))
+            self.cadctap.baseurl, jobid), session=self._auth_session)
 
-    def list_async_jobs(self, phases=None, after=None, last=None,
-                        short_description=True, verbose=None):
+    def list_async_jobs(self, *, phases=None, after=None, last=None,
+                        short_description=True):
         """
         Returns all the asynchronous jobs
 
         Parameters
         ----------
-        phases: list of str
+        phases : list of str
             Union of job phases to filter the results by.
-        after: datetime
+        after : datetime
             Return only jobs created after this datetime
-        last: int
+        last : int
             Return only the most recent number of jobs
-        short_description: flag - True or False
+        short_description : flag - True or False
             If True, the jobs in the list will contain only the information
             corresponding to the TAP ShortJobDescription object (job ID, phase,
             run ID, owner ID and creation ID) whereas if False, a separate GET
             call to each job is performed for the complete job description
-        verbose : deprecated
 
         Returns
         -------
         A list of Job objects
         """
-        if verbose is not None:
-            warnings.warn('verbose deprecated since 0.4.0')
 
         return self.cadctap.get_job_list(phases=phases, after=after, last=last,
                                          short_description=short_description)
 
-    def _parse_result(self, result, verbose=None):
+    def _parse_result(self, result, *, verbose=None):
         return result
 
     def _args_to_payload(self, *args, **kwargs):
@@ -753,7 +709,7 @@ class CadcClass(BaseQuery):
         # and force the coordinates to FK5 (assuming FK5/ICRS are
         # interchangeable) since RA/Dec are used below
         coordinates = commons.parse_coordinates(kwargs['coordinates']).fk5
-        radius_deg = commons.radius_to_unit(kwargs['radius'], unit='degree')
+        radius_deg = Angle(kwargs["radius"]).to_value(u.deg)
         payload = {format: 'VOTable'}
         payload['query'] = \
             "SELECT * from caom2.Observation o join caom2.Plane p " \
@@ -780,16 +736,23 @@ def static_vars(**kwargs):
 
 
 @static_vars(caps={})
-def get_access_url(service, capability=None):
+def get_access_url(service, *, capability=None):
     """
     Returns the URL corresponding to a service by doing a lookup in the cadc
     registry. It returns the access URL corresponding to cookie authentication.
-    :param service: the service the capability belongs to. It can be identified
-    by a CADC uri ('ivo://cadc.nrc.ca/) which is looked up in the CADC registry
-    or by the URL where the service capabilities is found.
-    :param capability: uri representing the capability for which the access
-    url is sought
-    :return: the access url
+
+    Parameters
+    ----------
+    service : str
+        the service the capability belongs to. It can be identified
+        by a CADC uri ('ivo://cadc.nrc.ca/) which is looked up in the CADC registry
+        or by the URL where the service capabilities is found.
+    capability : str
+        uri representing the capability for which the access url is sought
+
+    Returns
+    -------
+    The access url
 
     Note
     ------
@@ -812,7 +775,7 @@ def get_access_url(service, capability=None):
                 response = requests.get(conf.CADC_REGISTRY_URL)
                 response.raise_for_status()
             except requests.exceptions.HTTPError as err:
-                logger.debug(
+                log.debug(
                     "ERROR getting the CADC registry: {}".format(str(err)))
                 raise err
             for line in response.text.splitlines():
@@ -836,7 +799,7 @@ def get_access_url(service, capability=None):
         response2 = requests.get(caps_url)
         response2.raise_for_status()
     except Exception as e:
-        logger.debug(
+        log.debug(
             "ERROR getting the service capabilities: {}".format(str(e)))
         raise e
 
@@ -851,7 +814,7 @@ def get_access_url(service, capability=None):
                     if not sm or sm.get("standardid", None) is None or\
                        sm['standardid'] == "ivo://ivoa.net/sso#cookie":
                         return i.accessurl.text
-    raise RuntimeError("ERROR - capabilitiy {} not found or not working with "
+    raise RuntimeError("ERROR - capability {} not found or not working with "
                        "anonymous or cookie access".format(capability))
 
 

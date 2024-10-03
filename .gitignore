@@ -18,6 +18,9 @@ MANIFEST
 .ipynb_checkpoints
 .eggs
 pip-wheel-metadata
+.hypothesis
+doctests.py
+coverage.xml
 
 # Sphinx
 _build
@@ -64,6 +67,7 @@ distribute-*.tar.gz
 .*.sw[op]
 *~
 .svn
+.tmp
 
 # Mac OSX
 .DS_Store

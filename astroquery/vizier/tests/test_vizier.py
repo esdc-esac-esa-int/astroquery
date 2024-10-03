@@ -3,16 +3,18 @@ import os
 import requests
 from numpy import testing as npt
 import pytest
+from pyvo import registry
+from astropy.coordinates import SkyCoord
+import astropy.io.votable.tree as votree
 from astropy.table import Table
 import astropy.units as u
-import six
-from six.moves import urllib_parse as urlparse
-from ... import vizier
-from ...utils import commons
-from ...utils.testing_tools import MockResponse
 
-if six.PY3:
-    str, = six.string_types
+from ... import vizier
+from ...exceptions import EmptyResponseError
+from ...utils import commons
+from astroquery.utils.mocks import MockResponse
+from .conftest import scalar_skycoord, vector_skycoord
+
 
 VO_DATA = {'HIP,NOMAD,UCAC': "viz.xml",
            'NOMAD,UCAC': "viz.xml",
@@ -28,10 +30,8 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_post(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(requests.Session, 'request', post_mockreturn)
     return mp
 
@@ -43,46 +43,48 @@ def post_mockreturn(self, method, url, data=None, timeout=10, files=None,
     if isinstance(data, dict):
         datad = data
     else:
-        datad = dict([urlparse.parse_qsl(d)[0] for d in data.split('\n')])
+        datad = {}
+        for line in data.split('\n'):
+            if '=' in line:
+                key, value = line.split('=', maxsplit=1)
+                datad[key.strip()] = value.strip()
+            else:
+                datad[line] = None
     if '-source' in datad:
         # a request for the actual data
         filename = data_path(VO_DATA[datad['-source']])
-        content = open(filename, "rb").read()
     elif '-words' in datad:
         # a find_catalog request/only metadata
-        filename = data_path(VO_DATA['find_' + datad['-words']])
-        content = open(filename, "rb").read()
+        filename = data_path(VO_DATA['find_' + datad['-words'].split("&")[0]])
+
+    with open(filename, 'rb') as infile:
+        content = infile.read()
     return MockResponse(content, **kwargs)
 
 
 def parse_objname(obj):
-    d = {'AFGL 2591': commons.ICRSCoordGenerator(307.35388 * u.deg,
-                                                 40.18858 * u.deg)}
+    d = {"AFGL 2591": SkyCoord(307.35388 * u.deg, 40.18858 * u.deg, frame="icrs")}
     return d[obj]
 
 
 @pytest.fixture
 def patch_coords(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(commons, 'parse_coordinates', parse_objname)
     return mp
 
 
-@pytest.mark.parametrize(('dim', 'expected_out'),
-                         [(5 * u.deg, ('d', 5)),
-                          (5 * u.arcmin, ('m', 5)),
-                          (5 * u.arcsec, ('s', 5)),
-                          (0.314 * u.rad, ('d', 18)),
-                          ('5d5m5.5s', ('d', 5.0846))
-                          ])
-def test_parse_angle(dim, expected_out):
-    actual_out = vizier.core._parse_angle(dim)
-    actual_unit, actual_value = actual_out
-    expected_unit, expected_value = expected_out
+@pytest.mark.parametrize("dim,expected_unit,expected_unit_str,expected_value",
+                         [(5 * u.deg, u.deg, "d", 5),
+                          (5 * u.arcmin, u.arcmin, "m", 5),
+                          (5 * u.arcsec, u.arcsec, "s", 5),
+                          (0.314 * u.rad, u.deg, "d", 18),
+                          ("5d5m5.5s", u.deg, "d", 5.0846)])
+def test_parse_angle(dim, expected_unit, expected_unit_str, expected_value):
+    actual_unit, actual_unit_str, actual_value = vizier.core._parse_angle(dim)
     assert actual_unit == expected_unit
+    assert actual_unit_str == expected_unit_str
     npt.assert_approx_equal(actual_value, expected_value, significant=2)
 
 
@@ -94,8 +96,8 @@ def test_parse_angle_err():
 @pytest.mark.parametrize(('filepath'),
                          list(set(VO_DATA.values())))
 def test_parse_result_verbose(filepath, capsys):
-    with open(data_path(filepath), 'rb') as f:
-        table_contents = f.read()
+    with open(data_path(filepath), 'rb') as infile:
+        table_contents = infile.read()
     response = MockResponse(table_contents)
     vizier.core.Vizier._parse_result(response)
     out, err = capsys.readouterr()
@@ -109,7 +111,8 @@ def test_parse_result_verbose(filepath, capsys):
                           ]
                          )  # TODO: 1->50 because it is just 1 table
 def test_parse_result(filepath, objlen):
-    table_contents = open(data_path(filepath), 'rb').read()
+    with open(data_path(filepath), 'rb') as infile:
+        table_contents = infile.read()
     response = MockResponse(table_contents)
     result = vizier.core.Vizier._parse_result(response)
     assert isinstance(result, commons.TableList)
@@ -118,19 +121,34 @@ def test_parse_result(filepath, objlen):
 
 
 def test_query_region_async(patch_post):
-    target = commons.ICRSCoordGenerator(ra=299.590, dec=35.201,
-                                        unit=(u.deg, u.deg))
     response = vizier.core.Vizier.query_region_async(
-        target, radius=5 * u.deg, catalog=["HIP", "NOMAD", "UCAC"])
+        scalar_skycoord, radius=5 * u.deg, catalog=["HIP", "NOMAD", "UCAC"])
     assert response is not None
 
 
+@pytest.mark.parametrize(
+    "inner_r,region_str",
+    [(1 * u.deg, "-c.rd=1.0,5.0"), (60 * u.arcmin, "-c.rm=60.0,300.0")])
+@pytest.mark.parametrize("outer_r", (5 * u.deg, 300 * u.arcmin))
+def test_query_region_async_with_inner_radius(inner_r, outer_r, region_str):
+    query = vizier.VizierClass().query_region_async(
+        scalar_skycoord, radius=outer_r, inner_radius=inner_r, get_query_payload=True)
+    assert region_str in query.splitlines()
+
+
+@pytest.mark.parametrize(
+    "width,region_str",
+    [(1 * u.deg, "-c.bd=1.0x5.0"), (60 * u.arcmin, "-c.bm=60.0x300.0")])
+@pytest.mark.parametrize("height", (5 * u.deg, 300 * u.arcmin))
+def test_query_region_async_rectangle(width, height, region_str):
+    query = vizier.VizierClass().query_region_async(
+        scalar_skycoord, width=width, height=height, get_query_payload=True)
+    assert region_str in query.splitlines()
+
+
 def test_query_region(patch_post):
-    target = commons.ICRSCoordGenerator(ra=299.590, dec=35.201,
-                                        unit=(u.deg, u.deg))
-    result = vizier.core.Vizier.query_region(target,
-                                             radius=5 * u.deg,
-                                             catalog=["HIP", "NOMAD", "UCAC"])
+    result = vizier.core.Vizier.query_region(
+        scalar_skycoord, radius=5 * u.deg, catalog=["HIP", "NOMAD", "UCAC"])
 
     assert isinstance(result, commons.TableList)
 
@@ -142,12 +160,8 @@ def test_query_regions(patch_post):
     for the multi-object query.  There is no test for parsing
     that return (yet - but see test_multicoord in remote_data)
     """
-    targets = commons.ICRSCoordGenerator(ra=[299.590, 299.90],
-                                         dec=[35.201, 35.201],
-                                         unit=(u.deg, u.deg))
-    vizier.core.Vizier.query_region(targets,
-                                    radius=5 * u.deg,
-                                    catalog=["HIP", "NOMAD", "UCAC"])
+    vizier.core.Vizier.query_region(
+        vector_skycoord, radius=5 * u.deg, catalog=["HIP", "NOMAD", "UCAC"])
 
 
 def test_query_object_async(patch_post):
@@ -187,7 +201,7 @@ def test_find_resource_then_get(patch_post):
     assert next(iter(result.keys())).startswith(res.name)
 
     resultl = vizier.core.Vizier.get_catalogs([res])
-    assert type(result) == type(resultl)
+    assert isinstance(result, type(resultl))
     assert len(result) == len(resultl)
     assert len(result[0]) == len(resultl[0])
 
@@ -228,7 +242,8 @@ class TestVizierClass:
         v = vizier.core.Vizier(keywords=['optical', 'chandra', 'ans'])
         assert str(v.keywords) == ('-kw.Mission=ANS\n-kw.Mission='
                                    'Chandra\n-kw.Wavelength=optical')
-        v = vizier.core.Vizier(keywords=['xy', 'optical'])
+        with pytest.warns(UserWarning, match="xy : No such keyword"):
+            v = vizier.core.Vizier(keywords=['xy', 'optical'])
         assert str(v.keywords) == '-kw.Wavelength=optical'
         v.keywords = ['optical', 'cobe']
         assert str(v.keywords) == '-kw.Mission=COBE\n-kw.Wavelength=optical'
@@ -251,3 +266,27 @@ class TestVizierClass:
     def test_column_filters_unicode(self):
         v = vizier.core.Vizier(column_filters={u'Vmag': u'>10'})
         assert len(v.column_filters) == 1
+
+    def test_get_catalog_metadata(self):
+        v = vizier.core.Vizier(catalog="test")
+        request_dict = v.get_catalog_metadata(get_query_payload=True)
+        assert request_dict["REQUEST"] == "doQuery"
+        assert "WHERE ivoid = 'ivo://cds.vizier/test'" in request_dict["QUERY"]
+        with pytest.raises(ValueError, match="No catalog name was provided"):
+            vizier.core.Vizier().get_catalog_metadata()
+
+    def test_get_catalog_metadata_empty_result(self, monkeypatch):
+        """Checks that an empty result raises a meaningful error."""
+        v = vizier.core.Vizier(catalog="should_return_empty_result")
+
+        def return_empty_votable(_):
+            if commons.ASTROPY_LT_6_0:
+                table = votree.Table(votree.VOTableFile())
+            else:
+                table = votree.TableElement(votree.VOTableFile())
+            return table
+
+        monkeypatch.setattr(registry.regtap.RegistryQuery, "execute",
+                            return_empty_votable)
+        with pytest.raises(EmptyResponseError, match="'*' was not found in VizieR*"):
+            v.get_catalog_metadata()

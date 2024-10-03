@@ -1,8 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import pprint
 from bs4 import BeautifulSoup
-from six.moves.urllib import parse as urlparse
-import six
+from urllib import parse as urlparse
 from astropy import units as u
 
 from . import conf
@@ -21,7 +20,7 @@ class SkyViewClass(BaseQuery):
     URL = conf.url
 
     def __init__(self):
-        super(SkyViewClass, self).__init__()
+        super().__init__()
         self._default_form_values = None
 
     def _get_default_form_values(self, form):
@@ -36,8 +35,8 @@ class SkyViewClass(BaseQuery):
                 continue
             # check boxes: enabled boxes have the value "on" if not specified
             # otherwise. Found out by debugging, perhaps not documented.
-            if (elem.get('type') == 'checkbox' and
-                    elem.get('checked') in ["", "checked"]):
+            if (elem.get('type') == 'checkbox'
+                    and elem.get('checked') in ["", "checked"]):
                 value = elem.get('value', 'on')
                 res.append((elem.get('name'), value))
             # radio buttons and simple input fields
@@ -65,6 +64,7 @@ class SkyViewClass(BaseQuery):
         if input is None:
             input = {}
         form_response = self._request('GET', self.URL)
+        form_response.raise_for_status()
         bs = BeautifulSoup(form_response.content, "html.parser")
         form = bs.find('form')
         # cache the default values to save HTTP traffic
@@ -73,7 +73,7 @@ class SkyViewClass(BaseQuery):
         # only overwrite payload's values if the `input` value is not None
         # to avoid overwriting of the form's default values
         payload = self._default_form_values.copy()
-        for k, v in six.iteritems(input):
+        for k, v in input.items():
             if v is not None:
                 payload[k] = v
         url = urlparse.urljoin(self.URL, form.get('action'))
@@ -82,12 +82,12 @@ class SkyViewClass(BaseQuery):
     def _submit_form(self, input=None, cache=True):
         url, payload = self._generate_payload(input=input)
         response = self._request('GET', url, params=payload, cache=cache)
+        response.raise_for_status()
         return response
 
-    def get_images(self, position, survey, coordinates=None, projection=None,
+    def get_images(self, position, survey, *, coordinates=None, projection=None,
                    pixels=None, scaling=None, sampler=None, resolver=None,
-                   deedger=None, lut=None, grid=None, gridlabels=None,
-                   radius=None, height=None, width=None, cache=True,
+                   deedger=None, radius=None, height=None, width=None, cache=True,
                    show_progress=True):
         """
         Query the SkyView service, download the FITS file that will be
@@ -163,21 +163,18 @@ class SkyViewClass(BaseQuery):
             de-edging algorithm. The supported values are: ``"_skip_"`` to
             use the survey default, ``"skyview.process.Deedger"`` (for
             enabling de-edging), and ``"null"`` to disable.
-        lut : str
-            Choose from the color table selections to display the data in
-            false color.
-        grid : bool
-            overlay a coordinate grid on the image if True
-        gridlabels : bool
-            annotate the grid with coordinates positions if True
         radius : `~astropy.units.Quantity` or None
-            The radius of the specified field.  Overrides width and height.
+            The angular radius of the specified field.
+            Overrides the ``width`` and ``height`` parameters.
         width : `~astropy.units.Quantity` or None
             The width of the specified field.  Must be specified
             with ``height``.
         height : `~astropy.units.Quantity` or None
             The height of the specified field.  Must be specified
             with ``width``.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         References
         ----------
@@ -196,43 +193,37 @@ class SkyViewClass(BaseQuery):
         A list of `~astropy.io.fits.HDUList` objects.
 
         """
-        readable_objects = self.get_images_async(position, survey, coordinates,
-                                                 projection, pixels, scaling,
-                                                 sampler, resolver, deedger,
-                                                 lut, grid, gridlabels,
-                                                 radius=radius, height=height,
-                                                 width=width,
-                                                 cache=cache,
-                                                 show_progress=show_progress)
+        readable_objects = self.get_images_async(position, survey, coordinates=coordinates,
+                                                 projection=projection, pixels=pixels, scaling=scaling,
+                                                 sampler=sampler, resolver=resolver, deedger=deedger,
+                                                 radius=radius, height=height, width=width,
+                                                 cache=cache, show_progress=show_progress)
         return [obj.get_fits() for obj in readable_objects]
 
     @prepend_docstr_nosections(get_images.__doc__)
-    def get_images_async(self, position, survey, coordinates=None,
+    def get_images_async(self, position, survey, *, coordinates=None,
                          projection=None, pixels=None, scaling=None,
-                         sampler=None, resolver=None, deedger=None, lut=None,
-                         grid=None, gridlabels=None, radius=None, height=None,
-                         width=None, cache=True, show_progress=True):
+                         sampler=None, resolver=None, deedger=None,
+                         radius=None, height=None, width=None,
+                         cache=True, show_progress=True):
         """
         Returns
         -------
         A list of context-managers that yield readable file-like objects
         """
-        image_urls = self.get_image_list(position, survey, coordinates,
-                                         projection, pixels, scaling, sampler,
-                                         resolver, deedger, lut, grid,
-                                         gridlabels, radius=radius,
-                                         height=height, width=width,
-                                         cache=cache)
+        image_urls = self.get_image_list(position, survey, coordinates=coordinates,
+                                         projection=projection, pixels=pixels, scaling=scaling, sampler=sampler,
+                                         resolver=resolver, deedger=deedger, radius=radius,
+                                         height=height, width=width, cache=cache)
         return [commons.FileContainer(url, encoding='binary',
                                       show_progress=show_progress)
                 for url in image_urls]
 
     @prepend_docstr_nosections(get_images.__doc__, sections=['Returns', 'Examples'])
-    def get_image_list(self, position, survey, coordinates=None,
+    def get_image_list(self, position, survey, *, coordinates=None,
                        projection=None, pixels=None, scaling=None,
-                       sampler=None, resolver=None, deedger=None, lut=None,
-                       grid=None, gridlabels=None, radius=None, width=None,
-                       height=None, cache=True):
+                       sampler=None, resolver=None, deedger=None,
+                       radius=None, width=None, height=None, cache=True):
         """
         Returns
         -------
@@ -250,11 +241,11 @@ class SkyViewClass(BaseQuery):
         self._validate_surveys(survey)
 
         if radius is not None:
-            size_deg = str(radius.to(u.deg).value)
-        elif width and height:
-            size_deg = "{0},{1}".format(width.to(u.deg).value,
-                                        height.to(u.deg).value)
-        elif width and height:
+            size_deg = str(radius.to(u.deg).value * 2)
+        elif width is not None and height is not None:
+            size_deg = "{0},{1}".format(u.Quantity(width).to(u.deg).value,
+                                        u.Quantity(height).to(u.deg).value)
+        elif width is not None or height is not None:
             raise ValueError("Must specify width and height if you "
                              "specify either.")
         else:
@@ -264,12 +255,9 @@ class SkyViewClass(BaseQuery):
             'Position': parse_coordinates(position),
             'survey': survey,
             'Deedger': deedger,
-            'lut': lut,
             'projection': projection,
-            'gridlabels': '1' if gridlabels else '0',
             'coordinates': coordinates,
             'scaling': scaling,
-            'grid': grid,
             'resolver': resolver,
             'Sampler': sampler,
             'imscale': size_deg,
@@ -293,11 +281,12 @@ class SkyViewClass(BaseQuery):
         if not hasattr(self, '_survey_dict'):
 
             response = self._request('GET', self.URL, cache=False)
+            response.raise_for_status()
             page = BeautifulSoup(response.content, "html.parser")
-            surveys = page.findAll('select', {'name': 'survey'})
+            surveys = page.find_all('select', {'name': 'survey'})
 
             self._survey_dict = {
-                sel['id']: [x.text for x in sel.findAll('option')]
+                sel['id']: [x.text for x in sel.find_all('option')]
                 for sel in surveys
                 if 'overlay' not in sel['id']
             }

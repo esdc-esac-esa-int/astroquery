@@ -5,13 +5,13 @@ Affiliation: University of Colorado at Boulder
 Created on: Fri May  3 09:45:13 2013
 """
 
-from __future__ import print_function
+
 import requests
 import numpy as np
 import numpy.ma as ma
 from astropy import units as u
 from astropy import coordinates as coord
-from ..utils import commons, prepend_docstr_nosections
+from ..utils import commons
 from ..query import BaseQuery
 
 __all__ = ['Alfalfa', 'AlfalfaClass']
@@ -22,7 +22,6 @@ __doctest_skip__ = ['AlfalfaClass.query_region', 'Alfalfa.query_region']
 
 class AlfalfaClass(BaseQuery):
 
-    FITS_PREFIX = "http://arecibo.tc.cornell.edu/hiarchive/alfalfa/spectraFITS"
     CATALOG_PREFIX = "http://egg.astro.cornell.edu/alfalfa/data/a40files/a40.datafile1.csv"
 
     PLACEHOLDER = -999999
@@ -45,23 +44,23 @@ class AlfalfaClass(BaseQuery):
             return self.ALFALFACAT
 
         result = requests.get(self.CATALOG_PREFIX)
-        iterable_lines = result.iter_lines()
+        iterable_lines = result.text.split('\n')
 
         # Read header
-        cols = [col for col in next(iterable_lines).rstrip('\n').split(',')]
+        cols = iterable_lines[0].split(',')
 
         catalog = {}
         for col in cols:
             catalog[col] = []
 
         # Parse result
-        for line in iterable_lines:
+        for line in iterable_lines[1:]:
             # skip blank lines or trailing newlines
             if line == "":
                 continue
-            l = line.rstrip('\n').split(',')
+            col_values = line.split(',')
             for i, col in enumerate(cols):
-                item = l[i].strip()
+                item = col_values[i].strip()
                 if item == '\"\"':
                     catalog[col].append(self.PLACEHOLDER)
                 elif item.isdigit():
@@ -89,7 +88,7 @@ class AlfalfaClass(BaseQuery):
 
         return catalog
 
-    def query_region(self, coordinates, radius=3. * u.arcmin,
+    def query_region(self, coordinates, *, radius=3. * u.arcmin,
                      optical_counterpart=False):
         """
         Perform object cross-ID in ALFALFA.
@@ -158,49 +157,6 @@ class AlfalfaClass(BaseQuery):
             return cat['AGCNr'][i_minsep]
         else:
             return None
-
-    def get_spectrum_async(self, agc, show_progress=True):
-        """
-        Download spectrum from ALFALFA catalogue.
-
-        Parameters
-        ----------
-        agc : int
-            Identification number for object in ALFALFA catalog.
-        ascii : bool
-            Download spectrum from remote server in ASCII or FITS format?
-
-        Returns
-        -------
-        result : A file context manager
-
-        See Also
-        --------
-        get_catalog : method that downloads ALFALFA catalog
-        query_region : find object in catalog closest to supplied
-            position (use this to determine AGC number first)
-
-        """
-
-        agc = str(agc).zfill(6)
-
-        link = "%s/A%s.fits" % (self.FITS_PREFIX, agc)
-        result = commons.FileContainer(link, show_progress=show_progress)
-        return result
-
-    @prepend_docstr_nosections(get_spectrum_async.__doc__)
-    def get_spectrum(self, agc, show_progress=True):
-        """
-        Returns
-        -------
-        spectrum : `~astropy.io.fits.HDUList`
-            Spectrum is in ``hdulist[0].data[0][2]``
-
-        """
-
-        result = self.get_spectrum_async(agc, show_progress=show_progress)
-        hdulist = result.get_fits()
-        return hdulist
 
 
 Alfalfa = AlfalfaClass()

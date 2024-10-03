@@ -1,38 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-IRSA Query Tool
-===============
+This is the old namespace for querying the NASA/IPAC Infrared Science Archive (IRSA).
+Please update your imports and use it from astroquery.ipac.irsa
 
-This module contains various methods for querying the
-IRSA Catalog Query Service(CatQuery).
+.. deprecated:: 0.4.4
 """
-from astropy import config as _config
+import warnings
+
+warnings.warn("the ``irsa`` module has been moved to astroquery.ipac.irsa, "
+              "please update your imports.", DeprecationWarning, stacklevel=2)
+
+from astroquery.ipac.irsa import Irsa, IrsaClass, Conf, conf
 
 
-class Conf(_config.ConfigNamespace):
-    """
-    Configuration parameters for `astroquery.irsa`.
-    """
-
-    server = _config.ConfigItem(
-        'https://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query',
-        'Name of the IRSA mirror to use.')
-    gator_list_catalogs = _config.ConfigItem(
-        'https://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-scan',
-        'URL from which to list all the public catalogs in IRSA.')
-    row_limit = _config.ConfigItem(
-        500,
-        'Maximum number of rows to retrieve in result')
-    timeout = _config.ConfigItem(
-        60,
-        'Time limit for connecting to the IRSA server.')
-
-
-conf = Conf()
-
-
-from .core import Irsa, IrsaClass
-
-__all__ = ['Irsa', 'IrsaClass',
-           'Conf', 'conf',
-           ]
+__all__ = ['Irsa', 'IrsaClass', 'Conf', 'conf', ]

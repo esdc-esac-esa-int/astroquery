@@ -1,4 +1,16 @@
-[tool.astropy-bot]
+# astroquery still uses astropy-helpers
+# but we include pyproject.toml here so that python -m build can
+# work out of the box. In setup.py, we manually ensure that
+# astropy_helpers can be imported as an additional build time
+# dependency.
 
-[tool.astropy-bot.changelog_checker]
-filename = "CHANGES.rst"
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = 'setuptools.build_meta'
+
+[tool.black]
+force-exclude = '''
+(
+  .*
+)
+'''

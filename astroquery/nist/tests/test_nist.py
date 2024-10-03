@@ -6,7 +6,7 @@ import pytest
 from astropy.table import Table
 import astropy.units as u
 
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 from ... import nist
 
 DATA_FILES = {'lines': 'nist_out.html'}
@@ -19,17 +19,16 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_get(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(nist.Nist, '_request', get_mockreturn)
     return mp
 
 
 def get_mockreturn(method, url, params=None, timeout=10, **kwargs):
     filename = data_path(DATA_FILES['lines'])
-    content = open(filename, 'rb').read()
+    with open(filename, 'rb') as infile:
+        content = infile.read()
     return MockResponse(content, **kwargs)
 
 
@@ -43,13 +42,16 @@ def test_parse_wavelength():
 
 def test_query_async(patch_get):
     response = nist.core.Nist.query_async(4000 * u.nm, 7000 * u.nm,
-                                          "H I", get_query_payload=True)
+                                          linename="H I", get_query_payload=True)
     assert response['spectra'] == "H I"
     assert response['unit'] == nist.core.Nist.unit_code['nm']
-    response = nist.core.Nist.query_async(4000 * u.nm, 7000 * u.nm, "H I")
+    response = nist.core.Nist.query_async(4000 * u.nm, 7000 * u.nm,
+                                          linename=["H I", "Fe I"], get_query_payload=True)
+    assert response["spectra"] == "H I; Fe I"
+    response = nist.core.Nist.query_async(4000 * u.nm, 7000 * u.nm, linename="H I")
     assert response is not None
 
 
 def test_query(patch_get):
-    result = nist.core.Nist.query(4000 * u.nm, 7000 * u.nm, "H I")
+    result = nist.core.Nist.query(4000 * u.nm, 7000 * u.nm, linename="H I")
     assert isinstance(result, Table)

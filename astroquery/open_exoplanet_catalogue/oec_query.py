@@ -19,7 +19,7 @@ def get_catalogue(filepath=None):
     Parses the Open Exoplanet Catalogue file.
 
     Parameters
-    -----------
+    ----------
     filepath : str or None
         if no filepath is given, remote source is used.
 
@@ -30,7 +30,7 @@ def get_catalogue(filepath=None):
 
     if filepath is None:
         oec = ET.parse(gzip.GzipFile(
-                fileobj=io.BytesIO(urllib2.urlopen(oec_server_url).read())))
+            fileobj=io.BytesIO(urllib2.urlopen(oec_server_url).read())))
     else:
         oec = ET.parse(gzip.GzipFile(filepath))
     return oec

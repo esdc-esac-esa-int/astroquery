@@ -2,9 +2,22 @@
 """
 test_mpc
 
-Generate offline ephemeris files for testing with the following
-commands.  The asteroid must be one that returns ephemeris
-uncertainties:
+Generate offline ephemeris files for testing with the following commands.
+
+  * The first object can be any target with successful queries.
+
+  * The second object must be one that returns ephemeris uncertainties.
+
+  * The third object must be one that does not exist in the MPC database.  The
+    string 'test fail' is sufficient.
+
+  * The fourth object must be one that fails an orbit lookup.  Today (2022
+    July), that is 2008 JG, which has a permanent number 613986. The ephemeris
+    service is not resolving the temporary designation to the permanent number,
+    and therefore fails the orbit lookup.
+
+Any changes to these queries (such as target name) must be reflected in the
+appropriate tests below.
 
 ```
 from astroquery.mpc import MPC
@@ -15,9 +28,10 @@ parameters = {
   '2P_ephemeris_500-a-t': ('2P', {'proper_motion': 'total'}),
   '2P_ephemeris_500-a-c': ('2P', {'proper_motion': 'coordinate'}),
   '2P_ephemeris_500-a-s': ('2P', {'proper_motion': 'sky'}),
-  '1994XG_ephemeris_500-a-t': ('1994 XG', {}),
-  '1994XG_ephemeris_G37-a-t': ('1994 XG', {'location': 'G37'}),
-  'testfail_ephemeris_500-a-t': ('test fail', {})
+  '2024AA_ephemeris_500-a-t': ('2024 AA', {}),
+  '2024AA_ephemeris_G37-a-t': ('2024 AA', {'location': 'G37'}),
+  'testfail_ephemeris_500-a-t': ('test fail', {}),
+  '2008JG_ephemeris_500-a-t': ('2008 JG', {}),
 }
 for prefix, (name, kwargs) in parameters.items():
     with open(prefix + '.html', 'w') as outf:
@@ -39,7 +53,7 @@ For ObsCodes.html:
     wget https://minorplanetcenter.net/iau/lists/ObsCodes.html
 
 Then edit and remove all but the first 10 lines of observatories.
-This is sufficient for testing.
+This is sufficient for offline testing.
 
 """
 import os
@@ -50,9 +64,9 @@ import astropy.units as u
 from astropy.coordinates import EarthLocation, Angle
 from astropy.time import Time
 
-from ...exceptions import InvalidQueryError
+from ...exceptions import EmptyResponseError, InvalidQueryError
 from ... import mpc
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 from requests import Request
 
 
@@ -78,34 +92,34 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_post(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(mpc.MPCClass, '_request', post_mockreturn)
     return mp
 
 
 @pytest.fixture
 def patch_get(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(mpc.MPCClass, '_request', get_mockreturn)
     return mp
 
 
 def get_mockreturn(self, httpverb, url, params={}, auth=None, **kwargs):
+    filename = None
+
     if mpc.core.MPC.MPC_URL in url:
-        content = open(data_path('comet_object_C2012S1.json'), 'rb').read()
+        filename = 'comet_object_C2012S1.json'
     elif url == mpc.core.MPC.OBSERVATORY_CODES_URL:
-        content = open(data_path('ObsCodes.html'), 'rb').read()
+        filename = 'ObsCodes.html'
     elif mpc.core.MPC.MPCOBS_URL in url:
-        content = open(data_path('mpc_obs.dat'), 'rb').read()
+        filename = 'mpc_obs.dat'
     else:
         content = None
-
+    if filename:
+        with open(data_path(filename), 'rb') as infile:
+            content = infile.read()
     return MockResponse(content, url=url, auth=auth)
 
 
@@ -114,7 +128,8 @@ def post_mockreturn(self, httpverb, url, data={}, **kwargs):
         prefix = data['TextArea'].replace(' ', '')
         suffix = '-'.join((data['c'], data['raty'], data['s']))
         filename = data_path('{}_ephemeris_{}.html'.format(prefix, suffix))
-        content = open(filename, 'rb').read()
+        with open(filename, 'rb') as infile:
+            content = infile.read()
     else:
         content = None
 
@@ -141,7 +156,7 @@ def test_args_to_object_payload():
     ('asteroid',
         'https://minorplanetcenter.net/web_service/search_orbits')])
 def test_get_mpc_object_endpoint(type, url):
-    query_url = mpc.core.MPC.get_mpc_object_endpoint(target_type=type)
+    query_url = mpc.core.MPC._get_mpc_object_endpoint(target_type=type)
     assert query_url == url
 
 
@@ -163,20 +178,30 @@ def test_get_ephemeris_Moon_phase(patch_post):
 
 def test_get_ephemeris_Uncertainty(patch_post):
     # this test requires an object with uncertainties != N/A
-    result = mpc.core.MPC.get_ephemeris('1994 XG')
+    result = mpc.core.MPC.get_ephemeris('2024 AA')
     assert result['Uncertainty 3sig'].quantity[0] > 0 * u.arcsec
 
 
 def test_get_ephemeris_Moon_phase_and_Uncertainty(patch_post):
     # this test requires an object with uncertainties != N/A
-    result = mpc.core.MPC.get_ephemeris('1994 XG', location='G37')
+    result = mpc.core.MPC.get_ephemeris('2024 AA', location='G37')
     assert result['Moon phase'][0] >= 0
     assert result['Uncertainty 3sig'].quantity[0] > 0 * u.arcsec
+
+
+def test_get_ephemeris_by_name_empty(patch_post):
+    with pytest.raises(EmptyResponseError):
+        mpc.core.MPC.get_ephemeris('340P', location='G37')
 
 
 def test_get_ephemeris_by_name_fail(patch_post):
     with pytest.raises(InvalidQueryError):
         mpc.core.MPC.get_ephemeris('test fail')
+
+
+def test_get_ephemeris_object_without_orbit(patch_post):
+    with pytest.raises(InvalidQueryError):
+        mpc.core.MPC.get_ephemeris('2008 JG')
 
 
 def test_get_ephemeris_location_str():
@@ -332,7 +357,7 @@ def test_get_ephemeris_proper_motion_unit(mu, unit, columns, units,
 
 def test_get_ephemeris_proper_motion_unit_fail(patch_post):
     with pytest.raises(ValueError):
-        result = mpc.core.MPC.get_ephemeris('2P', proper_motion_unit='km/s')
+        mpc.core.MPC.get_ephemeris('2P', proper_motion_unit='km/s')
 
 
 @pytest.mark.parametrize('suppress_daytime,val', ((True, 'y'), (False, 'n')))
@@ -358,9 +383,10 @@ def test_get_ephemeris_perturbed(perturbed, val):
 
 @pytest.mark.parametrize('unc_links', (True, False))
 def test_get_ephemeris_unc_links(unc_links, patch_post):
-    tab = mpc.core.MPC.get_ephemeris('1994 XG', unc_links=unc_links)
-    assert ('Unc. map' in tab.colnames) == unc_links
-    assert ('Unc. offsets' in tab.colnames) == unc_links
+    result = mpc.core.MPC.get_ephemeris('2024 AA', unc_links=unc_links)
+    assert np.all(result['Uncertainty 3sig'].quantity > 0 * u.arcsec)
+    assert ('Unc. map' in result.colnames) == unc_links
+    assert ('Unc. offsets' in result.colnames) == unc_links
 
 
 def test_get_observatory_codes(patch_get):
@@ -390,10 +416,8 @@ def test_get_observations(patch_get):
     assert result['DEC'].unit == u.deg
     assert result['epoch'].unit == u.d
 
-    result = mpc.core.MPC.get_observations('12893',
-                                           get_raw_response=True)
-
-    assert result[0]['designation'] == "1998 QS55"
+    result = mpc.core.MPC.get_observations_async('12893')
+    assert result.json()[0]['designation'] == "1998 QS55"
 
     result = mpc.core.MPC.get_observations('12893',
                                            get_mpcformat=True)
@@ -410,25 +434,17 @@ def test_get_observations_target_parsing(patch_get):
     result = mpc.core.MPC.get_observations(345678, get_query_payload=True)
     assert result['object_type'] == 'M' and result['number'] == '345678'
 
-    result = mpc.core.MPC.get_observations('1998 QS55',
-                                           get_query_payload=True)
-    assert (result['object_type'] == 'M' and
-            result['designation'] == '1998 QS55')
+    result = mpc.core.MPC.get_observations('1998 QS55', get_query_payload=True)
+    assert result['object_type'] == 'M' and result['designation'] == '1998 QS55'
 
-    result = mpc.core.MPC.get_observations('P/2010 WK',
-                                           get_query_payload=True)
-    assert (result['object_type'] == 'P' and
-            result['designation'] == 'P/2010 WK')
+    result = mpc.core.MPC.get_observations('P/2010 WK', get_query_payload=True)
+    assert result['object_type'] == 'P' and result['designation'] == 'P/2010 WK'
 
-    result = mpc.core.MPC.get_observations('C/2013 US10',
-                                           get_query_payload=True)
-    assert (result['object_type'] == 'C' and
-            result['designation'] == 'C/2013 US10')
+    result = mpc.core.MPC.get_observations('C/2013 US10', get_query_payload=True)
+    assert result['object_type'] == 'C' and result['designation'] == 'C/2013 US10'
 
-    result = mpc.core.MPC.get_observations('C/2008 FK75',
-                                           get_query_payload=True)
-    assert (result['object_type'] == 'C' and
-            result['designation'] == 'C/2008 FK75')
+    result = mpc.core.MPC.get_observations('C/2008 FK75', get_query_payload=True)
+    assert result['object_type'] == 'C' and result['designation'] == 'C/2008 FK75'
 
     result = mpc.core.MPC.get_observations('1P', get_query_payload=True)
     assert result['object_type'] == 'P' and result['number'] == '1'
@@ -438,14 +454,12 @@ def test_get_observations_target_parsing(patch_get):
     result = mpc.core.MPC.get_observations('C/2008 FK75',
                                            id_type='comet designation',
                                            get_query_payload=True)
-    assert (result['object_type'] == 'C' and
-            result['designation'] == 'C/2008 FK75')
+    assert result['object_type'] == 'C' and result['designation'] == 'C/2008 FK75'
 
     result = mpc.core.MPC.get_observations('P/2010 WK',
                                            id_type='comet designation',
                                            get_query_payload=True)
-    assert (result['object_type'] == 'P' and
-            result['designation'] == 'P/2010 WK')
+    assert result['object_type'] == 'P' and result['designation'] == 'P/2010 WK'
 
     result = mpc.core.MPC.get_observations('1P',
                                            id_type='comet number',
@@ -460,8 +474,7 @@ def test_get_observations_target_parsing(patch_get):
     result = mpc.core.MPC.get_observations('1998 QS55',
                                            id_type='asteroid designation',
                                            get_query_payload=True)
-    assert (result['object_type'] == 'M' and
-            result['designation'] == '1998 QS55')
+    assert result['object_type'] == 'M' and result['designation'] == '1998 QS55'
 
     with pytest.raises(ValueError):
         result = mpc.core.MPC.get_observations(
@@ -474,9 +487,8 @@ def test_get_observations_target_parsing(patch_get):
     # this should technically not work, but the server allows it
     result = mpc.core.MPC.get_observations(
         '1998 QS55', id_type='asteroid number', get_query_payload=True)
-    assert (result['object_type'] == 'M' and result['number'] == '1998 QS55')
+    assert result['object_type'] == 'M' and result['number'] == '1998 QS55'
 
     result = mpc.core.MPC.get_observations(
         '1P', id_type='comet designation', get_query_payload=True)
-    assert (result['object_type'] == 'P' and
-            result['designation'] == '1P')
+    assert result['object_type'] == 'P' and result['designation'] == '1P'

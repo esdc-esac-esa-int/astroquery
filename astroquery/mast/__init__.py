@@ -30,15 +30,18 @@ class Conf(_config.ConfigNamespace):
 
 conf = Conf()
 
-from .cutouts import TesscutClass, Tesscut
+from .cutouts import TesscutClass, Tesscut, ZcutClass, Zcut, HapcutClass, Hapcut
 from .observations import Observations, ObservationsClass, MastClass, Mast
 from .collections import Catalogs, CatalogsClass
-from .core import MastQueryWithLogin
+from .missions import MastMissions, MastMissionsClass
 from . import utils
 
 __all__ = ['Observations', 'ObservationsClass',
            'Catalogs', 'CatalogsClass',
+           'MastMissions', 'MastMissionsClass',
            'Mast', 'MastClass',
            'Tesscut', 'TesscutClass',
+           'Zcut', 'ZcutClass',
+           'Hapcut', 'HapcutClass',
            'Conf', 'conf', 'utils',
            ]

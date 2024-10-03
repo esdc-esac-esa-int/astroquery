@@ -5,7 +5,7 @@
 import os
 
 # ASTROPY
-from astropy.utils.data import _find_pkg_data_path, get_pkg_data_filename
+from astropy.utils.data import get_pkg_data_filename, get_pkg_data_path
 
 # LOCAL
 from .. import inspect
@@ -14,11 +14,12 @@ from ... import conf as cs_conf
 __doctest_skip__ = ['*']
 
 
-class TestConeSearchResults(object):
+class TestConeSearchResults:
     """Inspection of ``TestConeSearchValidation`` results."""
+
     def setup_class(self):
         self.datadir = 'data'
-        test_vos_path = _find_pkg_data_path(self.datadir) + os.sep
+        test_vos_path = get_pkg_data_path(self.datadir) + os.sep
 
         # Convert to a proper file:// URL--on *NIXen this is not necessary but
         # Windows paths will blow up if we don't do this.
@@ -30,8 +31,8 @@ class TestConeSearchResults(object):
         self.r = inspect.ConeSearchResults()
 
     def test_catkeys(self):
-        assert (self.r.catkeys['good'] ==
-                ['The USNO-A2.0 Catalogue (Monet+ 1998) 1'])
+        assert (self.r.catkeys['good']
+                == ['The USNO-A2.0 Catalogue (Monet+ 1998) 1'])
         assert self.r.catkeys['warn'] == []
         assert self.r.catkeys['exception'] == []
         assert self.r.catkeys['error'] == []

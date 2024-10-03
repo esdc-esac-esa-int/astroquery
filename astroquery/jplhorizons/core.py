@@ -1,17 +1,21 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
 
 # 1. standard library imports
-from numpy import nan
-from numpy import isnan
-from numpy import ndarray
 from collections import OrderedDict
+from typing import Mapping
 import warnings
 
 # 2. third party imports
+from requests.exceptions import HTTPError
+from numpy import nan
+from numpy import isnan
+from numpy import ndarray
 from astropy.table import Table, Column
 from astropy.io import ascii
 from astropy.time import Time
+from astropy import units as u
+from astropy.utils.exceptions import AstropyDeprecationWarning
+from astropy.utils.decorators import deprecated_renamed_argument, deprecated_attribute
 
 # 3. local imports - use relative imports
 # commonly required local imports shown below as example
@@ -28,62 +32,94 @@ __all__ = ['Horizons', 'HorizonsClass']
 @async_to_sync
 class HorizonsClass(BaseQuery):
     """
-    A class for querying the
-    `JPL Horizons <https://ssd.jpl.nasa.gov/horizons.cgi>`_ service.
+    Query the `JPL Horizons <https://ssd.jpl.nasa.gov/horizons/>`_ service.
     """
 
     TIMEOUT = conf.timeout
 
-    def __init__(self, id=None, location=None, epochs=None,
-                 id_type='smallbody'):
-        """Instantiate JPL query.
+    raw_response = deprecated_attribute(
+        'raw_response', '0.4.7',
+        alternative=("an ``_async`` method (e.g., ``ephemerides_async``) to "
+                     "return a response object, and access the content with "
+                     "``response.text``"))
+
+    def __init__(self, id=None, *, location=None, epochs=None,
+                 id_type=None):
+        """
+        Initialize JPL query.
+
 
         Parameters
         ----------
-        id : str, required
-            Name, number, or designation of the object to be queried
+
+        id : str or dict, required
+            Name, number, or designation of target object. Uses the same codes
+            as JPL Horizons. Arbitrary topocentric coordinates can be added in a
+            dict. The dict has to be of the form {``'lon'``: longitude in deg
+            (East positive, West negative), ``'lat'``: latitude in deg (North
+            positive, South negative), ``'elevation'``: elevation in km above
+            the reference ellipsoid, [``'body'``: Horizons body ID of the
+            central body; optional; if this value is not provided it is assumed
+            that this location is on Earth]}.  Float values are assumed to have
+            units of degrees and kilometers.
+
         location : str or dict, optional
-            Observer's location for ephemerides queries or center body
-            name for orbital element or vector queries. Uses the same
-            codes as JPL Horizons. If no location is provided, Earth's
-            center is used for ephemerides queries and the Sun's
-            center for elements and vectors queries. Arbitrary topocentic
-            coordinates for ephemerides queries can be provided in the
-            format of a dictionary. The
-            dictionary has to be of the form {``'lon'``: longitude in
-            deg (East positive, West negative), ``'lat'``: latitude in
-            deg (North positive, South negative), ``'elevation'``:
-            elevation in km above the reference ellipsoid, [``'body'``:
-            Horizons body ID of the central body; optional; if this value
-            is not provided it is assumed that this location is on Earth]}.
+            Observer's location for ephemerides queries or center body name for
+            orbital element or vector queries. Uses the same codes as JPL
+            Horizons. If no location is provided, Earth's center is used for
+            ephemerides queries and the Sun's center for elements and vectors
+            queries. Arbitrary topocentric coordinates for ephemerides queries
+            can be provided in the format of a dictionary. The dictionary has to
+            be of the form {``'lon'``: longitude (East positive, West negative),
+            ``'lat'``: latitude (North positive, South negative),
+            ``'elevation'``: elevation above the reference ellipsoid,
+            [``'body'``: Horizons body ID of the central body; optional; if this
+            value is not provided it is assumed that this location is on
+            Earth]}.  Float values are assumed to have units of degrees and
+            kilometers.
+
         epochs : scalar, list-like, or dictionary, optional
-            Either a list of epochs in JD or MJD format or a dictionary
-            defining a range of times and dates; the range dictionary has to
-            be of the form {``'start'``:'YYYY-MM-DD [HH:MM:SS]',
-            ``'stop'``:'YYYY-MM-DD [HH:MM:SS]', ``'step'``:'n[y|d|m|s]'}.
-            Epoch timescales depend on the type of query performed: UTC for
-            ephemerides queries, TDB for element queries, CT for vector queries.
-            If no epochs are provided, the current time is used.
+            Either a list of epochs in JD or MJD format or a dictionary defining
+            a range of times and dates; the range dictionary has to be of the
+            form {``'start'``: 'YYYY-MM-DD [HH:MM:SS]', ``'stop'``: 'YYYY-MM-DD
+            [HH:MM:SS]', ``'step'``: 'n[y|d|m|s]'}. Epoch timescales depend on
+            the type of query performed: UTC for ephemerides queries, TDB for
+            element and vector queries. If no epochs are provided, the current
+            time is used.
+
         id_type : str, optional
-            Identifier type, options:
-            ``'smallbody'``, ``'majorbody'`` (planets but also
-            anything that is not a small body), ``'designation'``,
-            ``'name'``, ``'asteroid_name'``, ``'comet_name'``,
-            ``'id'`` (Horizons id number), or ``'smallbody'`` (find the
-            closest match under any id_type), default: ``'smallbody'``
+            Controls Horizons's object selection for ``id``
+            [HORIZONSDOC_SELECTION]_ .  Options: ``'designation'`` (small body
+            designation), ``'name'`` (asteroid or comet name),
+            ``'asteroid_name'``, ``'comet_name'``, ``'smallbody'`` (asteroid and
+            comet search), or ``None`` (first search search planets, natural
+            satellites, spacecraft, and special cases, and if no matches, then
+            search small bodies).
+
+
+        References
+        ----------
+
+        .. [HORIZONSDOC_SELECTION] https://ssd.jpl.nasa.gov/horizons/manual.html#select
+            (retrieved 2021 Sep 23).
 
 
         Examples
         --------
-            >>> from astroquery.jplhorizons import Horizons
-            >>> eros = Horizons(id='433', location='568',
-            ...              epochs={'start':'2017-01-01',
-            ...                      'stop':'2017-02-01',
-            ...                      'step':'1d'})
-            >>> print(eros)  # doctest: +SKIP
-            JPLHorizons instance "433"; location=568, epochs={'start': '2017-01-01', 'step': '1d', 'stop': '2017-02-01'}, id_type=smallbody
+
+        >>> from astroquery.jplhorizons import Horizons
+        >>> eros = Horizons(id='433', location='568',
+        ...                 epochs={'start': '2017-01-01',
+        ...                         'stop': '2017-02-01',
+        ...                         'step': '1d'})
+        >>> print(eros)
+        JPLHorizons instance "433"; location=568,
+        epochs={'start': '2017-01-01', 'stop': '2017-02-01', 'step': '1d'}, id_type=None
+
         """
-        super(HorizonsClass, self).__init__()
+
+        super().__init__()
+
         self.id = id
         self.location = location
 
@@ -92,9 +128,7 @@ class HorizonsClass(BaseQuery):
             if isinstance(epochs, (list, tuple, ndarray)):
                 pass
             elif isinstance(epochs, dict):
-                if not ('start' in epochs and
-                        'stop' in epochs and
-                        'step' in epochs):
+                if not ('start' in epochs and 'stop' in epochs and 'step' in epochs):
                     raise ValueError('time range ({:s}) requires start, stop, '
                                      'and step'.format(str(epochs)))
             else:
@@ -103,9 +137,13 @@ class HorizonsClass(BaseQuery):
         self.epochs = epochs
 
         # check for id_type
-        if id_type not in ['smallbody', 'majorbody',
-                           'designation', 'name',
-                           'asteroid_name', 'comet_name', 'id']:
+        if id_type in ['majorbody', 'id']:
+            warnings.warn("``id_type``s 'majorbody' and 'id' are deprecated "
+                          "and replaced with ``None``, which has the same "
+                          "functionality.", AstropyDeprecationWarning)
+            id_type = None
+        if id_type not in [None, 'smallbody', 'designation', 'name',
+                           'asteroid_name', 'comet_name']:
             raise ValueError('id_type ({:s}) not allowed'.format(id_type))
         self.id_type = id_type
 
@@ -115,23 +153,27 @@ class HorizonsClass(BaseQuery):
         self.query_type = None  # ['ephemerides', 'elements', 'vectors']
 
         self.uri = None  # will contain query URL
-        self.raw_response = None  # will contain raw response from server
+        self._raw_response = None  # will contain raw response from server
 
     def __str__(self):
         """
-        String representation of HorizonsClass object instance'
+        String representation of this instance.
 
 
         Examples
         --------
-            >>> from astroquery.jplhorizons import Horizons
-            >>> eros = Horizons(id='433', location='568',
-            ...                 epochs={'start':'2017-01-01',
-            ...                         'stop':'2017-02-01',
-            ...                         'step':'1d'})
-            >>> print(eros)  # doctest: +SKIP
-            JPLHorizons instance "433"; location=568, epochs={'start': '2017-01-01', 'step': '1d', 'stop': '2017-02-01'}, id_type=smallbody
+
+        >>> from astroquery.jplhorizons import Horizons
+        >>> eros = Horizons(id='433', location='568',
+        ...                 epochs={'start':'2017-01-01',
+        ...                         'stop':'2017-02-01',
+        ...                         'step':'1d'})
+        >>> print(eros)
+        JPLHorizons instance "433"; location=568,
+        epochs={'start': '2017-01-01', 'stop': '2017-02-01', 'step': '1d'}, id_type=None
+
         """
+
         return ('JPLHorizons instance \"{:s}\"; location={:s}, '
                 'epochs={:s}, id_type={:s}').format(
                     str(self.id),
@@ -139,31 +181,62 @@ class HorizonsClass(BaseQuery):
                     str(self.epochs),
                     str(self.id_type))
 
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, _id):
+        # check & format coordinate dictionaries for id; simply treat other
+        # values as given
+        if isinstance(_id, Mapping):
+            self._id = self._prep_loc_dict(dict(_id), "id")
+        else:
+            self._id = _id
+
+    @property
+    def location(self):
+        return self._location
+
+    @location.setter
+    def location(self, _location):
+        # check & format coordinate dictionaries for location; simply treat
+        # other values as given
+        if isinstance(_location, Mapping):
+            self._location = self._prep_loc_dict(dict(_location), "location")
+        else:
+            self._location = _location
+
     # ---------------------------------- query functions
 
-    def ephemerides_async(self, airmass_lessthan=99,
+    @deprecated_renamed_argument("get_raw_response", None, since="0.4.7",
+                                 alternative="async methods")
+    def ephemerides_async(self, *, airmass_lessthan=99,
                           solar_elongation=(0, 180), max_hour_angle=0,
                           rate_cutoff=None,
                           skip_daylight=False,
                           refraction=False,
-                          refsystem='J2000',
+                          refsystem='ICRF',
                           closest_apparition=False, no_fragments=False,
                           quantities=conf.eph_quantities,
+                          optional_settings=None,
                           get_query_payload=False,
                           get_raw_response=False, cache=True,
                           extra_precision=False):
         """
-        Query JPL Horizons for ephemerides. The ``location`` parameter
-        in ``HorizonsClass`` refers in this case to the location of
-        the observer.
+        Query JPL Horizons for ephemerides.
 
-        The following tables list the values queried, their
-        definitions, data types, units, and original Horizons
-        designations (where available). For more information on the
-        definitions of these quantities, please refer to the `Horizons
-        User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
+        .. deprecated:: 0.4.7
+           The ``get_raw_response`` keyword argument is deprecated.  The
+           `~HorizonsClass.ephemerides_async` method will return a raw response.
 
+        The ``location`` parameter in ``HorizonsClass`` refers in this case to
+        the location of the observer.
 
+        The following tables list the values queried, their definitions, data
+        types, units, and original Horizons designations (where available). For
+        more information on the definitions of these quantities, please refer to
+        the `Horizons User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
 
         +------------------+-----------------------------------------------+
         | Column Name      | Definition                                    |
@@ -184,7 +257,7 @@ class HorizonsClass(BaseQuery):
         +------------------+-----------------------------------------------+
         | phasecoeff       | comet phase coeff (float, mag/deg, ``PHCOFF``)|
         +------------------+-----------------------------------------------+
-        | datetime         | epoch (str, ``Date__(UT)__HR:MN:SC.fff``)     |
+        | datetime_str     | epoch (str, ``Date__(UT)__HR:MN:SC.fff``)     |
         +------------------+-----------------------------------------------+
         | datetime_jd      | epoch Julian Date (float,                     |
         |                  | ``Date_________JDUT``)                        |
@@ -394,8 +467,8 @@ class HorizonsClass(BaseQuery):
         +------------------+-----------------------------------------------+
         | true_anom        | True Anomaly (float, deg, ``Tru_Anom``)       |
         +------------------+-----------------------------------------------+
-        | hour_angle       | local apparent hour angle (string,            |
-        |                  | sexagesimal angular hours, ``L_Ap_Hour_Ang``) |
+        | hour_angle       | local apparent hour angle (float,             |
+        |                  | hour, ``L_Ap_Hour_Ang``)                      |
         +------------------+-----------------------------------------------+
         | alpha_true       | true phase angle (float, deg, ``phi``)        |
         +------------------+-----------------------------------------------+
@@ -405,111 +478,162 @@ class HorizonsClass(BaseQuery):
         | PABLat           | phase angle bisector latitude                 |
         |                  | (float, deg, ``PAB-LAT``)                     |
         +------------------+-----------------------------------------------+
+        | App_Lon_Sun      | apparent target-centered longitude of the Sun |
+        |                  | (float, hour, ``App_Lon_Sun``)                |
+        +------------------+-----------------------------------------------+
+        | RA_ICRF_app      | airless apparent right ascension of the target|
+        |                  | in the ICRF                                   |
+        |                  | (float, hour, ``RA_(ICRF-a-app)``)            |
+        +------------------+-----------------------------------------------+
+        | DEC_ICRF_app     | airless apparent declination of the target    |
+        |                  | in the ICRF                                   |
+        |                  | (float, deg, ``DEC_(ICRF-a-app)``)            |
+        +------------------+-----------------------------------------------+
+        | RA_ICRF_rate_app | RA rate of change in the targets' ICRF        |
+        |                  | multiplied by the cosine of declination       |
+        |                  | (float, arcsec/hour, ``I_dRA*cosD``)          |
+        +------------------+-----------------------------------------------+
+        | DEC_ICRF_rate_app| DEC rate of change in the targets' ICRF       |
+        |                  | (float, arcsec/hour, ``I_d(DEC)/dt``)         |
+        +------------------+-----------------------------------------------+
+        | Sky_motion       | Total apparent angular rate in the plane-of-  |
+        |                  | sky                                           |
+        |                  | (float, arcsec/minute, ``Sky_motion``)        |
+        +------------------+-----------------------------------------------+
+        | Sky_mot_PA       | position angle direction of motion in the     |
+        |                  | plane-of-sky                                  |
+        |                  | (float, deg, ``Sky_mot_PA``)                  |
+        +------------------+-----------------------------------------------+
+        | RelVel-ANG       | flight path angle of the target's relative    |
+        |                  | motion with respect to the observer's         |
+        |                  | line-of-sight                                 |
+        |                  | (float, deg, ``RelVel-ANG``)                  |
+        +------------------+-----------------------------------------------+
+        | Lun_Sky_Brt      | Sky brightness due to moonlight               |
+        |                  | (float, mag, ``Lun_Sky_Brt``)                 |
+        +------------------+-----------------------------------------------+
+        | sky_SNR          | approximate visual signal-to-noise ratio of   |
+        |                  | the target's brightness divided by lunar sky  |
+        |                  | brightness                                    |
+        |                  | (float, unitless, ``sky_SNR``)                |
+        +------------------+-----------------------------------------------+
 
 
         Parameters
         ----------
+
         airmass_lessthan : float, optional
             Defines a maximum airmass for the query, default: 99
+
         solar_elongation : tuple, optional
             Permissible solar elongation range: (minimum, maximum); default:
             (0,180)
+
         max_hour_angle : float, optional
             Defines a maximum hour angle for the query, default: 0
+
         rate_cutoff : float, optional
-            Angular range rate upper limit cutoff in arcsec/h; default:
-            disabled
+            Angular range rate upper limit cutoff in arcsec/h; default: disabled
+
         skip_daylight : boolean, optional
             Crop daylight epochs in query, default: False
+
         refraction : boolean
-            If `True`, coordinates account for a standard atmosphere
-            refraction model; if `False`, coordinates do not account for
-            refraction (airless model); default: `False`
+            If ``True``, coordinates account for a standard atmosphere
+            refraction model; if ``False``, coordinates do not account for
+            refraction (airless model); default: ``False``
+
         refsystem : string
-            Coordinate reference system: ``'J2000'`` or ``'B1950'``;
-            default: ``'J2000'``
+            Coordinate reference system: ``'ICRF'`` or ``'B1950'``; default:
+            ``'ICRF'``
+
         closest_apparition : boolean, optional
-            Only applies to comets. This option will choose the
-            closest apparition available in time to the selected
-            epoch; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. This option will choose the closest
+            apparition available in time to the selected epoch; default: False.
+            Do not use this option for non-cometary objects.
+
         no_fragments : boolean, optional
-            Only applies to comets. Reject all comet fragments from
-            selection; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. Reject all comet fragments from selection;
+            default: False. Do not use this option for non-cometary objects.
+
         quantities : integer or string, optional
             Single integer or comma-separated list in the form of a string
-            corresponding to all the
-            quantities to be queried from JPL Horizons using the coding
-            according to the `JPL Horizons User Manual Definition of
-            Observer Table Quantities
+            corresponding to all the quantities to be queried from JPL Horizons
+            using the coding according to the `JPL Horizons User Manual
+            Definition of Observer Table Quantities
             <https://ssd.jpl.nasa.gov/?horizons_doc#table_quantities>`_;
             default: all quantities
+
+        optional_settings: dict, optional
+            key-value based dictionary to inject some additional optional settings
+            See `Optional observer-table settings" <https://ssd.jpl.nasa.gov/horizons.cgi?s_tset=1>`_;
+            default: empty optional setting
+
         get_query_payload : boolean, optional
-            When set to `True` the method returns the HTTP request
-            parameters as a dict, default: False
+            When set to `True` the method returns the HTTP request parameters as
+            a dict, default: False
+
         get_raw_response : boolean, optional
-            Return raw data as obtained by JPL Horizons without parsing the
-            data into a table, default: False
+            Return raw data as obtained by JPL Horizons without parsing the data
+            into a table, default: False
+
         extra_precision : boolean, optional
             Enables extra precision in RA and DEC values; default: False
+
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
 
         Returns
         -------
+
         response : `requests.Response`
             The response of the HTTP request.
 
-
         Examples
         --------
-            >>> from astroquery.jplhorizons import Horizons
-            >>> obj = Horizons(id='Ceres', location='568',
-            ...             epochs={'start':'2010-01-01',
-            ...                     'stop':'2010-03-01',
-            ...                     'step':'10d'})
-            >>> eph = obj.ephemerides()  # doctest: +SKIP
-            >>> print(eph)  # doctest: +SKIP
-            targetname    datetime_str   datetime_jd ...   GlxLat  RA_3sigma
-            DEC_3sigma
-               ---            ---             d      ...    deg      arcsec
-            arcsec
-            ---------- ----------------- ----------- ... --------- ---------
-            ----------
-               1 Ceres 2010-Jan-01 00:00   2455197.5 ... 24.120057       0.0
-            0.0
-               1 Ceres 2010-Jan-11 00:00   2455207.5 ... 20.621496       0.0
-            0.0
-               1 Ceres 2010-Jan-21 00:00   2455217.5 ... 17.229529       0.0
-            0.0
-               1 Ceres 2010-Jan-31 00:00   2455227.5 ...  13.97264       0.0
-            0.0
-               1 Ceres 2010-Feb-10 00:00   2455237.5 ... 10.877201       0.0
-            0.0
-               1 Ceres 2010-Feb-20 00:00   2455247.5 ...  7.976737       0.0
-            0.0
+
+        >>> from astroquery.jplhorizons import Horizons
+        >>> obj = Horizons(id='Ceres', location='568',
+        ...             epochs={'start':'2010-01-01',
+        ...                     'stop':'2010-03-01',
+        ...                     'step':'10d'})
+        >>> eph = obj.ephemerides()  # doctest: +REMOTE_DATA
+        >>> print(eph)  # doctest: +SKIP
+            targetname       datetime_str   datetime_jd ...  PABLon  PABLat
+               ---               ---             d      ...   deg     deg
+        ----------------- ----------------- ----------- ... -------- ------
+        1 Ceres (A801 AA) 2010-Jan-01 00:00   2455197.5 ... 238.2494 4.5532
+        1 Ceres (A801 AA) 2010-Jan-11 00:00   2455207.5 ... 241.3339 4.2832
+        1 Ceres (A801 AA) 2010-Jan-21 00:00   2455217.5 ... 244.3394 4.0089
+        1 Ceres (A801 AA) 2010-Jan-31 00:00   2455227.5 ... 247.2518 3.7289
+        1 Ceres (A801 AA) 2010-Feb-10 00:00   2455237.5 ... 250.0576 3.4415
+        1 Ceres (A801 AA) 2010-Feb-20 00:00   2455247.5 ... 252.7383 3.1451
 
         """
 
         URL = conf.horizons_server
 
-        # check for required information
+        # check for required information and assemble commanddline stub
         if self.id is None:
             raise ValueError("'id' parameter not set. Query aborted.")
+        elif isinstance(self.id, dict):
+            commandline = self._format_id_coords(self.id)
+        else:
+            commandline = str(self.id)
         if self.location is None:
             self.location = '500@399'
         if self.epochs is None:
             self.epochs = Time.now().jd
+        # expand commandline based on self.id_type
 
-        # assemble commandline based on self.id_type
-        commandline = str(self.id)
         if self.id_type in ['designation', 'name',
                             'asteroid_name', 'comet_name']:
             commandline = ({'designation': 'DES=',
                             'name': 'NAME=',
                             'asteroid_name': 'ASTNAM=',
-                            'comet_name': 'COMNAM='}[self.id_type] +
-                           commandline)
+                            'comet_name': 'COMNAM='}[self.id_type] + commandline)
         if self.id_type in ['smallbody', 'asteroid_name',
                             'comet_name', 'designation']:
             commandline += ';'
@@ -522,35 +646,23 @@ class HorizonsClass(BaseQuery):
                 commandline += ' NOFRAG;'
 
         request_payload = OrderedDict([
-            ('batch', 1),
-            ('TABLE_TYPE', 'OBSERVER'),
-            ('QUANTITIES', "'"+str(quantities)+"'"),
+            ('format', 'text'),
+            ('EPHEM_TYPE', 'OBSERVER'),
+            ('QUANTITIES', "'" + str(quantities) + "'"),
             ('COMMAND', '"' + commandline + '"'),
-            ('SOLAR_ELONG', ('"' + str(solar_elongation[0]) + "," +
-                             str(solar_elongation[1]) + '"')),
+            ('SOLAR_ELONG', ('"' + str(solar_elongation[0]) + ","
+                             + str(solar_elongation[1]) + '"')),
             ('LHA_CUTOFF', (str(max_hour_angle))),
             ('CSV_FORMAT', ('YES')),
             ('CAL_FORMAT', ('BOTH')),
             ('ANG_FORMAT', ('DEG')),
             ('APPARENT', ({False: 'AIRLESS',
                            True: 'REFRACTED'}[refraction])),
-            ('REF_SYSTEM', (refsystem)),
+            ('REF_SYSTEM', refsystem),
             ('EXTRA_PREC', {True: 'YES', False: 'NO'}[extra_precision])])
 
         if isinstance(self.location, dict):
-            if ('lon' not in self.location or 'lat' not in self.location or
-                    'elevation' not in self.location):
-                raise ValueError(("'location' must contain lon, lat, "
-                                  "elevation"))
-
-            if 'body' not in self.location:
-                self.location['body'] = '399'
-            request_payload['CENTER'] = 'coord@{:s}'.format(
-                str(self.location['body']))
-            request_payload['COORD_TYPE'] = 'GEODETIC'
-            request_payload['SITE_COORD'] = "'{:f},{:f},{:f}'".format(
-                self.location['lon'], self.location['lat'],
-                self.location['elevation'])
+            request_payload = dict(**request_payload, **self._location_to_params(self.location))
         else:
             request_payload['CENTER'] = "'" + str(self.location) + "'"
 
@@ -562,16 +674,14 @@ class HorizonsClass(BaseQuery):
             request_payload['TLIST'] = "\n".join([str(epoch) for epoch in
                                                   self.epochs])
         elif isinstance(self.epochs, dict):
-            if ('start' not in self.epochs or 'stop' not in self.epochs or
-                    'step' not in self.epochs):
-                raise ValueError("'epochs' must contain start, " +
-                                 "stop, step")
+            if ('start' not in self.epochs or 'stop' not in self.epochs or 'step' not in self.epochs):
+                raise ValueError("'epochs' must contain start, stop, step")
             request_payload['START_TIME'] = (
-                '"'+self.epochs['start'].replace("'", '')+'"')
+                '"' + self.epochs['start'].replace("'", '') + '"')
             request_payload['STOP_TIME'] = (
-                '"'+self.epochs['stop'].replace("'", '')+'"')
+                '"' + self.epochs['stop'].replace("'", '') + '"')
             request_payload['STEP_SIZE'] = (
-                '"'+self.epochs['step'].replace("'", '')+'"')
+                '"' + self.epochs['step'].replace("'", '') + '"')
         else:
             # treat epochs as scalar
             request_payload['TLIST'] = str(self.epochs)
@@ -583,6 +693,11 @@ class HorizonsClass(BaseQuery):
             request_payload['SKIP_DAYLT'] = 'YES'
         else:
             request_payload['SKIP_DAYLT'] = 'NO'
+
+        # inject optional settings if provided
+        if optional_settings:
+            for key, value in optional_settings.items():
+                request_payload[key] = value
 
         self.query_type = 'ephemerides'
 
@@ -608,22 +723,28 @@ class HorizonsClass(BaseQuery):
 
         return response
 
-    def elements_async(self, get_query_payload=False,
-                       refsystem='J2000',
+    @deprecated_renamed_argument("get_raw_response", None, since="0.4.7",
+                                 alternative="async methods")
+    def elements_async(self, *, get_query_payload=False,
+                       refsystem='ICRF',
                        refplane='ecliptic',
                        tp_type='absolute',
                        closest_apparition=False, no_fragments=False,
                        get_raw_response=False, cache=True):
         """
-        Query JPL Horizons for osculating orbital elements. The ``location``
-        parameter in ``HorizonsClass`` refers in this case to the  center
-        body relative to which the elements are provided.
+        Query JPL Horizons for osculating orbital elements.
 
-        The following table lists the values queried, their
-        definitions, data types, units, and original Horizons
-        designations (where available). For more information on the
-        definitions of these quantities, please refer to the `Horizons
-        User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
+        .. deprecated:: 0.4.7
+           The ``get_raw_response`` keyword argument is deprecated.  The
+           `~HorizonsClass.elements_async` method will return a raw response.
+
+        The ``location`` parameter in ``HorizonsClass`` refers in this case to
+        the center body relative to which the elements are provided.
+
+        The following table lists the values queried, their definitions, data
+        types, units, and original Horizons designations (where available). For
+        more information on the definitions of these quantities, please refer to
+        the `Horizons User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
 
         +------------------+-----------------------------------------------+
         | Column Name      | Definition                                    |
@@ -676,73 +797,87 @@ class HorizonsClass(BaseQuery):
 
         Parameters
         ----------
+
         refsystem : string
-            Element reference system for geometric and astrometric
-            quantities: ``'J2000'`` or ``'B1950'``; default: ``'J2000'``
+            Element reference system for geometric and astrometric quantities:
+            ``'ICRF'`` or ``'B1950'``; default: ``'ICRF'``
+
         refplane : string
-            Reference plane for all output quantities: ``'ecliptic'``
-            (ecliptic and mean equinox of reference epoch), ``'earth'``
-            (Earth mean equator and equinox of reference epoch), or
-            ``'body'`` (body mean equator and node of date); default:
-            ``'ecliptic'``
+            Reference plane for all output quantities: ``'ecliptic'`` (ecliptic
+            and mean equinox of reference epoch), ``'earth'`` (Earth mean
+            equator and equinox of reference epoch), or ``'body'`` (body mean
+            equator and node of date); default: ``'ecliptic'``
+
         tp_type : string
             Representation for time-of-perihelion passage: ``'absolute'`` or
             ``'relative'`` (to epoch); default: ``'absolute'``
+
         closest_apparition : boolean, optional
-            Only applies to comets. This option will choose the
-            closest apparition available in time to the selected
-            epoch; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. This option will choose the closest
+            apparition available in time to the selected epoch; default: False.
+            Do not use this option for non-cometary objects.
+
         no_fragments : boolean, optional
-            Only applies to comets. Reject all comet fragments from
-            selection; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. Reject all comet fragments from selection;
+            default: False. Do not use this option for non-cometary objects.
+
         get_query_payload : boolean, optional
-            When set to ``True`` the method returns the HTTP request
-            parameters as a dict, default: False
+            When set to ``True`` the method returns the HTTP request parameters
+            as a dict, default: False
+
         get_raw_response: boolean, optional
-            Return raw data as obtained by JPL Horizons without parsing the
-            data into a table, default: False
+            Return raw data as obtained by JPL Horizons without parsing the data
+            into a table, default: False
+
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
 
         Returns
         -------
+
         response : `requests.Response`
             The response of the HTTP request.
 
 
         Examples
         --------
-            >>> from astroquery.jplhorizons import Horizons
-            >>> obj = Horizons(id='433', location='500@10',
-            ...                epochs=2458133.33546)
-            >>> el = obj.elements()  # doctest: +SKIP
-            >>> print(el)  # doctest: +SKIP
-                targetname      datetime_jd  ...       Q            P
-                   ---               d       ...       AU           d
-            ------------------ ------------- ... ------------- ------------
-            433 Eros (1898 DQ) 2458133.33546 ... 1.78244263804 642.93873484
+
+        >>> from astroquery.jplhorizons import Horizons
+        >>> obj = Horizons(id='433', location='500@10',
+        ...                epochs=2458133.33546)
+        >>> el = obj.elements()  # doctest: +REMOTE_DATA
+        >>> print(el)  # doctest: +SKIP
+            targetname      datetime_jd  ...       Q            P
+                ---              d       ...       AU           d
+        ------------------ ------------- ... ------------- ------------
+        433 Eros (1898 DQ) 2458133.33546 ... 1.78244263804 642.93873484
+
         """
 
         URL = conf.horizons_server
 
-        # check for required information
+        # check for required information and assemble commandline stub
         if self.id is None:
             raise ValueError("'id' parameter not set. Query aborted.")
+        elif isinstance(self.id, dict):
+            commandline = self._format_id_coords(self.id)
+        else:
+            commandline = str(self.id)
+
         if self.location is None:
             self.location = '500@10'
         if self.epochs is None:
             self.epochs = Time.now().jd
 
-        # assemble commandline based on self.id_type
-        commandline = str(self.id)
+        # expand commandline based on self.id_type
         if self.id_type in ['designation', 'name',
                             'asteroid_name', 'comet_name']:
             commandline = ({'designation': 'DES=',
                             'name': 'NAME=',
                             'asteroid_name': 'ASTNAM=',
-                            'comet_name': 'COMNAM='}[self.id_type] +
-                           commandline)
+                            'comet_name': 'COMNAM='}[self.id_type] + commandline)
         if self.id_type in ['smallbody', 'asteroid_name',
                             'comet_name', 'designation']:
             commandline += ';'
@@ -755,13 +890,13 @@ class HorizonsClass(BaseQuery):
                 commandline += ' NOFRAG;'
 
         if isinstance(self.location, dict):
-            raise ValueError(('cannot use topographic position in orbital'
+            raise ValueError(('cannot use topographic position in orbital '
                               'elements query'))
 
         # configure request_payload for ephemerides query
         request_payload = OrderedDict([
-            ('batch', 1),
-            ('TABLE_TYPE', 'ELEMENTS'),
+            ('format', 'text'),
+            ('EPHEM_TYPE', 'ELEMENTS'),
             ('MAKE_EPHEM', 'YES'),
             ('OUT_UNITS', 'AU-D'),
             ('COMMAND', '"' + commandline + '"'),
@@ -780,9 +915,9 @@ class HorizonsClass(BaseQuery):
             request_payload['TLIST'] = "\n".join([str(epoch) for
                                                   epoch in
                                                   self.epochs])
-        elif type(self.epochs) is dict:
-            if ('start' not in self.epochs or 'stop' not in self.epochs or
-                    'step' not in self.epochs):
+        elif isinstance(self.epochs, dict):
+            if ('start' not in self.epochs or 'stop' not in self.epochs
+                    or 'step' not in self.epochs):
                 raise ValueError("'epochs' must contain start, "
                                  "stop, step")
             request_payload['START_TIME'] = (
@@ -819,21 +954,27 @@ class HorizonsClass(BaseQuery):
 
         return response
 
-    def vectors_async(self, get_query_payload=False,
+    @deprecated_renamed_argument("get_raw_response", None, since="0.4.7",
+                                 alternative="async methods")
+    def vectors_async(self, *, get_query_payload=False,
                       closest_apparition=False, no_fragments=False,
                       get_raw_response=False, cache=True,
                       refplane='ecliptic', aberrations='geometric',
                       delta_T=False,):
         """
-        Query JPL Horizons for state vectors. The ``location``
-        parameter in ``HorizonsClass`` refers in this case to the center
-        body relative to which the vectors are provided.
+        Query JPL Horizons for state vectors.
 
-        The following table lists the values queried, their
-        definitions, data types, units, and original Horizons
-        designations (where available). For more information on the
-        definitions of these quantities, please refer to the `Horizons
-        User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
+        .. deprecated:: 0.4.7
+           The ``get_raw_response`` keyword argument is deprecated.  The
+           `~HorizonsClass.vectors_async` method will return a raw response.
+
+        The ``location`` parameter in ``HorizonsClass`` refers in this case to
+        the center body relative to which the vectors are provided.
+
+        The following table lists the values queried, their definitions, data
+        types, units, and original Horizons designations (where available). For
+        more information on the definitions of these quantities, please refer to
+        the `Horizons User Manual <https://ssd.jpl.nasa.gov/?horizons_doc>`_.
 
         +------------------+-----------------------------------------------+
         | Column Name      | Definition                                    |
@@ -890,90 +1031,104 @@ class HorizonsClass(BaseQuery):
 
         Parameters
         ----------
+
         closest_apparition : boolean, optional
-            Only applies to comets. This option will choose the
-            closest apparition available in time to the selected
-            epoch; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. This option will choose the closest
+            apparition available in time to the selected epoch; default: False.
+            Do not use this option for non-cometary objects.
+
         no_fragments : boolean, optional
-            Only applies to comets. Reject all comet fragments from
-            selection; default: False. Do not use this option for
-            non-cometary objects.
+            Only applies to comets. Reject all comet fragments from selection;
+            default: False. Do not use this option for non-cometary objects.
+
         get_query_payload : boolean, optional
-            When set to `True` the method returns the HTTP request
-            parameters as a dict, default: False
+            When set to `True` the method returns the HTTP request parameters as
+            a dict, default: False
+
         get_raw_response: boolean, optional
-            Return raw data as obtained by JPL Horizons without parsing the
-            data into a table, default: False
+            Return raw data as obtained by JPL Horizons without parsing the data
+            into a table, default: False
+
         refplane : string
-            Reference plane for all output quantities: ``'ecliptic'``
-            (ecliptic and mean equinox of reference epoch), ``'earth'``
-            (Earth mean equator and equinox of reference epoch), or
-            ``'body'`` (body mean equator and node of date); default:
-            ``'ecliptic'``
+            Reference plane for all output quantities: ``'ecliptic'`` (ecliptic
+            and mean equinox of reference epoch), ``'earth'`` (Earth mean
+            equator and equinox of reference epoch), or ``'body'`` (body mean
+            equator and node of date); default: ``'ecliptic'``.
+
+            See :ref:`Horizons Reference Frames <jpl-horizons-reference-frames>`
+            in the astroquery documentation for details.
+
         aberrations : string, optional
             Aberrations to be accounted for: [``'geometric'``,
             ``'astrometric'``, ``'apparent'``]. Default: ``'geometric'``
+
         delta_T : boolean, optional
             Triggers output of time-varying difference between TDB and UT
             time-scales. Default: False
 
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
+
 
         Returns
         -------
+
         response : `requests.Response`
             The response of the HTTP request.
 
 
         Examples
         --------
-            >>> from astroquery.jplhorizons import Horizons
-            >>> obj = Horizons(id='2012 TC4', location='257',
-            ...             epochs={'start':'2017-10-01',
-            ...                     'stop':'2017-10-02',
-            ...                     'step':'10m'})
-            >>> vec = obj.vectors()  # doctest: +SKIP
-            >>> print(vec)  # doctest: +SKIP
-            targetname  datetime_jd  ...      range          range_rate
-               ---           d       ...        AU             AU / d
-            ---------- ------------- ... --------------- -----------------
-            (2012 TC4)     2458027.5 ... 0.0429332099306 -0.00408018711862
-            (2012 TC4) 2458027.50694 ... 0.0429048742906 -0.00408040726527
-            (2012 TC4) 2458027.51389 ... 0.0428765385796 -0.00408020747595
-            (2012 TC4) 2458027.52083 ... 0.0428482057142  -0.0040795878561
-            (2012 TC4) 2458027.52778 ...  0.042819878607 -0.00407854931543
-            (2012 TC4) 2458027.53472 ... 0.0427915601617  -0.0040770935665
-                   ...           ... ...             ...               ...
-            (2012 TC4) 2458028.45833 ... 0.0392489462501 -0.00405496595173
-            (2012 TC4) 2458028.46528 ...   0.03922077771 -0.00405750632914
-            (2012 TC4) 2458028.47222 ...  0.039192592935 -0.00405964084539
-            (2012 TC4) 2458028.47917 ...  0.039164394759 -0.00406136516755
-            (2012 TC4) 2458028.48611 ... 0.0391361860433 -0.00406267574646
-            (2012 TC4) 2458028.49306 ... 0.0391079696711  -0.0040635698239
-            (2012 TC4)     2458028.5 ... 0.0390797485422 -0.00406404543822
-            Length = 145 rows
+
+        >>> from astroquery.jplhorizons import Horizons
+        >>> obj = Horizons(id='2012 TC4', location='257',
+        ...                epochs={'start': '2017-10-01',
+        ...                        'stop': '2017-10-02',
+        ...                        'step': '10m'})
+        >>> vec = obj.vectors()  # doctest: +REMOTE_DATA
+        >>> print(vec)  # doctest: +SKIP
+        targetname  datetime_jd  ...      range          range_rate
+           ---           d       ...        AU             AU / d
+        ---------- ------------- ... --------------- -----------------
+        (2012 TC4)     2458027.5 ... 0.0429332099306 -0.00408018711862
+        (2012 TC4) 2458027.50694 ... 0.0429048742906 -0.00408040726527
+        (2012 TC4) 2458027.51389 ... 0.0428765385796 -0.00408020747595
+        (2012 TC4) 2458027.52083 ... 0.0428482057142  -0.0040795878561
+        (2012 TC4) 2458027.52778 ...  0.042819878607 -0.00407854931543
+        (2012 TC4) 2458027.53472 ... 0.0427915601617  -0.0040770935665
+               ...           ... ...             ...               ...
+        (2012 TC4) 2458028.45833 ... 0.0392489462501 -0.00405496595173
+        (2012 TC4) 2458028.46528 ...   0.03922077771 -0.00405750632914
+        (2012 TC4) 2458028.47222 ...  0.039192592935 -0.00405964084539
+        (2012 TC4) 2458028.47917 ...  0.039164394759 -0.00406136516755
+        (2012 TC4) 2458028.48611 ... 0.0391361860433 -0.00406267574646
+        (2012 TC4) 2458028.49306 ... 0.0391079696711  -0.0040635698239
+        (2012 TC4)     2458028.5 ... 0.0390797485422 -0.00406404543822
+        Length = 145 rows
+
         """
 
         URL = conf.horizons_server
 
-        # check for required information
+        # check for required information and assemble commandline stub
         if self.id is None:
             raise ValueError("'id' parameter not set. Query aborted.")
+        elif isinstance(self.id, dict):
+            commandline = self._format_id_coords(self.id)
+        else:
+            commandline = str(self.id)
         if self.location is None:
             self.location = '500@10'
         if self.epochs is None:
             self.epochs = Time.now().jd
-
-        # assemble commandline based on self.id_type
-        commandline = str(self.id)
-
+        # expand commandline based on self.id_type
         if self.id_type in ['designation', 'name',
                             'asteroid_name', 'comet_name']:
             commandline = ({'designation': 'DES=',
                             'name': 'NAME=',
                             'asteroid_name': 'ASTNAM=',
-                            'comet_name': 'COMNAM='}[self.id_type] +
-                           commandline)
+                            'comet_name': 'COMNAM='}[self.id_type] + commandline)
         if self.id_type in ['smallbody', 'asteroid_name',
                             'comet_name', 'designation']:
             commandline += ';'
@@ -984,45 +1139,45 @@ class HorizonsClass(BaseQuery):
                 commandline += ' CAP{:s};'.format(closest_apparition)
             if no_fragments:
                 commandline += ' NOFRAG;'
-
-        if isinstance(self.location, dict):
-            raise ValueError(('cannot use topographic position in state'
-                              'vectors query'))
-
-        # configure request_payload for ephemerides query
+        # configure request_payload for vectors query
         request_payload = OrderedDict([
-            ('batch', 1),
-            ('TABLE_TYPE', 'VECTORS'),
+            ('format', 'text'),
+            ('EPHEM_TYPE', 'VECTORS'),
             ('OUT_UNITS', 'AU-D'),
             ('COMMAND', '"' + commandline + '"'),
-            ('CENTER', ("'" + str(self.location) + "'")),
             ('CSV_FORMAT', ('"YES"')),
-            ('REF_PLANE', {'ecliptic': 'ECLIPTIC', 'earth': 'FRAME',
+            ('REF_PLANE', {'ecliptic': 'ECLIPTIC',
+                           'earth': 'FRAME',
+                           'frame': 'FRAME',
                            'body': "'BODY EQUATOR'"}[refplane]),
-            ('REF_SYSTEM', 'J2000'),
+            ('REF_SYSTEM', 'ICRF'),
             ('TP_TYPE', 'ABSOLUTE'),
-            ('LABELS', 'YES'),
-            ('VECT_CORR', {'geometric': '"NONE"', 'astrometric': '"LT"',
-                           'apparent': '"LT+S"'}[aberrations]),
+            ('VEC_LABELS', 'YES'),
+            ('VEC_CORR', {'geometric': '"NONE"',
+                          'astrometric': '"LT"',
+                          'apparent': '"LT+S"'}[aberrations]),
             ('VEC_DELTA_T', {True: 'YES', False: 'NO'}[delta_T]),
             ('OBJ_DATA', 'YES')]
         )
-
+        if isinstance(self.location, dict):
+            request_payload = dict(
+                **request_payload, **self._location_to_params(self.location)
+            )
+        else:
+            request_payload['CENTER'] = "'" + str(self.location) + "'"
         # parse self.epochs
         if isinstance(self.epochs, (list, tuple, ndarray)):
             request_payload['TLIST'] = "\n".join([str(epoch) for epoch in
                                                   self.epochs])
-        elif type(self.epochs) is dict:
-            if ('start' not in self.epochs or 'stop' not in self.epochs or
-                    'step' not in self.epochs):
-                raise ValueError("'epochs' must contain start, " +
-                                 "stop, step")
+        elif isinstance(self.epochs, dict):
+            if ('start' not in self.epochs or 'stop' not in self.epochs or 'step' not in self.epochs):
+                raise ValueError("'epochs' must contain start, stop, step")
             request_payload['START_TIME'] = (
-                '"'+self.epochs['start'].replace("'", '')+'"')
+                '"' + self.epochs['start'].replace("'", '') + '"')
             request_payload['STOP_TIME'] = (
-                '"'+self.epochs['stop'].replace("'", '')+'"')
+                '"' + self.epochs['stop'].replace("'", '') + '"')
             request_payload['STEP_SIZE'] = (
-                '"'+self.epochs['step'].replace("'", '')+'"')
+                '"' + self.epochs['step'].replace("'", '') + '"')
 
         else:
             # treat epochs as a list
@@ -1053,56 +1208,114 @@ class HorizonsClass(BaseQuery):
         return response
 
     # ---------------------------------- parser functions
+    @staticmethod
+    def _prep_loc_dict(loc_dict, attr_name):
+        """prepare coord specification dict for 'location' or 'id'"""
+        if {'lat', 'lon', 'elevation'} - loc_dict.keys():
+            raise ValueError(
+                f"dict values for '{attr_name}' must contain 'lat', 'lon', "
+                "'elevation' (and optionally 'body')"
+            )
+        if 'body' not in loc_dict:
+            loc_dict['body'] = 399
+        # assumed units are degrees and km
+        loc_dict["lat"] = u.Quantity(loc_dict["lat"], u.deg)
+        loc_dict["lon"] = u.Quantity(loc_dict["lon"], u.deg)
+        loc_dict["elevation"] = u.Quantity(loc_dict["elevation"], u.km)
+        return loc_dict
 
-    def _parse_horizons(self, src):
+    @staticmethod
+    def _location_to_params(loc_dict):
+        """translate a 'location' dict to request parameters"""
+
+        location = {
+            "CENTER": f"coord@{loc_dict['body']}",
+            "COORD_TYPE": "GEODETIC",
+            "SITE_COORD": "'{}'".format(str(HorizonsClass._format_site_coords(loc_dict)))
+        }
+        return location
+
+    @staticmethod
+    def _format_coords(coords):
+        """Dictionary to Horizons API formatted lon/lat/elevation coordinate triplet."""
+        return (f"{coords['lon'].to_value('deg')},{coords['lat'].to_value('deg')},"
+                f"{coords['elevation'].to_value('km')}")
+
+    @staticmethod
+    def _format_site_coords(coords):
+        """`location` dictionary to SITE_COORDS parameter."""
+        return HorizonsClass._format_coords(coords)
+
+    @staticmethod
+    def _format_id_coords(coords):
+        """`id` dictionary to COMMAND parameter's coordinate format."""
+        return f"g:{HorizonsClass._format_coords(coords)}@{coords['body']}"
+
+    def _parse_result(self, response, verbose=None):
         """
-        Routine for parsing data from JPL Horizons
+        Parse query result to a `~astropy.table.Table` object.
 
 
         Parameters
         ----------
-        self : HorizonsClass instance
-        src : list
-            raw response from server
+
+        response : `~requests.Response`
+            Response from server.
 
 
         Returns
         -------
-        data : `astropy.Table`
+
+        data : `~astropy.table.Table`
+
         """
 
-        self.raw_response = src
+        self.last_response = response
+        try:
+            response.raise_for_status()
+        except HTTPError:
+            # don't cache any HTTP errored queries (especially when the API is down!)
+            try:
+                self._last_query.remove_cache_file(self.cache_location)
+            except OSError:
+                # this is allowed: if `cache` was set to False, this
+                # won't be needed
+                pass
+            raise
+
+        self._raw_response = response.text
 
         # return raw response, if desired
         if self.return_raw:
             # reset return_raw flag
             self.return_raw = False
-            return self.raw_response
+            return self._raw_response
 
         # split response by line break
-        src = src.split('\n')
+        src = response.text.split('\n')
 
         data_start_idx = 0
         data_end_idx = 0
         H, G = nan, nan
         M1, M2, k1, k2, phcof = nan, nan, nan, nan, nan
         headerline = []
+        centername = ''
         for idx, line in enumerate(src):
             # read in ephemerides header line; replace some field names
-            if (self.query_type == 'ephemerides' and
-                    "Date__(UT)__HR:MN" in line):
+            if (self.query_type == 'ephemerides' and "Date__(UT)__HR:MN" in line):
                 headerline = str(line).split(',')
                 headerline[2] = 'solar_presence'
-                headerline[3] = 'flags'
+                headerline[3] = "lunar_presence" if "Earth" in centername else "interfering_body"
                 headerline[-1] = '_dump'
+                if isinstance(self.id, dict) or str(self.id).startswith('g:'):
+                    headerline[4] = 'nearside_flag'
+                    headerline[5] = 'illumination_flag'
             # read in elements header line
-            elif (self.query_type == 'elements' and
-                  "JDTDB," in line):
+            elif (self.query_type == 'elements' and "JDTDB," in line):
                 headerline = str(line).split(',')
                 headerline[-1] = '_dump'
             # read in vectors header line
-            elif (self.query_type == 'vectors' and
-                  "JDTDB," in line):
+            elif (self.query_type == 'vectors' and "JDTDB," in line):
                 headerline = str(line).split(',')
                 headerline[-1] = '_dump'
             # identify end of data block
@@ -1114,6 +1327,9 @@ class HorizonsClass(BaseQuery):
             # read in targetname
             if "Target body name" in line:
                 targetname = line[18:50].strip()
+            # read in center body name
+            if "Center body name" in line:
+                centername = line[18:50].strip()
             # read in H and G (if available)
             if "rotational period in hours)" in line:
                 HGline = src[idx + 2].split('=')
@@ -1144,20 +1360,17 @@ class HorizonsClass(BaseQuery):
                 except ValueError:
                     phcof = nan
             # catch unambiguous names
-            if (("Multiple major-bodies match string" in line or
-                 "Matching small-bodies:" in line) and
-                    ("No matches found" not in src[idx + 1])):
+            if (("Multiple major-bodies match string" in line or "Matching small-bodies:" in line)
+                    and ("No matches found" not in src[idx + 1])):
                 for i in range(idx + 2, len(src), 1):
-                    if (('To SELECT, enter record' in src[i]) or
-                            ('make unique selection.' in src[i])):
+                    if (('To SELECT, enter record' in src[i]) or ('make unique selection.' in src[i])):
                         end_idx = i
                         break
                 raise ValueError(('Ambiguous target name; provide '
                                   'unique id:\n%s' %
-                                  '\n'.join(src[idx + 2:end_idx])))
+                                  '\n'.join(src[idx + 2: end_idx])))
             # catch unknown target
-            if ("Matching small-bodies" in line and
-                    "No matches found" in src[idx + 1]):
+            if ("Matching small-bodies" in line and "No matches found" in src[idx + 1]):
                 raise ValueError(('Unknown target ({:s}). Maybe try '
                                   'different id_type?').format(self.id))
             # catch any unavailability of ephemeris data
@@ -1182,12 +1395,12 @@ class HorizonsClass(BaseQuery):
         if headerline == []:
             err_msg = "".join(src[data_start_idx:data_end_idx])
             if len(err_msg) > 0:
-                raise ValueError('Query failed with error message:\n' +
-                                 err_msg)
+                raise ValueError('Query failed with error message:\n'
+                                 + err_msg)
             else:
                 raise ValueError(('Query failed without known error message; '
                                   'received the following response:\n'
-                                  '{}').format(self.raw_response))
+                                  '{}').format(response.text))
         # strip whitespaces from column labels
         headerline = [h.strip() for h in headerline]
 
@@ -1266,34 +1479,6 @@ class HorizonsClass(BaseQuery):
                 data.rename_column(data[col].name, column_defs[col][0])
             except KeyError:
                 pass
-
-        return data
-
-    def _parse_result(self, response, verbose=None):
-        """
-        Routine for managing parser calls;
-
-
-        This routine decides based on `self.query_type` which parser
-        has to be used.
-
-
-        Parameters
-        ----------
-        self : Horizonsclass instance
-        response : string
-            raw response from server
-
-
-        Returns
-        -------
-        data : `astropy.Table`
-
-        """
-        if self.query_type not in ['ephemerides', 'elements', 'vectors']:
-            return None
-        else:
-            data = self._parse_horizons(response.text)
 
         return data
 

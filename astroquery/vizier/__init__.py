@@ -4,7 +4,7 @@ VizieR Query Tool
 -----------------
 
 This package is for querying the VizieR service, primarily hosted at:
-http://vizier.u-strasbg.fr
+https://vizier.cds.unistra.fr
 
 Note: If the access to catalogues with VizieR was helpful for your research
 work, the following acknowledgment would be appreciated::
@@ -22,7 +22,7 @@ class Conf(_config.ConfigNamespace):
     """
 
     server = _config.ConfigItem(
-        ['vizier.u-strasbg.fr',
+        ['vizier.cds.unistra.fr',
          'vizier.cfa.harvard.edu',
          'vizier.nao.ac.jp',
          'vizier.hia.nrc.ca',

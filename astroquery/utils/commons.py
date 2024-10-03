@@ -8,131 +8,34 @@ import warnings
 import os
 import shutil
 import socket
+from io import BytesIO, StringIO
+from urllib.error import URLError
 
-import requests
-
-from six.moves.urllib_error import URLError
-import six
 import astropy.units as u
-from astropy import coordinates as coord
 from collections import OrderedDict
 from astropy.utils import minversion
 import astropy.utils.data as aud
 from astropy.io import fits, votable
 
-from astropy.coordinates import BaseCoordinateFrame
+from astropy.coordinates import BaseCoordinateFrame, SkyCoord
 
 from ..exceptions import TimeoutError, InputWarning
-from .. import version
 
 
-def ICRSCoordGenerator(*args, **kwargs):
-    return coord.SkyCoord(*args, frame='icrs', **kwargs)
+CoordClasses = (SkyCoord, BaseCoordinateFrame)
 
 
-def GalacticCoordGenerator(*args, **kwargs):
-    return coord.SkyCoord(*args, frame='galactic', **kwargs)
-
-
-def FK5CoordGenerator(*args, **kwargs):
-    return coord.SkyCoord(*args, frame='fk5', **kwargs)
-
-
-def FK4CoordGenerator(*args, **kwargs):
-    return coord.SkyCoord(*args, frame='fk4', **kwargs)
-
-
-ICRSCoord = coord.SkyCoord
-CoordClasses = (coord.SkyCoord, BaseCoordinateFrame)
-
-
-__all__ = ['send_request',
-           'parse_coordinates',
+__all__ = ['parse_coordinates',
            'TableList',
            'suppress_vo_warnings',
            'validate_email',
-           'ASTROPY_LT_4_1']
+           'ASTROPY_LT_5_1',
+           'ASTROPY_LT_5_3',
+           'ASTROPY_LT_6_0']
 
-ASTROPY_LT_4_1 = not minversion('astropy', '4.1')
-
-
-def send_request(url, data, timeout, request_type='POST', headers={},
-                 **kwargs):
-    """
-    A utility function that post HTTP requests to remote server
-    and returns the HTTP response.
-
-    Parameters
-    ----------
-    url : str
-        The URL of the remote server
-    data : dict
-        A dictionary representing the payload to be posted via the HTTP request
-    timeout : int, quantity_like
-        Time limit for establishing successful connection with remote server
-    request_type : str
-        options are 'POST' (default) and 'GET'. Determines whether to perform
-        an HTTP POST or an HTTP GET request
-    headers : dict
-        POST or GET headers.  user-agent will be set to
-        astropy:astroquery.version
-
-    Returns
-    -------
-    response : `requests.Response`
-        Response object returned by the remote server
-    """
-    headers['User-Agent'] = ('astropy:astroquery.{vers}'
-                             .format(vers=version.version))
-
-    if hasattr(timeout, "unit"):
-        warnings.warn("Converting timeout to seconds and truncating "
-                      "to integer.", InputWarning)
-        timeout = int(timeout.to(u.s).value)
-
-    try:
-        if request_type == 'GET':
-            response = requests.get(url, params=data, timeout=timeout,
-                                    headers=headers, **kwargs)
-        elif request_type == 'POST':
-            response = requests.post(url, data=data, timeout=timeout,
-                                     headers=headers, **kwargs)
-        else:
-            raise ValueError("request_type must be either 'GET' or 'POST'.")
-
-        response.raise_for_status()
-
-        return response
-
-    except requests.exceptions.Timeout:
-        raise TimeoutError("Query timed out, time elapsed {time}s".
-                           format(time=timeout))
-    except requests.exceptions.RequestException as ex:
-        raise Exception("Query failed: {0}\n".format(ex))
-
-
-def radius_to_unit(radius, unit='degree'):
-    """
-    Helper function: Parse a radius, then return its value in degrees
-
-    Parameters
-    ----------
-    radius : str or `~astropy.units.Quantity`
-        The radius of a region
-
-    Returns
-    -------
-    Floating point scalar value of radius in degrees
-    """
-    rad = coord.Angle(radius)
-
-    if isinstance(unit, six.string_types):
-        if hasattr(rad, unit):
-            return getattr(rad, unit)
-        elif hasattr(rad, unit + 's'):
-            return getattr(rad, unit + 's')
-
-    return rad.to(unit).value
+ASTROPY_LT_5_1 = not minversion('astropy', '5.1')
+ASTROPY_LT_5_3 = not minversion('astropy', '5.3')
+ASTROPY_LT_6_0 = not minversion('astropy', '6.0')
 
 
 def parse_coordinates(coordinates):
@@ -157,9 +60,9 @@ def parse_coordinates(coordinates):
     astropy.units.UnitsError
     TypeError
     """
-    if isinstance(coordinates, six.string_types):
+    if isinstance(coordinates, str):
         try:
-            c = ICRSCoordGenerator(coordinates)
+            c = SkyCoord(coordinates, frame="icrs")
             warnings.warn("Coordinate string is being interpreted as an "
                           "ICRS coordinate.", InputWarning)
 
@@ -169,23 +72,23 @@ def parse_coordinates(coordinates):
                           "appropriate astropy.coordinates object.", InputWarning)
             raise u.UnitsError
         except ValueError as err:
-            if isinstance(err.args[1], u.UnitsError):
+            if isinstance(err.__context__, u.UnitsError):
                 try:
-                    c = ICRSCoordGenerator(coordinates, unit='deg')
+                    c = SkyCoord(coordinates, unit="deg", frame="icrs")
                     warnings.warn("Coordinate string is being interpreted as an "
                                   "ICRS coordinate provided in degrees.", InputWarning)
 
                 except ValueError:
-                    c = ICRSCoord.from_name(coordinates)
+                    c = SkyCoord.from_name(coordinates, frame="icrs")
             else:
-                c = ICRSCoord.from_name(coordinates)
+                c = SkyCoord.from_name(coordinates, frame="icrs")
 
     elif isinstance(coordinates, CoordClasses):
         if hasattr(coordinates, 'frame'):
             c = coordinates
         else:
             # Convert the "frame" object into a SkyCoord
-            c = coord.SkyCoord(coordinates)
+            c = SkyCoord(coordinates)
     else:
         raise TypeError("Argument cannot be parsed as a coordinate")
     return c
@@ -235,12 +138,12 @@ class TableList(list):
                                  "or list of (k,v) pairs")
 
         self._dict = inp
-        super(TableList, self).__init__(inp.values())
+        super().__init__(inp.values())
 
     def __getitem__(self, key):
         if isinstance(key, int):
             # get the value in the (key,value) pair
-            return super(TableList, self).__getitem__(key)
+            return super().__getitem__(key)
         elif key in self._dict:
             return self._dict[key]
         else:
@@ -318,7 +221,7 @@ def _is_coordinate(coordinates):
         # its coordinate-like enough
         return True
     try:
-        ICRSCoordGenerator(coordinates)
+        SkyCoord(coordinates, frame="icrs")
         return True
     except ValueError:
         return False
@@ -345,7 +248,7 @@ def validate_email(email):
         return bool(re.compile(r'^\S+@\S+\.\S+$').match(email))
 
 
-class FileContainer(object):
+class FileContainer:
     """
     A File Object container, meant to offer lazy access to downloaded FITS
     files.
@@ -375,7 +278,7 @@ class FileContainer(object):
 
         return self._fits
 
-    def save_fits(self, savepath, link_cache='hard'):
+    def save_fits(self, savepath, *, link_cache='hard'):
         """
         Save a FITS file to savepath
 
@@ -389,27 +292,15 @@ class FileContainer(object):
             If the system is unable to create a hardlink, the file will be
             copied to the target location.
         """
-        from warnings import warn
-
         self.get_fits()
+        target_key = str(self._target)
 
-        try:
-            dldir, urlmapfn = aud._get_download_cache_locs()
-        except (IOError, OSError) as e:
-            msg = 'Remote data cache could not be accessed due to '
-            estr = '' if len(e.args) < 1 else (': ' + str(e))
-            warn(aud.CacheMissingWarning(msg + e.__class__.__name__ + estr))
-
-        with _open_shelve(urlmapfn, True) as url2hash:
-            if str(self._target) in url2hash:
-                target = url2hash[str(self._target)]
-            else:
-                raise IOError("Cached file not found / does not exist.")
+        target = aud.download_file(target_key, cache=True, sources=[])
 
         if link_cache == 'hard':
             try:
                 os.link(target, savepath)
-            except (IOError, OSError, AttributeError):
+            except (OSError, AttributeError):
                 shutil.copy(target, savepath)
         elif link_cache == 'sym':
             try:
@@ -442,18 +333,16 @@ class FileContainer(object):
         Return the file as an io.StringIO object
         """
         s = self.get_string()
-        # TODO: replace with six.BytesIO
         try:
-            return six.BytesIO(s)
+            return BytesIO(s)
         except TypeError:
-            return six.StringIO(s)
+            return StringIO(s)
 
     def __repr__(self):
         if hasattr(self, '_fits'):
-            return "Downloaded FITS file: " + self._fits.__repr__()
+            return f"Downloaded FITS file: {self._fits!r}"
         else:
-            return ("Downloaded object from URL {} with ID {}"
-                    .format(self._target, id(self._readable_object)))
+            return f"Downloaded object from URL {self._target} with ID {id(self._readable_object)}"
 
 
 def get_readable_fileobj(*args, **kwargs):
@@ -468,24 +357,5 @@ def parse_votable(content):
     """
     Parse a votable in string format
     """
-    tables = votable.parse(six.BytesIO(content), pedantic=False)
+    tables = votable.parse(BytesIO(content), verify='warn')
     return tables
-
-
-def _open_shelve(shelffn, withclosing=False):
-    """
-    Opens a shelf file.  If ``withclosing`` is True, it will be opened with
-    closing, allowing use like:
-
-        with _open_shelve('somefile',True) as s:
-            ...
-    """
-    import shelve
-    import contextlib
-
-    shelf = shelve.open(shelffn, protocol=2)
-
-    if withclosing:
-        return contextlib.closing(shelf)
-    else:
-        return shelf

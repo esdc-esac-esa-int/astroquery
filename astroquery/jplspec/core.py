@@ -9,6 +9,7 @@ from ..utils import async_to_sync
 # import configurable items declared in __init__.py
 from . import conf
 from . import lookup_table
+from astroquery.exceptions import EmptyResponseError, InvalidQueryError
 
 
 __all__ = ['JPLSpec', 'JPLSpecClass']
@@ -26,7 +27,7 @@ class JPLSpecClass(BaseQuery):
     URL = conf.server
     TIMEOUT = conf.timeout
 
-    def query_lines_async(self, min_frequency, max_frequency,
+    def query_lines_async(self, min_frequency, max_frequency, *,
                           min_strength=-500,
                           max_lines=2000, molecule='All', flags=0,
                           parse_name_locally=False,
@@ -63,6 +64,9 @@ class JPLSpecClass(BaseQuery):
         get_query_payload : bool, optional
             When set to `True` the method should return the HTTP request
             parameters as a dict. Default value is set to False
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -104,11 +108,11 @@ class JPLSpecClass(BaseQuery):
         if molecule is not None:
             if parse_name_locally:
                 self.lookup_ids = build_lookup()
-                payload['Mol'] = tuple(self.lookup_ids.find(molecule, flags))
+                payload['Mol'] = tuple(self.lookup_ids.find(molecule, flags).values())
                 if len(molecule) == 0:
-                    raise ValueError('No matching species found. Please\
-                                     refine your search or read the Docs\
-                                     for pointers on how to search.')
+                    raise InvalidQueryError('No matching species found. Please '
+                                            'refine your search or read the Docs '
+                                            'for pointers on how to search.')
             else:
                 payload['Mol'] = molecule
 
@@ -125,7 +129,7 @@ class JPLSpecClass(BaseQuery):
 
         return response
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         """
         Parse a response into an `~astropy.table.Table`
 
@@ -156,11 +160,14 @@ class JPLSpecClass(BaseQuery):
         QN":   Quantum numbers for the lower state.
         """
 
+        if 'Zero lines were found' in response.text:
+            raise EmptyResponseError(f"Response was empty; message was '{response.text}'.")
+
         # data starts at 0 since regex was applied
         # Warning for a result with more than 1000 lines:
         # THIS form is currently limited to 1000 lines.
         result = ascii.read(response.text, header_start=None, data_start=0,
-                            comment=r'THIS|^\s{12,14}\d{4,6}.*',
+                            comment=r'THIS|^\s{12,14}\d{4,6}.*|CADDIR CATDIR',
                             names=('FREQ', 'ERR', 'LGINT', 'DR', 'ELO', 'GUP',
                                    'TAG', 'QNFMT', 'QN\'', 'QN"'),
                             col_starts=(0, 13, 21, 29, 31, 41, 44, 51, 55, 67),
@@ -177,7 +184,7 @@ class JPLSpecClass(BaseQuery):
 
         return result
 
-    def get_species_table(self, catfile='catdir.cat'):
+    def get_species_table(self, *, catfile='catdir.cat'):
         """
         A directory of the catalog is found in a file called 'catdir.cat.'
         Each element of this directory is an 80-character record with the
@@ -187,12 +194,12 @@ class JPLSpecClass(BaseQuery):
         | (I6,X, A13, I6, 7F7.4,  I2)
 
         Parameters
-        -----------
+        ----------
         catfile : str, name of file, default 'catdir.cat'
             The catalog file, installed locally along with the package
 
         Returns
-        --------
+        -------
         Table: `~astropy.table.Table`
             | TAG : The species tag or molecular identifier.
             | NAME : An ASCII name for the species.
@@ -234,9 +241,9 @@ JPLSpec = JPLSpecClass()
 def build_lookup():
 
     result = JPLSpec.get_species_table()
-    keys = list(result[1][:])  # convert NAME column to list
-    values = list(result[0][:])  # convert TAG column to list
-    dictionary = dict(zip(keys, values))  # make k,v dictionary
+    keys = list(result['NAME'])
+    values = list(result['TAG'])
+    dictionary = dict(zip(keys, values))
     lookuptable = lookup_table.Lookuptable(dictionary)  # apply the class above
 
     return lookuptable

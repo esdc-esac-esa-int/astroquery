@@ -16,7 +16,7 @@ Created on 30 jun. 2016
 """
 
 
-class TapTableMeta(object):
+class TapTableMeta:
     """TAP table metadata object
     """
 
@@ -27,6 +27,7 @@ class TapTableMeta(object):
         self.name = None
         self.schema = None
         self.description = None
+        self.size_bytes = 0
 
     def get_qualified_name(self):
         """Returns the qualified TAP table name. I.e. schema+table
@@ -35,7 +36,10 @@ class TapTableMeta(object):
         -------
         The the qualified TAP table name (schema+table)
         """
-        return self.schema + "." + self.name
+        if '.' in self.name:
+            return self.name
+
+        return f"{self.schema}.{self.name}"
 
     def add_column(self, tap_column):
         """Adds a table TAP column
@@ -48,6 +52,7 @@ class TapTableMeta(object):
         self.columns.append(tap_column)
 
     def __str__(self):
-        return "TAP Table name: " + str(self.get_qualified_name()) + \
-            "\nDescription: " + str(self.description) + \
-            "\nNum. columns: " + str(len(self.columns))
+        return f"TAP Table name: {self.get_qualified_name()}" \
+            f"\nDescription: {self.description}" \
+            f"\nSize (bytes): {self.size_bytes}" \
+            f"\nNum. columns: {len(self.columns)}"

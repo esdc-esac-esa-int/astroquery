@@ -1,38 +1,32 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-# 1. standard library imports
 from io import BytesIO
-from urllib.parse import unquote
+import os
+from urllib.parse import unquote, urlparse
 import time
 from xml.etree import ElementTree
 from datetime import datetime, timezone
+import keyring
 
-# 2. third party imports
 import astropy.units as u
 import astropy.coordinates as coord
 from astropy.table import Table
 from astropy.io.votable import parse
-from astropy import log
+from astroquery import log
+import numpy as np
 
-# 3. local imports - use relative imports
-# commonly required local imports shown below as example
-# all Query classes should inherit from BaseQuery.
-from ..query import BaseQuery
-# has common functions required by most modules
+from ..query import QueryWithLogin
 from ..utils import commons
-# prepend_docstr is a way to copy docstrings between methods
-from ..utils import prepend_docstr_nosections
-# async_to_sync generates the relevant query tools from _async methods
 from ..utils import async_to_sync
-# import configurable items declared in __init__.py
 from . import conf
+from ..exceptions import LoginError
 
-# export all the public classes and methods
+
 __all__ = ['Casda', 'CasdaClass']
 
 
 @async_to_sync
-class CasdaClass(BaseQuery):
+class CasdaClass(QueryWithLogin):
 
     """
     Class for accessing ASKAP data through the CSIRO ASKAP Science Data Archive (CASDA). Typical usage:
@@ -44,38 +38,84 @@ class CasdaClass(BaseQuery):
     URL = conf.server
     TIMEOUT = conf.timeout
     POLL_INTERVAL = conf.poll_interval
+    USERNAME = conf.username
     _soda_base_url = conf.soda_base_url
+    _login_url = conf.login_url
     _uws_ns = {'uws': 'http://www.ivoa.net/xml/UWS/v1.0'}
 
-    def __init__(self, user=None, password=None):
-        super(CasdaClass, self).__init__()
-        if user is None:
-            self._authenticated = False
-        else:
-            self._authenticated = True
-            # self._user = user
-            # self._password = password
-            self._auth = (user, password)
+    def __init__(self):
+        super().__init__()
 
-    def query_region_async(self, coordinates, radius=None, height=None, width=None,
+    def _login(self, *, username=None, store_password=False,
+               reenter_password=False):
+        """
+        login to non-public data as a known user
+
+        Parameters
+        ----------
+        username : str, optional
+            Username to the CASDA archive, uses ATNF OPAL credentials. If not given, it should be
+            specified in the config file.
+        store_password : bool, optional
+            Stores the password securely in your keyring. Default is False.
+        reenter_password : bool, optional
+            Asks for the password even if it is already stored in the
+            keyring. This is the way to overwrite an already stored passwork
+            on the keyring. Default is False.
+        """
+
+        if username is None:
+            if not self.USERNAME:
+                raise LoginError("If you do not pass a username to login(), "
+                                 "you should configure a default one!")
+            else:
+                username = self.USERNAME
+
+        # Get password from keyring or prompt
+        password, password_from_keyring = self._get_password(
+            "astroquery:casda.csiro.au", username, reenter=reenter_password)
+
+        # Login to CASDA to test credentals
+        log.info("Authenticating {0} on CASDA ...".format(username))
+        auth = (username, password)
+        login_response = self._request("GET", self._login_url, auth=auth,
+                                       timeout=self.TIMEOUT, cache=False)
+        authenticated = login_response.status_code == 200
+
+        if authenticated:
+            log.info("Authentication successful!")
+            self.USERNAME = username
+            self._auth = (username, password)
+
+            # When authenticated, save password in keyring if needed
+            if password_from_keyring is None and store_password:
+                keyring.set_password("astroquery:casda.csiro.au", username, password)
+        else:
+            log.exception("Authentication failed")
+
+        return authenticated
+
+    def query_region_async(self, coordinates, *, radius=1*u.arcmin, height=None, width=None,
                            get_query_payload=False, cache=True):
         """
-        Queries a region around the specified coordinates. Either a radius or both a height and a width must be provided.
+        Queries a region around the specified coordinates. Either a radius or both a height and a width
+        must be provided.
 
         Parameters
         ----------
         coordinates : str or `astropy.coordinates`.
             coordinates around which to query
-        radius : str or `astropy.units.Quantity`.
+        radius : str or `astropy.units.Quantity`, optional
             the radius of the cone search
-        width : str or `astropy.units.Quantity`
-            the width for a box region
-        height : str or `astropy.units.Quantity`
+        height : str or `astropy.units.Quantity`, optional
             the height for a box region
+        width : str or `astropy.units.Quantity`, optional
+            the width for a box region
         get_query_payload : bool, optional
             Just return the dict of HTTP request parameters.
-        cache: bool, optional
-            Use the astroquery internal query result cache
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -96,35 +136,78 @@ class CasdaClass(BaseQuery):
 
     # Create the dict of HTTP request parameters by parsing the user
     # entered values.
-    def _args_to_payload(self, **kwargs):
+    def _args_to_payload(self, *, radius=1*u.arcmin, **kwargs):
         request_payload = dict()
 
         # Convert the coordinates to FK5
         coordinates = kwargs.get('coordinates')
-        c = commons.parse_coordinates(coordinates).transform_to(coord.FK5)
+        if coordinates is not None:
+            fk5_coords = commons.parse_coordinates(coordinates).transform_to(coord.FK5)
 
-        if kwargs['radius'] is not None:
-            radius = u.Quantity(kwargs['radius']).to(u.deg)
-            pos = 'CIRCLE {} {} {}'.format(c.ra.degree, c.dec.degree, radius.value)
-        elif kwargs['width'] is not None and kwargs['height'] is not None:
-            width = u.Quantity(kwargs['width']).to(u.deg).value
-            height = u.Quantity(kwargs['height']).to(u.deg).value
-            top = c.dec.degree - (height/2)
-            bottom = c.dec.degree + (height/2)
-            left = c.ra.degree - (width/2)
-            right = c.ra.degree + (width/2)
-            pos = 'RANGE {} {} {} {}'.format(left, right, top, bottom)
-        else:
-            raise ValueError("Either 'radius' or both 'height' and 'width' must be supplied.")
+            if kwargs.get('width') is not None and kwargs.get('height') is not None:
+                width = u.Quantity(kwargs['width']).to(u.deg).value
+                height = u.Quantity(kwargs['height']).to(u.deg).value
+                top = fk5_coords.dec.degree + (height/2)
+                bottom = fk5_coords.dec.degree - (height/2)
+                left = fk5_coords.ra.degree - (width/2)
+                right = fk5_coords.ra.degree + (width/2)
+                pos = f'RANGE {left} {right} {bottom} {top}'
+            else:
+                radius = u.Quantity(radius).to(u.deg)
+                pos = f'CIRCLE {fk5_coords.ra.degree} {fk5_coords.dec.degree} {radius.value}'
 
-        request_payload['POS'] = pos
+            request_payload['POS'] = pos
+
+        band = kwargs.get('band')
+        channel = kwargs.get('channel')
+        if band is not None:
+            if channel is not None:
+                raise ValueError("Either 'channel' or 'band' values may be provided but not both.")
+
+            if (not isinstance(band, (list, tuple, np.ndarray))) or len(band) != 2 or \
+                    (band[0] is not None and not isinstance(band[0], u.Quantity)) or \
+                    (band[1] is not None and not isinstance(band[1], u.Quantity)):
+                raise ValueError("The 'band' value must be a list of 2 wavelength or frequency values.")
+
+            bandBoundedLow = band[0] is not None
+            bandBoundedHigh = band[1] is not None
+            if bandBoundedLow and bandBoundedHigh and band[0].unit.physical_type != band[1].unit.physical_type:
+                raise ValueError("The 'band' values must have the same kind of units.")
+            if bandBoundedLow or bandBoundedHigh:
+                unit = band[0].unit if bandBoundedLow else band[1].unit
+                if unit.physical_type == 'length':
+                    min_band = '-Inf' if not bandBoundedLow else band[0].to(u.m).value
+                    max_band = '+Inf' if not bandBoundedHigh else band[1].to(u.m).value
+                elif unit.physical_type == 'frequency':
+                    # Swap the order when changing frequency to wavelength
+                    min_band = '-Inf' if not bandBoundedHigh else band[1].to(u.m, equivalencies=u.spectral()).value
+                    max_band = '+Inf' if not bandBoundedLow else band[0].to(u.m, equivalencies=u.spectral()).value
+                else:
+                    raise ValueError("The 'band' values must be wavelengths or frequencies.")
+                # If values were provided in the wrong order, swap them
+                if bandBoundedLow and bandBoundedHigh and min_band > max_band:
+                    temp_val = min_band
+                    min_band = max_band
+                    max_band = temp_val
+
+                request_payload['BAND'] = f'{min_band} {max_band}'
+
+        if channel is not None:
+            if not isinstance(channel, (list, tuple, np.ndarray)) or len(channel) != 2 or \
+                    not isinstance(channel[0], (int, np.integer)) or not isinstance(channel[1], (int, np.integer)):
+                raise ValueError("The 'channel' value must be a list of 2 integer values.")
+            if channel[0] <= channel[1]:
+                request_payload['CHANNEL'] = f'{channel[0]} {channel[1]}'
+            else:
+                # If values were provided in the wrong order, swap them
+                request_payload['CHANNEL'] = f'{channel[1]} {channel[0]}'
 
         return request_payload
 
     # the methods above implicitly call the private _parse_result method.
     # This should parse the raw HTTP response and return it as
     # an `astropy.table.Table`.
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         # if verbose is False then suppress any VOTable related warnings
         if not verbose:
             commons.suppress_vo_warnings()
@@ -159,44 +242,33 @@ class CasdaClass(BaseQuery):
         now = str(datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f'))
         return table[(table['obs_release_date'] != '') & (table['obs_release_date'] < now)]
 
-    def stage_data(self, table, verbose=False):
-        """
-        Request access to a set of data files. All requests for data must use authentication. If you have access to the
-        data, the requested files will be brought online and a set of URLs to download the files will be returned.
-
-        Parameters
-        ----------
-        table: `astropy.table.Table`
-            A table describing the files to be staged, such as produced by query_region. It must include an
-            access_url column.
-        verbose: bool, optional
-            Should status message be logged periodically, defaults to False
-
-        Returns
-        -------
-        A list of urls of both the requested files and the checksums for the files
-        """
-        if not self._authenticated:
-            raise ValueError("Credentials must be supplied to download CASDA image data")
-
-        if table is None or len(table) == 0:
-            return []
-
+    def _create_job(self, table, service_name, verbose):
         # Use datalink to get authenticated access for each file
         tokens = []
+        soda_url = None
         for row in table:
             access_url = row['access_url']
-            response = self._request('GET', access_url, auth=self._auth,
-                                     timeout=self.TIMEOUT, cache=False)
-            response.raise_for_status()
-            soda_url, id_token = self._parse_datalink_for_service_and_id(response, 'cutout_service')
-            tokens.append(id_token)
+            if access_url:
+                response = self._request('GET', access_url, auth=self._auth,
+                                         timeout=self.TIMEOUT, cache=False)
+                response.raise_for_status()
+                service_url, id_token = self._parse_datalink_for_service_and_id(response, service_name)
+                if id_token:
+                    tokens.append(id_token)
+                    soda_url = service_url
+
+        # Trap a request with no allowed data
+        if not soda_url:
+            raise ValueError('You do not have access to any of the requested data files.')
 
         # Create job to stage all files
         job_url = self._create_soda_job(tokens, soda_url=soda_url)
         if verbose:
             log.info("Created data staging job " + job_url)
 
+        return job_url
+
+    def _complete_job(self, job_url, verbose):
         # Wait for job to be complete
         final_status = self._run_job(job_url, verbose, poll_interval=self.POLL_INTERVAL)
         if final_status != 'COMPLETED':
@@ -213,7 +285,90 @@ class CasdaClass(BaseQuery):
 
         return fileurls
 
-    def download_files(self, urls, savedir=''):
+    def stage_data(self, table, *, verbose=False):
+        """
+        Request access to a set of data files. All requests for data must use authentication. If you have access to the
+        data, the requested files will be brought online and a set of URLs to download the files will be returned.
+
+        Parameters
+        ----------
+        table: `astropy.table.Table`
+            A table describing the files to be staged, such as produced by query_region. It must include an
+            access_url column.
+        verbose: bool, optional
+            Should status message be logged periodically, defaults to False
+
+        Returns
+        -------
+        A list of urls of both the requested files/cutouts and the checksums for the files/cutouts
+        """
+        if not self._authenticated:
+            raise ValueError("Credentials must be supplied to download CASDA image data")
+
+        if table is None or len(table) == 0:
+            return []
+
+        job_url = self._create_job(table, 'async_service', verbose)
+
+        return self._complete_job(job_url, verbose)
+
+    def cutout(self, table, *, coordinates=None, radius=1*u.arcmin, height=None,
+               width=None, band=None, channel=None, verbose=False):
+        """
+        Produce a cutout from each selected file. All requests for data must use authentication. If you have access to
+        the data, the requested files will be brought online, a cutout produced from each file and a set of URLs to
+        download the cutouts will be returned.
+
+        If a set of coordinates is provided along with either a radius or a box height and width, then CASDA will
+        produce a spatial cutout at that location from each data file specified in the table. If a band or channel pair
+        is provided then CASDA will produce a spectral cutout of that range from each data file. These can be combined
+        to produce subcubes with restrictions in both spectral and spatial axes.
+
+        Parameters
+        ----------
+        table: `astropy.table.Table`
+            A table describing the files to be staged, such as produced by query_region. It must include an
+            access_url column.
+        coordinates : str or `astropy.coordinates`, optional
+            coordinates around which to produce a cutout, the radius will be 1 arcmin if no radius, height or width is
+            provided.
+        radius : str or `astropy.units.Quantity`, optional
+            the radius of the cutout
+        height : str or `astropy.units.Quantity`, optional
+            the height for a box cutout
+        width : str or `astropy.units.Quantity`, optional
+            the width for a box cutout
+        band : list of `astropy.units.Quantity` with two elements, optional
+            the spectral range to be included, may be low and high wavelengths in metres or low and high frequencies in
+            Hertz. Use None for an open bound.
+        channel : list of int with two elements, optional
+            the spectral range to be included, the low and high channels (i.e. planes of a cube) inclusive
+        verbose: bool, optional
+            Should status messages be logged periodically, defaults to False
+
+        Returns
+        -------
+        A list of urls of both the requested files/cutouts and the checksums for the files/cutouts
+        """
+        if not self._authenticated:
+            raise ValueError("Credentials must be supplied to download CASDA image data")
+
+        if table is None or len(table) == 0:
+            return []
+
+        job_url = self._create_job(table, 'cutout_service', verbose)
+
+        cutout_spec = self._args_to_payload(radius=radius, coordinates=coordinates, height=height, width=width,
+                                            band=band, channel=channel, verbose=verbose)
+
+        if not cutout_spec:
+            raise ValueError("Please provide cutout parameters such as coordinates, band or channel.")
+
+        self._add_cutout_params(job_url, verbose, cutout_spec)
+
+        return self._complete_job(job_url, verbose)
+
+    def download_files(self, urls, *, savedir=''):
         """
         Download a series of files
 
@@ -231,9 +386,15 @@ class CasdaClass(BaseQuery):
         # for each url in list, download file and checksum
         filenames = []
         for url in urls:
-            fn = self._request('GET', url, save=True, savedir=savedir, timeout=self.TIMEOUT, cache=False)
-            if fn:
-                filenames.append(fn)
+            parseResult = urlparse(url)
+            local_filename = unquote(os.path.basename(parseResult.path))
+            if os.name == 'nt':
+                # Windows doesn't allow special characters in filenames like
+                # ":" so replace them with an underscore
+                local_filename = local_filename.replace(':', '_')
+            local_filepath = os.path.join(savedir or self.cache_location or '.', local_filename)
+            self._download_file(url, local_filepath, timeout=self.TIMEOUT, cache=False)
+            filenames.append(local_filepath)
 
         return filenames
 
@@ -254,7 +415,7 @@ class CasdaClass(BaseQuery):
         """
         data = BytesIO(response.content)
 
-        votable = parse(data, pedantic=False)
+        votable = parse(data, verify='warn')
         results = next(resource for resource in votable.resources if
                        resource.type == "results")
         if results is None:
@@ -264,28 +425,28 @@ class CasdaClass(BaseQuery):
         authenticated_id_token = None
 
         # Find the authenticated id token for accessing the image cube
-        for x in results_array:
-            service_def = x['service_def']
+        for result in results_array:
+            service_def = result['service_def']
             if isinstance(service_def, bytes):
                 service_def = service_def.decode("utf8")
             if service_def == service_name:
-                authenticated_id_token = x['authenticated_id_token']
+                authenticated_id_token = result['authenticated_id_token']
                 if isinstance(service_def, bytes):
                     authenticated_id_token = authenticated_id_token.decode("utf8")
 
         # Find the async url
-        for x in votable.resources:
-            if x.type == "meta":
-                if x.ID == service_name:
-                    for p in x.params:
-                        if p.name == "accessURL":
-                            async_url = p.value
+        for resource in votable.resources:
+            if resource.type == "meta":
+                if resource.ID == service_name:
+                    for param in resource.params:
+                        if param.name == "accessURL":
+                            async_url = param.value
                             if isinstance(async_url, bytes):
                                 async_url = async_url.decode()
 
         return async_url, authenticated_id_token
 
-    def _create_soda_job(self, authenticated_id_tokens, soda_url=None):
+    def _create_soda_job(self, authenticated_id_tokens, *, soda_url=None):
         """
         Creates the async job, returning the url to query the job status and details
 
@@ -309,7 +470,26 @@ class CasdaClass(BaseQuery):
         resp.raise_for_status()
         return resp.url
 
-    def _run_job(self, job_location, verbose, poll_interval=20):
+    def _add_cutout_params(self, job_location, verbose, cutout_spec):
+        """
+        Add a cutout specification to an async SODA job. This will change the job
+        from just retrieving the full file to producing a cutout from the target file.
+
+        Parameters
+        ----------
+        job_location: str
+            The url to query the job status and details
+        verbose: bool
+            Should progress be logged periodically
+        cutout_spec: map
+            The map containing the POS parameter defining the cutout.
+        """
+        if verbose:
+            log.info("Adding parameters: " + str(cutout_spec))
+        resp = self._request('POST', job_location + '/parameters', data=cutout_spec, cache=False)
+        resp.raise_for_status()
+
+    def _run_job(self, job_location, verbose, *, poll_interval=20):
         """
         Start an async job (e.g. TAP or SODA) and wait for it to be completed.
 

@@ -8,14 +8,15 @@ see: https://api.astrocats.space.
 :authors: Philip S. Cowperthwaite (pcowpert@cfa.harvard.edu)
 and James Guillochon (jguillochon@cfa.harvard.edu)
 """
-from __future__ import print_function
+
 
 import json
 import csv
+import re
 
 import astropy.units as u
 from astropy.table import Column, Table
-from astropy.logger import log
+from astroquery import log
 
 from . import conf
 from ..query import BaseQuery
@@ -35,6 +36,7 @@ class OACClass(BaseQuery):
 
     def query_object_async(self,
                            event,
+                           *,
                            quantity=None,
                            attribute=None,
                            argument=None,
@@ -82,6 +84,9 @@ class OACClass(BaseQuery):
             When set to `True` the method returns the HTTP request
             parameters as a dict. The actual HTTP request is not made.
             The default value is False.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -106,7 +111,7 @@ class OACClass(BaseQuery):
 
         return response
 
-    def query_region_async(self, coordinates,
+    def query_region_async(self, coordinates, *,
                            radius=None,
                            height=None, width=None,
                            quantity=None,
@@ -172,6 +177,9 @@ class OACClass(BaseQuery):
             When set to `True` the method returns the HTTP request
             parameters as a dict. The actual HTTP request is not made.
             The default value is False.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -190,11 +198,8 @@ class OACClass(BaseQuery):
 
         # Check that coordinate object is a valid astropy coordinate object
         # Criteria/Code from ../sdss/core.py
-        if (not isinstance(coordinates, list) and
-            not isinstance(coordinates, Column) and
-            not (isinstance(coordinates, commons.CoordClasses) and
-                 not coordinates.isscalar)):
-
+        if (not isinstance(coordinates, list) and not isinstance(coordinates, Column)
+                and not (isinstance(coordinates, commons.CoordClasses) and not coordinates.isscalar)):
             request_payload['ra'] = coordinates.ra.deg
             request_payload['dec'] = coordinates.dec.deg
 
@@ -263,7 +268,7 @@ class OACClass(BaseQuery):
 
         return response
 
-    def get_photometry_async(self, event, argument=None, cache=True):
+    def get_photometry_async(self, event, *, argument=None, cache=True):
         """
         Retrieve all photometry for specified event(s).
 
@@ -292,6 +297,9 @@ class OACClass(BaseQuery):
             only those table rows with all of the requested attributes.
             A complete list of commands and their usage can be found at:
             https://github.com/astrocatalogs/OACAPI. The default is None.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -310,7 +318,7 @@ class OACClass(BaseQuery):
 
         return response
 
-    def get_single_spectrum_async(self, event, time, cache=True):
+    def get_single_spectrum_async(self, event, time, *, cache=True):
         """
         Retrieve a single spectrum at a specified time for given event.
 
@@ -331,6 +339,9 @@ class OACClass(BaseQuery):
         time : float, required
             A single MJD time to query. This time does not need to be
             exact. The closest spectrum will be returned.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -348,7 +359,7 @@ class OACClass(BaseQuery):
 
         return response
 
-    def get_spectra_async(self, event, cache=True):
+    def get_spectra_async(self, event, *, cache=True):
         """
         Retrieve all spectra for a specified event.
 
@@ -367,6 +378,9 @@ class OACClass(BaseQuery):
         event : str, required
             Name of the event to query. Can be a single event or a
             list of events.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -423,8 +437,8 @@ class OACClass(BaseQuery):
                 else:
                     request_payload[arg] = True
 
-        if ((data_format.lower() == 'csv') or
-                (data_format.lower() == 'json')):
+        if ((data_format.lower() == 'csv')
+                or (data_format.lower() == 'json')):
             request_payload['format'] = data_format.lower()
         else:
             raise ValueError("The format must be either csv or JSON.")
@@ -435,7 +449,12 @@ class OACClass(BaseQuery):
 
     def _format_output(self, raw_output):
         if self.FORMAT == 'csv':
-            split_output = raw_output.splitlines()
+
+            fixed_raw_output = re.sub('<[^<]+?>', '', raw_output)
+            split_output = fixed_raw_output.splitlines()
+
+            # Remove any HTML tags
+
             columns = list(csv.reader([split_output[0]], delimiter=',',
                            quotechar='"'))[0]
             rows = split_output[1:]
@@ -447,7 +466,7 @@ class OACClass(BaseQuery):
 
             if (len(columns) != len(test_row)):
                 log.info("The API did not return a valid CSV output! \n"
-                      "Outputing JSON-compliant dictionary instead.")
+                         "Outputing JSON-compliant dictionary instead.")
 
                 output = json.loads(raw_output)
                 return output
@@ -473,13 +492,13 @@ class OACClass(BaseQuery):
 
         return output
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         if not verbose:
             commons.suppress_vo_warnings()
 
         if response.status_code != 200:
             raise AttributeError("ERROR: The web service returned error code: %s" %
-                response.status_code)
+                                 response.status_code)
 
         if 'message' in response.text:
             raise KeyError("ERROR: API Server returned the following error:\n{}".format(response.text))

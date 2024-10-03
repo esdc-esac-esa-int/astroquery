@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 import socket
 import time
 import copy
@@ -8,7 +8,7 @@ import re
 import os
 import warnings
 from astropy.io import ascii
-from six.moves.urllib_error import URLError
+from urllib.error import URLError
 from collections import OrderedDict
 from ..query import BaseQuery
 from ..utils import commons, prepend_docstr_nosections, async_to_sync
@@ -86,11 +86,11 @@ class BesanconClass(BaseQuery):
     # sample file name:  1340900648.230224.resu
     result_re = re.compile(r"[0-9]{10}\.[0-9]{6}\.resu")
 
-    def __init__(self, email=None):
-        super(BesanconClass, self).__init__()
+    def __init__(self, *, email=None):
+        super().__init__()
         self.email = email
 
-    def get_besancon_model_file(self, filename, verbose=True, timeout=5.0):
+    def get_besancon_model_file(self, filename, *, verbose=True, timeout=5.0):
         """
         Download a Besancon model from the website.
 
@@ -145,7 +145,7 @@ class BesanconClass(BaseQuery):
 
         return parse_besancon_model_string(results)
 
-    def _parse_result(self, response, verbose=False, retrieve_file=True):
+    def _parse_result(self, response, *, verbose=False, retrieve_file=True):
         """
         retrieve_file : bool
             If True, will try to retrieve the file every 30s until it shows up.
@@ -174,7 +174,7 @@ class BesanconClass(BaseQuery):
         else:
             return filename
 
-    def _parse_args(self, glon, glat, email, smallfield=True, extinction=0.7,
+    def _parse_args(self, glon, glat, email, *, smallfield=True, extinction=0.7,
                     area=0.0001, verbose=True, clouds=None,
                     absmag_limits=(-7, 20), mag_limits=copy.copy(mag_limits),
                     colors_limits=copy.copy(colors_limits),
@@ -182,7 +182,7 @@ class BesanconClass(BaseQuery):
         """
         Perform a query on the Besancon model of the galaxy.
 
-        http://model.obs-besancon.fr/
+        https://model.obs-besancon.fr/
 
         Parameters
         ----------
@@ -223,8 +223,8 @@ class BesanconClass(BaseQuery):
         """
         if email is None and hasattr(self, 'email'):
             email = self.email
-        if (email is None or not isinstance(email, str) or
-                not commons.validate_email(email)):
+        if (email is None or not isinstance(email, str)
+                or not commons.validate_email(email)):
             raise ValueError("Must specify a valid e-mail address.")
 
         # create a new keyword dict based on inputs + defaults
@@ -247,11 +247,11 @@ class BesanconClass(BaseQuery):
         kwd['oo'][0] = absmag_limits[0]
         kwd['ff'][0] = absmag_limits[1]
 
-        for ii, (key, val) in enumerate(colors_limits.items()):
+        for index, (key, val) in enumerate(colors_limits.items()):
             if key[0] in mag_order and key[1] == '-' and key[2] in mag_order:
-                kwd['colind'][ii] = key
-                kwd['oo'][ii + 9] = val[0]
-                kwd['ff'][ii + 9] = val[1]
+                kwd['colind'][index] = key
+                kwd['oo'][index + 9] = val[0]
+                kwd['ff'][index + 9] = val[1]
             else:
                 raise ValueError('Invalid color %s' % key)
 
@@ -263,9 +263,9 @@ class BesanconClass(BaseQuery):
                 raise ValueError('Invalid band %s' % key)
 
         if clouds is not None:
-            for ii, (AV, di) in enumerate(clouds):
-                kwd['AV'][ii] = AV
-                kwd['di'][ii] = di
+            for index, (AV, di) in enumerate(clouds):
+                kwd['AV'][index] = AV
+                kwd['di'][index] = di
 
         # parse the default dictionary
         # request_data = parse_besancon_dict(keyword_defaults)
@@ -274,20 +274,19 @@ class BesanconClass(BaseQuery):
         # convert all array elements to arrays
         for dummy in range(2):  # deal with nested lists
             for k, v in list(request_data.items()):
-                if (isinstance(v, list) or
-                        (isinstance(v, tuple) and len(v) > 1)):
+                if (isinstance(v, list)
+                        or (isinstance(v, tuple) and len(v) > 1)):
                     if k in request_data:
                         del request_data[k]
-                    for ii, x in enumerate(v):
-                        request_data['%s[%i]' % (k, ii)] = x
+                    for index, val in enumerate(v):
+                        request_data['%s[%i]' % (k, index)] = val
 
         # an e-mail address is required
         request_data['email'] = email
 
         return request_data
 
-    @prepend_docstr_nosections("\n" + _parse_args.__doc__ +
-                              _parse_result.__doc__)
+    @prepend_docstr_nosections("\n" + _parse_args.__doc__ + _parse_result.__doc__)
     def query_async(self, *args, **kwargs):
         """
         Returns
@@ -326,12 +325,12 @@ def parse_besancon_dict(bd):
                 for listval in val:
                     http_dict.append((key, listval))
             else:
-                for ii, listval in enumerate(val):
+                for index, listval in enumerate(val):
                     if isinstance(listval, list):
-                        for jj, lv in enumerate(listval):
-                            http_dict.append((key + "[%i][%i]" % (ii, jj), lv))
+                        for inner_index, inner_listval in enumerate(listval):
+                            http_dict.append((key + "[%i][%i]" % (index, inner_index), inner_listval))
                     else:
-                        http_dict.append((key + "[%i]" % (ii), listval))
+                        http_dict.append((key + "[%i]" % (index), listval))
         else:
             http_dict.append((key, val))
 
@@ -379,7 +378,7 @@ def parse_besancon_model_string(bms,):
     # locate index of data start
     lines = bms.split('\n')
     nblanks1 = 0
-    for ii, line in enumerate(lines):
+    for index, line in enumerate(lines):
         if line.strip() == '':
             nblanks1 += 1
         if all([h in line for h in header_start]):
@@ -387,7 +386,7 @@ def parse_besancon_model_string(bms,):
 
     names = line.split()
     ncols = len(names)
-    header_line = ii
+    header_line = index
     # data starts 1 line after header
     first_data_line = lines[header_line + 1]
     # apparently ascii wants you to start 1 early though
@@ -397,7 +396,7 @@ def parse_besancon_model_string(bms,):
 
     # locate index of data end
     nblanks2 = 0
-    for jj, line in enumerate(lines[::-1]):
+    for data_index, line in enumerate(lines[::-1]):
         if "TOTAL NUMBER OF STARS :" in line:
             nstars = int(line.split()[-1])
         if line.strip() == '':
@@ -405,7 +404,7 @@ def parse_besancon_model_string(bms,):
         if all([h in line for h in header_start]):
             break
     # most likely = -7
-    data_end = -(jj - nblanks2 + 1)
+    data_end = -(data_index - nblanks2 + 1)
 
     # note: old col_starts/col_ends were:
     # (0,7,13,16,21,27,33,36,41,49,56,62,69,76,82,92,102,109)

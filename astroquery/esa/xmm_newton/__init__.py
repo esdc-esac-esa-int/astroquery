@@ -1,12 +1,10 @@
 """
-
-@author: Elena Colomo
-@contact: ecolomo@esa.int
+===============
+XMM-Newton Init
+===============
 
 European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
-
-Created on 3 Sept. 2019
 
 """
 
@@ -17,13 +15,13 @@ class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astroquery.esa.xmm_newton`.
     """
-    DATA_ACTION = _config.ConfigItem("http://nxsa.esac.esa.int/"
+    DATA_ACTION = _config.ConfigItem("https://nxsa.esac.esa.int/"
                                      "nxsa-sl/servlet/data-action?",
                                      "Main url for retriving XSA files")
-    DATA_ACTION_AIO = _config.ConfigItem("http://nxsa.esac.esa.int/"
+    DATA_ACTION_AIO = _config.ConfigItem("https://nxsa.esac.esa.int/"
                                          "nxsa-sl/servlet/data-action-aio?",
                                          "Main url for retriving XSA files")
-    METADATA_ACTION = _config.ConfigItem("http://nxsa.esac.esa.int/"
+    METADATA_ACTION = _config.ConfigItem("https://nxsa.esac.esa.int/"
                                          "nxsa-sl/servlet/"
                                          "metadata-action?",
                                          "Main url for retriving XSA metadata")

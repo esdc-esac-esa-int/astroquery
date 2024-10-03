@@ -19,8 +19,9 @@ class Conf(_config.ConfigNamespace):
     slap_url = _config.ConfigItem(
         'https://find.nrao.edu/splata-slap/slap',
         'Splatalogue SLAP interface URL (not used).')
+    base_url = 'https://splatalogue.online'
     query_url = _config.ConfigItem(
-        'https://www.cv.nrao.edu/php/splat/c_export.php',
+        f'{base_url}/splata-slap/advanceded/false',
         'Splatalogue web interface URL.')
     timeout = _config.ConfigItem(
         60,
@@ -32,8 +33,6 @@ class Conf(_config.ConfigNamespace):
 
 conf = Conf()
 
-from . import load_species_table
-from . import utils
 from .core import Splatalogue, SplatalogueClass
 
 __all__ = ['Splatalogue', 'SplatalogueClass',

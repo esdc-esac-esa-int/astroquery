@@ -1,7 +1,4 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
 import json
 import warnings
 
@@ -9,15 +6,14 @@ from astropy.table import Table
 from astropy.utils.data import get_pkg_data_contents
 from astropy.utils.exceptions import AstropyUserWarning
 
-from . import conf
-from ..utils.mocks import MockResponse
+from astroquery.sdss import conf
+from astroquery.utils.mocks import MockResponse
 
 __all__ = ['get_field_info', 'photoobj_defs', 'specobj_defs', 'crossid_defs']
 
 # Default photometric and spectroscopic quantities to retrieve.
 photoobj_defs = ['ra', 'dec', 'objid', 'run', 'rerun', 'camcol', 'field']
-specobj_defs = ['z', 'plate', 'mjd', 'fiberID', 'specobjid', 'run2d',
-                'instrument']
+specobj_defs = ['z', 'plate', 'mjd', 'fiberID', 'specobjid', 'run2d']
 crossid_defs = ['ra', 'dec', 'psfMag_u', 'psfMagerr_u', 'psfMag_g',
                 'psfMagerr_g', 'psfMag_r', 'psfMagerr_r', 'psfMag_i',
                 'psfMagerr_i', 'psfMag_z', 'psfMagerr_z']

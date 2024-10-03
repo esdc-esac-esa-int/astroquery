@@ -15,7 +15,7 @@ class GAMAClass(BaseQuery):
     TODO: document
     """
 
-    request_url = 'http://www.gama-survey.org/dr3/query/'
+    request_url = 'https://www.gama-survey.org/dr3/query/'
     timeout = 60
 
     def query_sql_async(self, *args, **kwargs):
@@ -57,7 +57,7 @@ class GAMAClass(BaseQuery):
 
         return payload
 
-    def _parse_result(self, result, verbose=False, **kwargs):
+    def _parse_result(self, result, *, verbose=False, **kwargs):
         """
         Use get_gama_datafile to download a result URL
         """

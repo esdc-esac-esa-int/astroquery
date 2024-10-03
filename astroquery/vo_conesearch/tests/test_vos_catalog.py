@@ -28,8 +28,9 @@ __doctest_skip__ = ['*']
 DB_FILE = get_pkg_data_filename(os.path.join('data', 'basic.json'))
 
 
-class TestCatalog(object):
+class TestCatalog:
     """Test VOSCatalog class."""
+
     def setup_class(self):
         self.cat = VOSCatalog.create(
             'foo', 'bar.foo', description='test', my_num=100)
@@ -71,8 +72,9 @@ def test_db_illegal_catalog():
         VOSDatabase(db._tree)
 
 
-class TestDatabase(object):
+class TestDatabase:
     """Test VOSDatabase class."""
+
     def setup_class(self):
         """Use ``from_json()`` method to init."""
         self.db = VOSDatabase.from_json(DB_FILE)
@@ -103,8 +105,8 @@ class TestDatabase(object):
 
         for k, v in foo_iter:
             assert k == 'foo'
-            assert (v._tree == foo_cat._tree ==
-                    {'title': 'bar', 'url': 'bar.foo'})
+            assert (v._tree == foo_cat._tree
+                    == {'title': 'bar', 'url': 'bar.foo'})
 
         with pytest.raises(MissingCatalog):
             method1('foofoo')
@@ -187,6 +189,7 @@ def test_write_json(tmpdir):
     assert db.list_catalogs_by_url() == db2.list_catalogs_by_url()
 
 
+@pytest.mark.filterwarnings('ignore')
 @pytest.mark.remote_data
 def test_db_from_registry():
     """Test database created from VO registry.

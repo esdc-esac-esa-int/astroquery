@@ -1,14 +1,17 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-import six
-from astropy.io import ascii
+from io import StringIO, BytesIO
+
+from astropy.io import votable
 import astropy.units as u
 from astropy.table import Table
+from requests import HTTPError
+
+from astroquery.query import BaseQuery
+from astroquery.exceptions import InvalidQueryError
+from astroquery.utils import url_helpers, prepend_docstr_nosections, async_to_sync
 
 from . import conf
-from ..query import BaseQuery
-from ..utils import url_helpers, prepend_docstr_nosections, async_to_sync
-
 try:
     from regions import CircleSkyRegion
 except ImportError:
@@ -21,7 +24,7 @@ class XMatchClass(BaseQuery):
     URL = conf.url
     TIMEOUT = conf.timeout
 
-    def query(self, cat1, cat2, max_distance,
+    def query(self, cat1, cat2, max_distance, *,
               colRA1=None, colDec1=None, colRA2=None, colDec2=None,
               area='allsky', cache=True, get_query_payload=False, **kwargs):
         """
@@ -61,22 +64,27 @@ class XMatchClass(BaseQuery):
             Default value is 'allsky' (no restriction). If a
             ``regions.CircleSkyRegion`` object is given, only sources in
             this region will be considered.
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
         table : `~astropy.table.Table`
             Query results table
         """
-        response = self.query_async(cat1, cat2, max_distance, colRA1, colDec1,
-                                    colRA2, colDec2, area=area, cache=cache,
+        response = self.query_async(cat1, cat2, max_distance, colRA1=colRA1, colDec1=colDec1,
+                                    colRA2=colRA2, colDec2=colDec2, area=area, cache=cache,
                                     get_query_payload=get_query_payload,
                                     **kwargs)
         if get_query_payload:
             return response
-        return self._parse_text(response.text)
+
+        content = BytesIO(response.content)
+        return Table.read(content, format='votable', use_names_over_ids=True)
 
     @prepend_docstr_nosections("\n" + query.__doc__)
-    def query_async(self, cat1, cat2, max_distance, colRA1=None, colDec1=None,
+    def query_async(self, cat1, cat2, max_distance, *, colRA1=None, colDec1=None,
                     colRA2=None, colDec2=None, area='allsky', cache=True,
                     get_query_payload=False, **kwargs):
         """
@@ -86,14 +94,12 @@ class XMatchClass(BaseQuery):
             The HTTP response returned from the service.
         """
         if max_distance > 180 * u.arcsec:
-            raise ValueError(
-                'max_distance argument must not be greater than 180')
-        payload = {
-            'request': 'xmatch',
-            'distMaxArcsec': max_distance.to(u.arcsec).value,
-            'RESPONSEFORMAT': 'csv',
-            **kwargs
-        }
+            raise ValueError('max_distance argument must not be greater than 180')
+        payload = {'request': 'xmatch',
+                   'distMaxArcsec': max_distance.to(u.arcsec).value,
+                   'RESPONSEFORMAT': 'votable',
+                   **kwargs}
+
         kwargs = {}
 
         self._prepare_sending_table(1, payload, kwargs, cat1, colRA1, colDec1)
@@ -105,22 +111,27 @@ class XMatchClass(BaseQuery):
 
         response = self._request(method='POST', url=self.URL, data=payload,
                                  timeout=self.TIMEOUT, cache=cache, **kwargs)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except HTTPError as err:
+            error_votable = votable.parse(BytesIO(response.content))
+            error_reason = error_votable.get_info_by_id('QUERY_STATUS').content
+            raise InvalidQueryError(error_reason) from err
 
         return response
 
-    def _prepare_sending_table(self, i, payload, kwargs, cat, colRA, colDec):
+    def _prepare_sending_table(self, cat_index, payload, kwargs, cat, colRA, colDec):
         '''Check if table is a string, a `astropy.table.Table`, etc. and set
         query parameters accordingly.
         '''
-        catstr = 'cat{0}'.format(i)
-        if isinstance(cat, six.string_types):
+        catstr = 'cat{0}'.format(cat_index)
+        if isinstance(cat, str):
             payload[catstr] = cat
         elif isinstance(cat, Table):
             # write the Table's content into a new, temporary CSV-file
             # so that it can be pointed to via the `files` option
             # file will be closed when garbage-collected
-            fp = six.StringIO()
+            fp = StringIO()
             cat.write(fp, format='ascii.csv')
             fp.seek(0)
             kwargs['files'] = {catstr: ('cat1.csv', fp.read())}
@@ -130,12 +141,11 @@ class XMatchClass(BaseQuery):
 
         if not self.is_table_available(cat):
             if ((colRA is None) or (colDec is None)):
-                raise ValueError('Specify the name of the RA/Dec columns in' +
-                                 ' the input table.')
+                raise ValueError('Specify the name of the RA/Dec columns in the input table.')
             # if `cat1` is not a VizieR table,
             # it is assumed it's either a URL or an uploaded table
-            payload['colRA{0}'.format(i)] = colRA
-            payload['colDec{0}'.format(i)] = colDec
+            payload['colRA{0}'.format(cat_index)] = colRA
+            payload['colDec{0}'.format(cat_index)] = colDec
 
     def _prepare_area(self, payload, area):
         '''Set the area parameter in the payload'''
@@ -158,7 +168,7 @@ class XMatchClass(BaseQuery):
 
         # table_id can actually be a Table instance, there is no point in
         # comparing those to stings
-        if not isinstance(table_id, six.string_types):
+        if not isinstance(table_id, str):
             return False
 
         if (table_id[:7] == 'vizier:'):
@@ -166,10 +176,15 @@ class XMatchClass(BaseQuery):
 
         return table_id in self.get_available_tables()
 
-    def get_available_tables(self, cache=True):
+    def get_available_tables(self, *, cache=True):
         """Get the list of the VizieR tables which are available in the
         xMatch service and return them as a list of strings.
 
+        Parameters
+        ----------
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
         """
         response = self._request(
             'GET',
@@ -180,23 +195,6 @@ class XMatchClass(BaseQuery):
 
         content = response.text
         return content.splitlines()
-
-    def _parse_text(self, text):
-        """
-        Parse a CSV text file that has potentially duplicated header names
-        """
-        header = text.split("\n")[0]
-        colnames = header.split(",")
-        for cn in colnames:
-            if colnames.count(cn) > 1:
-                ii = 1
-                while colnames.count(cn) > 0:
-                    colnames[colnames.index(cn)] = cn + "_{ii}".format(ii=ii)
-                    ii += 1
-        new_text = ",".join(colnames) + "\n" + "\n".join(text.split("\n")[1:])
-        result = ascii.read(new_text, format='csv', fast_reader=False)
-
-        return result
 
 
 XMatch = XMatchClass()

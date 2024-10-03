@@ -4,17 +4,21 @@ Search functionality for the Gemini archive of observations.
 For questions, contact ooberdorf@gemini.edu
 """
 
+import os
+
 from datetime import date
 
+from astroquery import log
 from astropy import units
 from astropy.table import Table, MaskedColumn
 
 from astroquery.gemini.urlhelper import URLHelper
 import numpy as np
 
-from ..query import BaseQuery
+from ..query import QueryWithLogin
 from ..utils.class_or_instance import class_or_instance
 from . import conf
+
 
 __all__ = ['Observations', 'ObservationsClass']  # specifies what to import
 
@@ -92,7 +96,7 @@ __valid_raw_reduced__ = [
 ]
 
 
-class ObservationsClass(BaseQuery):
+class ObservationsClass(QueryWithLogin):
 
     server = conf.server
     url_helper = URLHelper(server)
@@ -106,8 +110,29 @@ class ObservationsClass(BaseQuery):
         """
         super().__init__()
 
+    def _login(self, username, password):
+        """
+        Login to the Gemini Archive website.
+
+        This method will authenticate the session as a particular user.  This may give you access
+        to additional information or access based on your credentials
+
+        Parameters
+        ----------
+        username : str
+            The username to login as
+        password : str
+            The password for the given account
+        """
+        params = dict(username=username, password=password)
+        r = self._session.request('POST', 'https://archive.gemini.edu/login/', params=params)
+        if b'<P>Welcome, you are sucessfully logged in' not in r.content:
+            log.error('Unable to login, please check your credentials')
+            return False
+        return True
+
     @class_or_instance
-    def query_region(self, coordinates, radius=0.3*units.deg):
+    def query_region(self, coordinates, *, radius=0.3*units.deg):
         """
         search for Gemini observations by target on the sky.
 
@@ -131,7 +156,7 @@ class ObservationsClass(BaseQuery):
         return self.query_criteria(coordinates=coordinates, radius=radius)
 
     @class_or_instance
-    def query_object(self, objectname, radius=0.3*units.deg):
+    def query_object(self, objectname, *, radius=0.3*units.deg):
         """
         search for Gemini observations by target on the sky.
 
@@ -156,7 +181,7 @@ class ObservationsClass(BaseQuery):
         return self.query_criteria(objectname=objectname, radius=radius)
 
     @class_or_instance
-    def query_criteria(self, *rawqueryargs, coordinates=None, radius=0.3*units.deg, pi_name=None, program_id=None, utc_date=None,
+    def query_criteria(self, *rawqueryargs, coordinates=None, radius=None, pi_name=None, program_id=None, utc_date=None,
                        instrument=None, observation_class=None, observation_type=None, mode=None,
                        adaptive_optics=None, program_text=None, objectname=None, raw_reduced=None,
                        orderby=None, **rawquerykwargs):
@@ -173,7 +198,7 @@ class ObservationsClass(BaseQuery):
             The target around which to search. It may be specified as a
             string or as the appropriate `~astropy.coordinates` object.
         radius : str or `~astropy.units.Quantity` object, optional
-            Default 0.3 degrees.
+            Default 0.3 degrees if coordinates are set, else None
             The string must be parsable by `~astropy.coordinates.Angle`. The
             appropriate `~astropy.units.Quantity` object from
             `~astropy.units` may also be used. Defaults to 0.3 deg.
@@ -293,6 +318,9 @@ class ObservationsClass(BaseQuery):
             for (k, v) in rawquerykwargs.items():
                 kwargs[k] = v
 
+        # If coordinates is set but we have no radius, set a default
+        if (coordinates or objectname) and radius is None:
+            radius = 0.3 * units.deg
         # Now consider the canned criteria
         if radius is not None:
             kwargs["radius"] = radius
@@ -310,7 +338,7 @@ class ObservationsClass(BaseQuery):
                     raise ValueError("utc_date tuple should have two values")
                 if not isinstance(utc_date[0], date) or not isinstance(utc_date[1], date):
                     raise ValueError("utc_date tuple should have date values in it")
-                args.append("%s-%s" % utc_date[0].strftime("YYYYMMdd"), utc_date[1].strftime("YYYYMMdd"))
+                args.append("{:%Y%m%d}-{:%Y%m%d}".format(*utc_date))
         if instrument is not None:
             if instrument.upper() not in __valid_instruments__:
                 raise ValueError("Unrecognized instrument: %s" % instrument)
@@ -390,6 +418,21 @@ class ObservationsClass(BaseQuery):
         js = response.json()
         return _gemini_json_to_table(js)
 
+    def get_file(self, filename, *, download_dir='.', timeout=None):
+        """
+        Download the requested file to the current directory
+
+        filename : str
+            Name of the file to download
+        download_dir : str, optional
+            Name of the directory to download to
+        timeout : int, optional
+            Timeout of the request in milliseconds
+        """
+        url = "https://archive.gemini.edu/file/%s" % filename
+        local_filepath = os.path.join(download_dir, filename)
+        self._download_file(url=url, local_filepath=local_filepath, timeout=timeout)
+
 
 def _gemini_json_to_table(json):
     """
@@ -419,67 +462,67 @@ def _gemini_json_to_table(json):
 
 
 __keys__ = ["exposure_time",
-        "detector_roi_setting",
-        "detector_welldepth_setting",
-        "telescope",
-        "mdready",
-        "requested_bg",
-        "engineering",
-        "cass_rotator_pa",
-        "ut_datetime",
-        "file_size",
-        "types",
-        "requested_wv",
-        "detector_readspeed_setting",
-        "size",
-        "laser_guide_star",
-        "observation_id",
-        "science_verification",
-        "raw_cc",
-        "filename",
-        "instrument",
-        "reduction",
-        "camera",
-        "ra",
-        "detector_binning",
-        "lastmod",
-        "wavelength_band",
-        "data_size",
-        "mode",
-        "raw_iq",
-        "airmass",
-        "elevation",
-        "data_label",
-        "requested_iq",
-        "object",
-        "requested_cc",
-        "program_id",
-        "file_md5",
-        "central_wavelength",
-        "raw_wv",
-        "compressed",
-        "filter_name",
-        "detector_gain_setting",
-        "path",
-        "observation_class",
-        "qa_state",
-        "observation_type",
-        "calibration_program",
-        "md5",
-        "adaptive_optics",
-        "name",
-        "focal_plane_mask",
-        "data_md5",
-        "raw_bg",
-        "disperser",
-        "wavefront_sensor",
-        "gcal_lamp",
-        "detector_readmode_setting",
-        "phot_standard",
-        "local_time",
-        "spectroscopy",
-        "azimuth",
-        "release",
-        "dec"]
+            "detector_roi_setting",
+            "detector_welldepth_setting",
+            "telescope",
+            "mdready",
+            "requested_bg",
+            "engineering",
+            "cass_rotator_pa",
+            "ut_datetime",
+            "file_size",
+            "types",
+            "requested_wv",
+            "detector_readspeed_setting",
+            "size",
+            "laser_guide_star",
+            "observation_id",
+            "science_verification",
+            "raw_cc",
+            "filename",
+            "instrument",
+            "reduction",
+            "camera",
+            "ra",
+            "detector_binning",
+            "lastmod",
+            "wavelength_band",
+            "data_size",
+            "mode",
+            "raw_iq",
+            "airmass",
+            "elevation",
+            "data_label",
+            "requested_iq",
+            "object",
+            "requested_cc",
+            "program_id",
+            "file_md5",
+            "central_wavelength",
+            "raw_wv",
+            "compressed",
+            "filter_name",
+            "detector_gain_setting",
+            "path",
+            "observation_class",
+            "qa_state",
+            "observation_type",
+            "calibration_program",
+            "md5",
+            "adaptive_optics",
+            "name",
+            "focal_plane_mask",
+            "data_md5",
+            "raw_bg",
+            "disperser",
+            "wavefront_sensor",
+            "gcal_lamp",
+            "detector_readmode_setting",
+            "phot_standard",
+            "local_time",
+            "spectroscopy",
+            "azimuth",
+            "release",
+            "dec"]
 
 Observations = ObservationsClass()

@@ -13,7 +13,7 @@ import numpy as np
 
 # LOCAL
 from astropy import units as u
-from astropy import log
+from astroquery import log
 from astropy import modeling
 from astropy.utils.exceptions import AstropyUserWarning
 
@@ -21,7 +21,7 @@ __all__ = ['timefunc', 'RunTimePredictor']
 __doctest_skip__ = ['timefunc']
 
 
-def timefunc(num_tries=1, verbose=True):
+def timefunc(*, num_tries=1, verbose=True):
     """Decorator to time a function or method.
 
     Parameters
@@ -148,6 +148,7 @@ class RunTimePredictor:
     [(2, 4), (3, 9), (5, 25)]
 
     """
+
     def __init__(self, func, *args, **kwargs):
         self._funcname = func.__name__
         self._pfunc = partial(func, *args, **kwargs)
@@ -206,7 +207,7 @@ class RunTimePredictor:
             self._cache_time(arg)
 
     # FUTURE: Implement N^x * O(log(N)) fancy fitting.
-    def do_fit(self, model=None, fitter=None, power=1, min_datapoints=3):
+    def do_fit(self, *, model=None, fitter=None, power=1, min_datapoints=3):
         """Fit a function to the lists of arguments and
         their respective run time in the cache.
 
@@ -303,11 +304,11 @@ class RunTimePredictor:
             self._cache_est[arg] = t_est
         return t_est
 
-    def plot(self, xscale='linear', yscale='linear', xlabeltext='args',
+    def plot(self, *, xscale='linear', yscale='linear', xlabeltext='args',
              save_as=''):  # pragma: no cover
         """Plot prediction.
 
-        .. note:: Uses `matplotlib <http://matplotlib.org/>`_.
+        .. note:: Uses `matplotlib <https://matplotlib.org/>`_.
 
         Parameters
         ----------
@@ -350,13 +351,11 @@ class RunTimePredictor:
         # Fitted data
         if self._fit_func is not None:
             x_est = list(self._cache_est.keys())
-            y_est = (np.array(list(self._cache_est.values())) *
-                     u.second).to_value(cur_u)
+            y_est = (np.array(list(self._cache_est.values())) * u.second).to_value(cur_u)
             ax.scatter(x_est, y_est, marker='o', c='r', label='Predicted')
 
             x_fit = np.array(sorted(x_arr + x_est))
-            y_fit = (self._fit_func(x_fit**self._power) *
-                     u.second).to_value(cur_u)
+            y_fit = (self._fit_func(x_fit**self._power) * u.second).to_value(cur_u)
             ax.plot(x_fit, y_fit, 'b--', label='Fit')
 
         ax.set_xscale(xscale)

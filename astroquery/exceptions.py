@@ -8,7 +8,8 @@ from astropy.utils.exceptions import AstropyWarning
 __all__ = ['TimeoutError', 'InvalidQueryError', 'RemoteServiceError',
            'TableParseError', 'LoginError', 'ResolverError',
            'NoResultsWarning', 'LargeQueryWarning', 'InputWarning',
-           'AuthenticationWarning', 'MaxResultsWarning']
+           'AuthenticationWarning', 'MaxResultsWarning', 'CorruptDataWarning',
+           'EmptyResponseError', 'BlankResponseWarning']
 
 
 class TimeoutError(Exception):
@@ -96,3 +97,25 @@ class MaxResultsWarning(AstropyWarning):
     results are returned.
     """
     pass
+
+
+class CorruptDataWarning(AstropyWarning):
+    """
+    Astroquery warning class to be issued when there is a sign that the
+    (partially) downloaded data are corrupt.
+    """
+    pass
+
+
+class EmptyResponseError(ValueError):
+    """
+    Astroquery error class to be raised when the query returns an empty result
+    """
+    pass
+
+
+class BlankResponseWarning(AstropyWarning):
+    """
+    Astroquery warning to be raised if one or more rows in a table are bad, but
+    not all rows are.
+    """

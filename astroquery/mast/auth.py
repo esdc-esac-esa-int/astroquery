@@ -9,13 +9,12 @@ authenticating MAST users.
 
 import os
 import keyring
-import warnings
 
 from getpass import getpass
 
-from astropy.logger import log
+from astroquery import log
 
-from ..exceptions import AuthenticationWarning
+from ..exceptions import LoginError
 
 from . import conf
 
@@ -23,7 +22,7 @@ from . import conf
 __all__ = []
 
 
-class MastAuth(object):
+class MastAuth:
     """
     MAST authentication class, handles MAST authentication token.
     """
@@ -31,8 +30,8 @@ class MastAuth(object):
     def __init__(self, session, token=None):
 
         self.SESSION_INFO_URL = conf.server + "/whoami"
-        self.AUTH_URL = (conf.server.replace("mast", "auth.mast") +
-                         "/token?suggested_name=Astroquery&suggested_scope=mast:exclusive_access")
+        self.AUTH_URL = (conf.server.replace("mast", "auth.mast")
+                         + "/token?suggested_name=Astroquery&suggested_scope=mast:exclusive_access")
 
         self.session = session
 
@@ -82,10 +81,8 @@ class MastAuth(object):
         if not info["anon"]:
             log.info("MAST API token accepted, welcome {}".format(info["attrib"].get("display_name")))
         else:
-            warn_msg = ("MAST API token invalid!\n"
-                        "To make create a new API token visit to following link: " +
-                        self.AUTH_URL)
-            warnings.warn(warn_msg, AuthenticationWarning)
+            raise LoginError("MAST API token invalid!\n To create a new API token"
+                             "visit to following link: " + self.AUTH_URL)
 
         return not info["anon"]
 

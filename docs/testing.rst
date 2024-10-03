@@ -50,10 +50,8 @@ either be ``post`` or ``get``.
 
     @pytest.fixture
     def patch_get(request):
-        try:
-            mp = request.getfixturevalue("monkeypatch")
-        except AttributeError:  # pytest < 3
-            mp = request.getfuncargvalue("monkeypatch")
+        mp = request.getfixturevalue("monkeypatch")
+
         mp.setattr(requests.Session, 'request', get_mockreturn)
         return mp
 
@@ -71,7 +69,8 @@ object within the ``MockResponse`` class:
 
     def get_mockreturn(url, params=None, timeout=10):
         filename = data_path(DATA_FILES['votable'])
-        content = open(filename, 'r').read()
+        with open(filename, 'r') as infile:
+            content = infile.read()
         return MockResponse(content)
 
 ``data_path`` is a simple function that looks for the ``data`` directory local to
@@ -86,8 +85,14 @@ the ``test_module.py`` file.
 ``test_module_remote.py``
 -------------------------
 
-The remote tests are much easier.  Just decorate the test class or test
-functions with ``astropy.tests.helper.remote_data``.
+The remote tests are much easier. The file must contain the following::
+
+    import pytest
+
+    pytestmark = pytest.mark.remote_data
+
+This ensures that the test functions in remote test module are only executed if
+the ``--remote-data`` flag is used.
 
 ``setup_package.py``
 --------------------
@@ -103,3 +108,28 @@ This file only needs the ``get_package_data()`` function, which will tell
         paths_test = [os.path.join('data', '*.xml')]
 
         return {'astroquery.module.tests': paths_test}
+
+
+Doctesting
+----------
+
+Narrative documentation should also be tested, the ``doctest-remote-data`` directive provides a way
+to mark code snippets that relies on remote data access.
+
+If any of the examples include saving data files locally, use the ``testcleanup`` directive and the
+`~astroquery.utils.cleanup_saved_downloads` function at the end of the
+narrative documentation.
+
+
+Running only the remote-data tests
+----------------------------------
+
+We should aim to have a reasonably complete test coverage for all the code using the
+actual servers (as opposed to mocked tests). To check the remote-data test
+coverage you can opt to run only those marked with ``remote_data``. Do
+remember to change ``<module_you_want_to_test>`` to the module name you
+actually work on:
+
+.. code-block:: bash
+
+    pytest -P <module_you_want_to_test> -m remote_data --remote-data=any --cov astroquery/<module_you_want_to_test> --cov-config=setup.cfg

@@ -4,18 +4,10 @@
 Gaia TAP plus
 =============
 
-@author: Juan Carlos Segovia
-@contact: juan.carlos.segovia@sciops.esa.int
-
 European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
 
-Created on 30 jun. 2016
-
-
 """
-
-from astroquery.utils.tap.core import TapPlus
 from astropy import config as _config
 
 
@@ -24,7 +16,7 @@ class Conf(_config.ConfigNamespace):
     Configuration parameters for `astroquery.gaia`.
     """
 
-    MAIN_GAIA_TABLE = _config.ConfigItem("gaiadr2.gaia_source",
+    MAIN_GAIA_TABLE = _config.ConfigItem("gaiadr3.gaia_source",
                                          "GAIA source data table")
     MAIN_GAIA_TABLE_RA = _config.ConfigItem("ra",
                                             "Name of RA parameter in table")
@@ -33,12 +25,31 @@ class Conf(_config.ConfigNamespace):
     ROW_LIMIT = _config.ConfigItem(50,
                                    "Number of rows to return from database "
                                    "query (set to -1 for unlimited).")
+    VALID_DATALINK_RETRIEVAL_TYPES = ['EPOCH_PHOTOMETRY',
+                                      'XP_CONTINUOUS',
+                                      'XP_SAMPLED',
+                                      'RVS',
+                                      'MCMC_GSPPHOT',
+                                      'MCMC_MSC',
+                                      'EPOCH_ASTROMETRY',
+                                      'RV_EPOCH_SINGLE',
+                                      'RV_EPOCH_DOUBLE',
+                                      'RVS_EPOCH',
+                                      'RVS_TRANSIT',
+                                      'EPOCH_ASTROMETRY_CROWDED_FIELD',
+                                      'EPOCH_IMAGE',
+                                      'EPOCH_PHOTOMETRY_CCD',
+                                      'XP_EPOCH_SPECTRUM_SSO',
+                                      'XP_EPOCH_CROWDING',
+                                      'XP_MEAN_SPECTRUM',
+                                      'XP_EPOCH_SPECTRUM',
+                                      'CROWDED_FIELD_IMAGE']
+
+    VALID_LINKING_PARAMETERS = {'SOURCE_ID', 'TRANSIT_ID', 'IMAGE_ID'}
 
 
 conf = Conf()
 
-
 from .core import Gaia, GaiaClass
-
 
 __all__ = ['Gaia', 'GaiaClass', 'Conf', 'conf']

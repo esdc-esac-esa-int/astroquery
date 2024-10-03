@@ -1,30 +1,17 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-NASA Exoplanet Archive Query Tool
----------------------------------
+This is the old namespace for querying the NASA Exolpanet Archive.
+Please update your imports and use it from astroquery.ipac.nexsci.nasa_exoplanet_archive.
 
-Module to query the `NASA Exoplanet Archive <https://exoplanetarchive.ipac.caltech.edu>`_ via `the
-API <https://exoplanetarchive.ipac.caltech.edu/docs/program_interfaces.html>`_.
+.. deprecated:: 0.4.4
 """
+import warnings
 
-from astropy import config as _config
+warnings.warn("the ``nasa_exoplanet_archive`` module has been moved to "
+              "astroquery.ipac.nexsci.nasa_exoplanet_archive, "
+              "please update your imports.", DeprecationWarning, stacklevel=2)
 
+from astroquery.ipac.nexsci.nasa_exoplanet_archive import NasaExoplanetArchive, NasaExoplanetArchiveClass, Conf
 
-class Conf(_config.ConfigNamespace):
-    """
-    Configuration parameters for `astroquery.nasa_exoplanet_archive`.
-    """
-
-    url = _config.ConfigItem(
-        "https://exoplanetarchive.ipac.caltech.edu/cgi-bin/nstedAPI/nph-nstedAPI",
-        "URL for the NASA Exoplanet Archive API")
-    timeout = _config.ConfigItem(
-        600, "Time limit for requests from the NASA Exoplanet Archive servers")
-    cache = _config.ConfigItem(False, "Should the requests be cached?")
-
-
-conf = Conf()
-
-from .core import NasaExoplanetArchive, NasaExoplanetArchiveClass  # noqa isort:skip
 
 __all__ = ["NasaExoplanetArchive", "NasaExoplanetArchiveClass", "Conf"]

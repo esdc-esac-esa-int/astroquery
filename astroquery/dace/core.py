@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 from collections import defaultdict
 from json import JSONDecodeError
 from astropy.table import Table
@@ -35,14 +35,14 @@ class DaceClass(BaseQuery):
         object_name : str
             The target you want radial velocities data
 
-        Return
-        ------
+        Returns
+        -------
         response : a ``requests.Response`` from DACE
         """
         return self._request("GET", ''.join([self.__DACE_URL, self.__RADIAL_VELOCITIES_ENDPOINT, object_name]),
                              timeout=self.__DACE_TIMEOUT, headers=self.__HEADERS)
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         try:
             json_data = response.json()
             dace_dict = self.transform_data_as_dict(json_data)

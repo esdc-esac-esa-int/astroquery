@@ -1,16 +1,14 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """
-
-@author: Elena Colomo
-@contact: ecolomo@esa.int
+========================
+XMM-Newton Setup Package
+========================
 
 European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
 
-Created on 4 Sept. 2019
 """
 
-from __future__ import absolute_import
 
 import os
 
@@ -20,6 +18,7 @@ import os
 def get_package_data():
     paths = [os.path.join('data', '*.tar'),
              os.path.join('data', '*.xml'),
+             os.path.join('data', '*.ini')
              ]  # etc, add other extensions
     # you can also enlist files individually by names
     # finally construct and return a dict for the sub module

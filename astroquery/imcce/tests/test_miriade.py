@@ -1,11 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
 
 import pytest
 import os
 
 import astropy.units as u
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 
 from .. import Miriade, MiriadeClass
 
@@ -32,12 +31,9 @@ def nonremote_request(self, request_type, url, **kwargs):
 # that mocks(monkeypatches) the actual 'requests.get' function:
 @pytest.fixture
 def patch_request(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
-    mp.setattr(MiriadeClass, '_request',
-               nonremote_request)
+    mp = request.getfixturevalue("monkeypatch")
+
+    mp.setattr(MiriadeClass, '_request', nonremote_request)
     return mp
 
 
@@ -93,10 +89,10 @@ def test_observation_coordinates(patch_request):
     eph = Miriade.get_ephemerides('3552', coordtype=5)
     cols = ('target', 'epoch', 'siderealtime', 'RAJ2000', 'DECJ2000',
             'hourangle', 'DEC', 'AZ', 'EL', 'refraction',
-            'airmass', 'V', 'delta', 'heldist', 'alpha', 'elong', 'posunc',
+            'V', 'delta', 'heldist', 'alpha', 'elong', 'posunc',
             'RAcosD_rate', 'DEC_rate', 'delta_rate')
     units = (None, u.d, u.h, u.deg, u.deg, u.deg, u.deg, u.deg, u.deg,
-             u.arcsec, '-', u.mag, u.au, u.au, u.deg, u.deg, u.arcsec,
+             u.arcsec, u.mag, u.au, u.au, u.deg, u.deg, u.arcsec,
              u.arcsec / u.minute, u.arcsec / u.minute, u.km / u.s)
     for i in range(len(cols)):
         assert cols[i] in eph.columns
@@ -106,9 +102,9 @@ def test_observation_coordinates(patch_request):
 def test_aoobservation_coordinates(patch_request):
     eph = Miriade.get_ephemerides('3552', coordtype=6)
     cols = ('target', 'epoch', 'siderealtime', 'RAJ2000', 'DECJ2000',
-            'refraction', 'airmass', 'V', 'delta', 'heldist', 'alpha',
+            'refraction', 'V', 'delta', 'heldist', 'alpha',
             'elong', 'posunc', 'RAcosD_rate', 'DEC_rate', 'delta_rate')
-    units = (None, u.d, u.h, u.deg, u.deg, u.arcsec, '-', u.mag,
+    units = (None, u.d, u.h, u.deg, u.deg, u.arcsec, u.mag,
              u.au, u.au, u.deg, u.deg, u.arcsec, u.arcsec / u.minute,
              u.arcsec / u.minute, u.km / u.s)
     for i in range(len(cols)):

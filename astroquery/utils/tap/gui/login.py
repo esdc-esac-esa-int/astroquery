@@ -15,35 +15,33 @@ Created on 30 jun. 2016
 
 """
 
-import six
-
 try:
-    from six.moves.tkinter import Tk as TKTk
+    from tkinter import Tk as TKTk
 except ImportError:
     TKTk = None
 
 try:
-    from six.moves.tkinter import Toplevel as TKToplevel
+    from tkinter import Toplevel as TKToplevel
 except ImportError:
     TKToplevel = None
 
 try:
-    from six.moves.tkinter import Button as TKButton
+    from tkinter import Button as TKButton
 except ImportError:
     TKButton = None
 
 try:
-    from six.moves.tkinter import Label as TKLabel
+    from tkinter import Label as TKLabel
 except ImportError:
     TKLabel = None
 
 try:
-    from six.moves.tkinter import Entry as TKEntry
+    from tkinter import Entry as TKEntry
 except ImportError:
     TKEntry = None
 
 
-class LoginDialog(object):
+class LoginDialog:
 
     def __init__(self, host):
         self.__interna_init()
@@ -92,7 +90,7 @@ class LoginDialog(object):
         x = (self.__top.winfo_screenwidth() // 2) - (width // 2)
         y = (self.__top.winfo_screenheight() // 2) - (height // 2)
 
-        self.__top.geometry("+%d+%d" % (x, y))
+        self.__top.geometry(f"+{x}+{y}")
 
         row = 0
         expLabel = TKLabel(self.__top, text='Login to host:')

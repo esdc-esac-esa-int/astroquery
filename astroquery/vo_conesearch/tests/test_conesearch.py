@@ -12,7 +12,7 @@ import pytest
 # ASTROPY
 from astropy import units as u
 from astropy.coordinates import ICRS, SkyCoord
-from astropy.io.votable.tree import Table as VOTable
+from astropy.io.votable.exceptions import W25
 from astropy.table import Table
 from astropy.utils.data import get_pkg_data_filename
 from astropy.utils import data
@@ -22,6 +22,14 @@ from .. import conf, conesearch, vos_catalog
 from ..core import _validate_coord, ConeSearch
 from ..exceptions import VOSError, ConeSearchError
 from ...exceptions import NoResultsWarning
+
+
+try:
+    # Workaround astropy deprecation, remove try/except once >=6.0 is required
+    from astropy.io.votable.tree import TableElement as VOTable
+except ImportError:
+    from astropy.io.votable.tree import Table as VOTable
+
 
 __doctest_skip__ = ['*']
 
@@ -35,7 +43,7 @@ SCS_RADIUS = SCS_SR * u.degree
 
 
 @pytest.mark.remote_data
-class TestConeSearch(object):
+class TestConeSearch:
     """
     Test Cone Search on a pre-defined access URL.
 
@@ -48,9 +56,10 @@ class TestConeSearch(object):
         At the time this was written, ``pedantic=True`` will
         not yield any successful search.
     """
+
     def setup_class(self):
         # If this link is broken, use the next in database that works
-        self.url = ('http://vizier.u-strasbg.fr/viz-bin/votable/-A?-out.all&'
+        self.url = ('http://vizier.unistra.fr/viz-bin/votable/-A?-out.all&'
                     '-source=I/252/out&')
         self.catname = 'USNO-A2'
 
@@ -63,10 +72,10 @@ class TestConeSearch(object):
         self.verbose = False
 
     def test_cat_listing(self):
-        assert (conesearch.list_catalogs() ==
-                ['BROKEN', 'USNO ACT', 'USNO NOMAD', 'USNO-A2', 'USNO-B1'])
-        assert (conesearch.list_catalogs(pattern='usno*a') ==
-                ['USNO ACT', 'USNO NOMAD', 'USNO-A2'])
+        assert (conesearch.list_catalogs()
+                == ['BROKEN', 'USNO ACT', 'USNO NOMAD', 'USNO-A2', 'USNO-B1'])
+        assert (conesearch.list_catalogs(pattern='usno*a')
+                == ['USNO ACT', 'USNO NOMAD', 'USNO-A2'])
 
     def test_no_result_classic(self):
         with pytest.warns(NoResultsWarning, match='returned 0 result'):
@@ -81,6 +90,7 @@ class TestConeSearch(object):
                 service_url=self.url)
         assert result is None
 
+    @pytest.mark.filterwarnings('ignore::astropy.io.votable.exceptions.W25')
     @pytest.mark.parametrize(('center', 'radius'),
                              [((SCS_RA, SCS_DEC), SCS_SR),
                               (SCS_CENTER, SCS_RADIUS)])
@@ -113,11 +123,12 @@ class TestConeSearch(object):
 
     def test_timeout_classic(self):
         """Test timed out query."""
-        with pytest.warns(NoResultsWarning, match='timed out'):
-            with conf.set_temp('timeout', 1e-6):
-                result = conesearch.conesearch(
-                    SCS_CENTER, SCS_RADIUS, cache=False,
-                    verbose=self.verbose, catalog_db=self.url)
+        with pytest.warns(W25, match='timed out'):
+            with pytest.warns(NoResultsWarning):
+                with conf.set_temp('timeout', 1e-6):
+                    result = conesearch.conesearch(
+                        SCS_CENTER, SCS_RADIUS, cache=False,
+                        verbose=self.verbose, catalog_db=self.url)
         assert result is None
 
     def test_searches_classic(self):
@@ -142,6 +153,7 @@ class TestConeSearch(object):
         assert tab_2.url == tab_4.url
         np.testing.assert_array_equal(tab_2.array, tab_4.array)
 
+    @pytest.mark.filterwarnings('ignore::astropy.io.votable.exceptions.W25')
     @pytest.mark.parametrize(('center', 'radius'),
                              [((SCS_RA, SCS_DEC), SCS_SR),
                               (SCS_CENTER, SCS_RADIUS)])
@@ -156,6 +168,7 @@ class TestConeSearch(object):
 
         assert tab_1.array.size > 0
 
+    @pytest.mark.filterwarnings('ignore::astropy.io.votable.exceptions.W25')
     def test_async(self):
         async_search = conesearch.AsyncConeSearch(
             SCS_CENTER, SCS_RADIUS, return_astropy_table=False)
@@ -172,6 +185,7 @@ class TestConeSearch(object):
         else:
             assert tab.array.size > 0
 
+    @pytest.mark.filterwarnings('ignore::astropy.io.votable.exceptions.W25')
     def test_async_all(self):
         async_search_all = conesearch.AsyncSearchAll(
             SCS_CENTER, SCS_RADIUS, return_astropy_table=False)
@@ -218,7 +232,7 @@ class TestConeSearch(object):
         data.conf.reset('remote_timeout')
 
 
-class TestErrorResponse(object):
+class TestErrorResponse:
     """
     Test Cone Search error response handling.
 
@@ -227,6 +241,7 @@ class TestErrorResponse(object):
 
     Also see https://github.com/astropy/astropy/issues/1001
     """
+
     def setup_class(self):
         self.datadir = 'data'
         self.pedantic = False

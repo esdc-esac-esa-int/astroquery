@@ -1,196 +1,206 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import pytest
 
-import astropy.coordinates as coord
+from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astropy.utils.exceptions import AstropyDeprecationWarning
 from astropy.table import Table
-from ...utils.testing_tools import MockResponse
-from ... import simbad
 
+from astroquery.exceptions import NoResultsWarning
+from astroquery.simbad import Simbad
+from astroquery.simbad.core import _cached_query_tap, _Column, _Join
+
+from pyvo.dal.exceptions import DALOverflowWarning
+
+# this is for the very slow tests
+SKIP_SLOW = True
 
 # M42 coordinates
-ICRS_COORDS_M42 = coord.SkyCoord("05h35m17.3s -05h23m28s", frame='icrs')
-ICRS_COORDS_SgrB2 = coord.SkyCoord(266.835*u.deg, -28.38528*u.deg, frame='icrs')
-multicoords = coord.SkyCoord([ICRS_COORDS_M42, ICRS_COORDS_SgrB2])
+ICRS_COORDS_M42 = SkyCoord("05h35m17.3s -05d23m28s", frame='icrs')
+ICRS_COORDS_SgrB2 = SkyCoord(266.835*u.deg, -28.38528*u.deg, frame='icrs')
+multicoords = SkyCoord([ICRS_COORDS_SgrB2, ICRS_COORDS_SgrB2])
 
 
-@pytest.mark.remote_data
-class TestSimbad(object):
+@pytest.mark.remote_data()
+class TestSimbad:
 
-    @classmethod
-    def setup_class(cls):
-        simbad.core.Simbad.ROW_LIMIT = 5
-
-    def test_query_criteria1(self):
-        result = simbad.core.Simbad.query_criteria(
-            "region(box, GAL, 49.89 -0.3, 0.5d 0.5d)", otype='HII')
-        assert isinstance(result, Table)
-
-    def test_query_criteria2(self):
-        result = simbad.core.Simbad.query_criteria(otype='SNR')
-        assert isinstance(result, Table)
-
-    def test_query_bibcode_async(self):
-        response = simbad.core.Simbad.query_bibcode_async(
-            '2006ApJ*', wildcard=True)
-        assert response is not None
-        response.raise_for_status()
-        # make sure requests has *NOT* been monkeypatched
-        assert hasattr(response, 'connection')
-        assert hasattr(response, 'close')
-        assert hasattr(response, 'status_code')
-        assert hasattr(response, 'request')
-        assert not isinstance(response, MockResponse)
-        assert not issubclass(response.__class__, MockResponse)
+    simbad = Simbad()
 
     def test_query_bibcode(self):
-        result = simbad.core.Simbad.query_bibcode('2006ApJ*', wildcard=True)
-        assert isinstance(result, Table)
+        self.simbad.ROW_LIMIT = 20
+        # wildcard option
+        refs = self.simbad.query_bibcode('2006ApJ*', wildcard=True)
+        assert set(refs["journal"]).issubset({"ApJ", "ApJS"})
+        assert "abstract" not in refs.colnames
+        assert len(refs) == 20  # we applied the ROW_LIMIT
 
-    def test_query_bibobj_async(self):
-        response = simbad.core.Simbad.query_bibobj_async('2005A&A.430.165F')
-        assert response is not None
+    def test_non_ascii_bibcode(self):
+        # regression test for #1775
+        ref = self.simbad.query_bibcode('2019PASJ...71...55K', abstract=True)
+        assert ref["title"][0].startswith("The dominant origin of diffuse Lyα halos")
+        # we also check the abstract option here
+        assert "abstract" in ref.colnames
 
     def test_query_bibobj(self):
-        result = simbad.core.Simbad.query_bibobj('2005A&A.430.165F')
-        assert isinstance(result, Table)
-
-    def test_query_catalog_async(self):
-        response = simbad.core.Simbad.query_catalog_async('m')
-        assert response is not None
+        self.simbad.ROW_LIMIT = 5
+        self.simbad.add_votable_fields("otype")
+        bibcode = '2005A&A...430..165F'
+        result = self.simbad.query_bibobj(bibcode, criteria="otype='*..'")
+        assert all((bibcode == code) for code in result["bibcode"].data.data)
+        assert all(('*' in otype) for otype in result["otype"].data.data)
+        self.simbad.reset_votable_fields()
 
     def test_query_catalog(self):
-        result = simbad.core.Simbad.query_catalog('m')
-        assert isinstance(result, Table)
-
-    def test_query_region_async(self):
-        response = simbad.core.Simbad.query_region_async(
-            ICRS_COORDS_M42, radius=5 * u.deg, equinox=2000.0, epoch='J2000')
-
-        assert response is not None
-
-    def test_query_region_async_vector(self):
-        response1 = simbad.core.Simbad.query_region_async(multicoords,
-                                                          radius=0.5*u.arcsec)
-        assert response1.request.body == 'script=votable+%7Bmain_id%2Ccoordinates%7D%0Avotable+open%0Aquery+coo+5%3A35%3A17.3+-80%3A52%3A00+radius%3D0.5s+frame%3DICRS+equi%3D2000.0%0Aquery+coo+17%3A47%3A20.4+-28%3A23%3A07.008+radius%3D0.5s+frame%3DICRS+equi%3D2000.0%0Avotable+close'   # noqa
+        self.simbad.ROW_LIMIT = -1
+        result = self.simbad.query_catalog('M')
+        assert len(result) == 110
 
     def test_query_region(self):
-        result = simbad.core.Simbad.query_region(ICRS_COORDS_M42, radius=5 * u.deg,
-                                                 equinox=2000.0, epoch='J2000')
-        assert isinstance(result, Table)
+        self.simbad.ROW_LIMIT = 10
+        result = self.simbad.query_region(ICRS_COORDS_M42, radius="1d")
+        assert all(ra > 83 and ra < 85 for ra in result["ra"].data.data)
 
     def test_query_regions(self):
-        result = simbad.core.Simbad.query_region(multicoords, radius=1 * u.arcmin,
-                                                 equinox=2000.0, epoch='J2000')
-        assert isinstance(result, Table)
-
-    def test_query_object_async(self):
-        response = simbad.core.Simbad.query_object_async("m [0-9]",
-                                                         wildcard=True)
-        assert response is not None
-
-    def test_query_object(self):
-        result = simbad.core.Simbad.query_object("m [0-9]", wildcard=True)
-        assert isinstance(result, Table)
-
-    def test_query_multi_object(self):
-        result = simbad.core.Simbad.query_objects(['M32', 'M81'])
-        assert len(result) == 2
-        assert len(result.errors) == 0
-
-        result = simbad.core.Simbad.query_objects(['M32', 'M81', 'gHer'])
-        # 'gHer' is not a valid Simbad identifier - it should be 'g Her' to
-        # get the star
-        assert len(result) == 2
-        assert len(result.errors) == 1
-
-        # test async
-        s = simbad.core.Simbad()
-        response = s.query_objects_async(['M32', 'M81'])
-
-        result = s._parse_result(response, simbad.core.SimbadVOTableResult)
-        assert len(result) == 2
+        self.simbad.ROW_LIMIT = 10
+        result = self.simbad.query_region(SkyCoord([SkyCoord.from_name('m81'),
+                                                    SkyCoord.from_name('m10')]),
+                                          radius=1 * u.arcmin, criteria="main_id LIKE 'M %'")
+        # filtering on main_id to retrieve the two cone centers
+        assert {"M  81", "M  10"} == set(result["main_id"].data.data)
 
     def test_query_object_ids(self):
-        result = simbad.core.Simbad.query_objectids("Polaris")
-
+        self.simbad.ROW_LIMIT = -1
+        result = self.simbad.query_objectids("Polaris")
         # Today, there are 42 names.  There could be more in the future
         assert len(result) >= 42
 
-    # Test multiple functions correctly return "None" when SIMBAD has no
-    # data for the query
-    @pytest.mark.parametrize('function', [
-        ('query_criteria'),
-        ('query_object'),
-        ('query_catalog'),
-        ('query_bibobj'),
-        ('query_bibcode'),
-        ('query_objectids')])
-    def test_null_response(self, function):
-        assert (simbad.core.Simbad.__getattribute__(function)('idonotexist')
-                is None)
+    def test_query_multi_object(self):
+        result = self.simbad.query_objects(['M32', 'M81'])
+        assert len(result) == 2
+        # check that adding fields preserves the left join
+        self.simbad.add_votable_fields("mesdistance", "otype")
+        result = self.simbad.query_objects(['M32', 'M81', 'gHer'])
+        # 'gHer' is not a valid Simbad identifier - it should be 'g Her' to
+        # get the star. This appears as an empty line corresponding to
+        # 'object_number_id' = 3
+        assert max(result["object_number_id"]) == 3
+        self.simbad.reset_votable_fields()
 
-    # Special case of null test: list of nonexistent parameters
-    def test_query_objects_null(self):
-        assert simbad.core.Simbad.query_objects(['idonotexist',
-                                                 'idonotexisteither']) is None
-
-    # Special case of null test: zero-sized region
-    def test_query_region_null(self):
-        result = simbad.core.Simbad.query_region(
-            coord.SkyCoord("00h01m0.0s 00h00m0.0s"), radius="0d",
-            equinox=2000.0, epoch='J2000')
-        assert result is None
-
-    # Special case of null test: very small region
-    def test_query_small_region_null(self):
-        result = simbad.core.Simbad.query_region(
-            coord.SkyCoord("00h01m0.0s 00h00m0.0s"), radius=1.0 * u.marcsec,
-            equinox=2000.0, epoch='J2000')
-        assert result is None
-
-    # Special case : zero-sized region with one object
-    def test_query_zero_sized_region(self):
-        result = simbad.core.Simbad.query_region(
-            coord.SkyCoord("20h54m05.6889s 37d01m17.380s"), radius="1s",
-            equinox=2000.0, epoch='J2000')
-        # This should find a single star, BD+36 4308
-        assert len(result) == 1
+    @pytest.mark.skipif("SKIP_SLOW")  # ~300 seconds (has to regexp all the database twice!)
+    def test_query_multi_object_wildcard(self):
+        # with wildcards
+        result = self.simbad.query_objects(['*Crab*', '*Bubble*'], wildcard=True)
+        assert len(result) >= 23
 
     def test_simbad_flux_qual(self):
         '''Regression test for issue 680'''
-        request = simbad.core.Simbad()
-        request.add_votable_fields("flux_qual(V)")
-        response = request.query_object('algol')
-        assert("FLUX_QUAL_V" in response.keys())
+        simbad_instance = Simbad()
+        simbad_instance.add_votable_fields("flux")
+        response = simbad_instance.query_object('algol', criteria="filter='V'")
+        # this is bugged, it should be "flux.qual", see https://github.com/gmantele/vollt/issues/154
+        # when the issue upstream in vollt (the TAP software used in SIMBAD) is fixed we can rewrite this test
+        assert "qual" in response.colnames
+        # replace "filter" by "flux.filter" when upstream bug is fixed
+        assert response["filter"][0] == "V"
 
-    def test_multi_vo_fields(self):
-        '''Regression test for issue 820'''
-        request = simbad.core.Simbad()
+    def test_query_object(self):
+        self.simbad.ROW_LIMIT = 5
+        result = self.simbad.query_object("NGC [0-9]*", wildcard=True)
+        assert all(matched_id.startswith("NGC") for matched_id in result["matched_id"].data.data)
 
-        request.add_votable_fields("flux_qual(V)")
-        request.add_votable_fields("flux_qual(R)")
-        request.add_votable_fields("coo(s)")  # sexagesimal coordinates
-        request.add_votable_fields("coo(d)")  # degree coordinates
-        request.add_votable_fields("ra(:;A;ICRS;J2000)")
-        request.add_votable_fields("ra(:;A;fk5;J2000)")
-        request.add_votable_fields("bibcodelist(2000-2006)")
-        request.add_votable_fields("bibcodelist(1990-2000)")
-        request.add_votable_fields("otype(S)")
-        request.add_votable_fields("otype(3)")
-        request.add_votable_fields("id(1)")
-        request.add_votable_fields("id(2mass)")
-        request.add_votable_fields("id(s)")
+    def test_query_criteria(self):
+        simbad_instance = Simbad()
+        simbad_instance.add_votable_fields("otype")
+        with pytest.warns(AstropyDeprecationWarning, match="'query_criteria' is deprecated*"):
+            result = simbad_instance.query_criteria("region(Galactic Center, 10s)", maintype="X")
+            assert all(result["otype"].data.data == "X")
+            assert len(result) >= 16  # there could be more measurements, there are 16 sources in 2024
 
-        response = request.query_object('algol')
-        assert("FLUX_QUAL_V" in response.keys())
-        assert("FLUX_QUAL_R" in response.keys())
-        assert("RA_d" in response.keys())
-        assert("RA_s" in response.keys())
-        assert("RA___A_ICRS_J2000" in response.keys())
-        assert("RA___A_fk5_J2000" in response.keys())
-        assert("OTYPE_S" in response.keys())
-        assert("OTYPE_3" in response.keys())
-        assert("ID_1" in response.keys())
-        assert("ID_2mass" in response.keys())
-        assert("ID_s" in response.keys())
+    def test_query_tap(self):
+        # a robust query about something that should not change in Simbad
+        filtername = self.simbad.query_tap("select filtername from filter where filtername='B'")
+        assert filtername["filtername"][0] == 'B'
+        # test uploads by joining two local tables
+        table_letters = Table([["a", "b", "c"]], names=["letters"])
+        table_numbers = Table([[1, 2, 3], ["a", "b", "c"]], names=["numbers", "letters"])
+        result = self.simbad.query_tap("SELECT * FROM TAP_UPLOAD.numbers "
+                                       "JOIN TAP_UPLOAD.letters USING(letters)",
+                                       numbers=table_numbers, letters=table_letters)
+        expect = ("letters numbers\n------- -------\n      a       1\n      b       2\n"
+                  "      c       3")
+        assert expect == str(result)
+        # Test query_tap raised errors
+        with pytest.warns(DALOverflowWarning, match="Partial result set *"):
+            truncated_result = Simbad.query_tap("SELECT * from basic", maxrec=2)
+            assert len(truncated_result) == 2
+        with pytest.raises(ValueError, match="The maximum number of records cannot exceed 2000000."):
+            Simbad.query_tap("select top 5 * from basic", maxrec=10e10)
+        with pytest.raises(ValueError, match="Query string contains an odd number of single quotes.*"):
+            Simbad.query_tap("'''")
+        # test the cache
+        assert _cached_query_tap.cache_info().currsize != 0
+        Simbad.clear_cache()
+        assert _cached_query_tap.cache_info().currsize == 0
+
+    def test_empty_response_warns(self):
+        with pytest.warns(NoResultsWarning, match="The request executed correctly, but *"):
+            # a catalog that does not exists should return an empty response
+            Simbad.query_catalog("unknown_catalog")
+
+    # ----------------------------------
+
+    def test_simbad_list_tables(self):
+        tables = Simbad.list_tables()
+        # check the content
+        assert "basic" in str(tables)
+        # there might be new tables, we have 30 now.
+        assert len(tables) >= 30
+
+    def test_simbad_list_columns(self):
+        columns = Simbad.list_columns("ident", "bibliO")  # this should be case insensitive
+        assert len(columns) == 4
+        assert "oidref" in str(columns)
+        columns = Simbad.list_columns(keyword="herschel")
+        assert {"mesHerschel"} == set(columns["table_name"])
+
+    def test_list_linked_tables(self):
+        links = Simbad.list_linked_tables("h_link")
+        assert {"basic"} == set(links["target_table"])
+
+    # ----------------------------------
+
+    def test_add_bundle_to_output(self):
+        simbad_instance = Simbad()
+        # empty before the test
+        simbad_instance.columns_in_output = []
+        # add a bundle
+        simbad_instance.add_votable_fields("dim")
+        # check the length
+        assert len(simbad_instance.columns_in_output) == 8
+        assert _Column("basic", "galdim_majaxis") in simbad_instance.columns_in_output
+
+    def test_add_votable_fields(self):
+        simbad_instance = Simbad()
+        # empty before the test
+        simbad_instance.columns_in_output = []
+        simbad_instance.add_votable_fields("otypes")
+        assert _Column("otypes", "otype", 'otypes.otype') in simbad_instance.columns_in_output
+        # tables also require a join
+        assert _Join("otypes",
+                     _Column("basic", "oid"),
+                     _Column("otypes", "oidref")) == simbad_instance.joins[0]
+        # tables that have been renamed should warn
+        with pytest.warns(DeprecationWarning, match="'iue' has been renamed 'mesiue'.*"):
+            simbad_instance.add_votable_fields("IUE")
+        # empty before the test
+        simbad_instance.columns_in_output = []
+        # mixed columns bundles and tables
+        simbad_instance.add_votable_fields("flux", "velocity", "update_date")
+        assert len(simbad_instance.columns_in_output) == 19
+
+        # add fluxes by their filter names
+        simbad_instance = Simbad()
+        simbad_instance.add_votable_fields("U", "V")
+        simbad_instance.add_votable_fields("u")
+        result = simbad_instance.query_object("HD 147933")
+        assert all(filtername in result.colnames for filtername in {"u", "U", "V"})

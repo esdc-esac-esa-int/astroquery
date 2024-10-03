@@ -1,8 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
 import json
 import os
+import warnings
 
 from astropy.utils.data import download_file
 from astropy.io import ascii
@@ -18,7 +17,7 @@ BOOL_ATTRS = ('ASTROMETRY', 'BINARY', 'EOD', 'KDE', 'MICROLENSING', 'MULT',
               'SE', 'TIMING', 'TRANSIT', 'TREND')
 
 
-class ExoplanetOrbitDatabaseClass(object):
+class ExoplanetOrbitDatabaseClass:
     """
     Exoplanet Orbit Database querying object. Use the ``get_table`` or
     ``query_planet`` methods to get information about exoplanets via the
@@ -32,13 +31,13 @@ class ExoplanetOrbitDatabaseClass(object):
     def param_units(self):
         if self._param_units is None:
             module_dir = os.path.dirname(os.path.abspath(__file__))
-            units_file = open(os.path.join(module_dir, 'data',
-                                           'exoplanet_orbit_database_units.json'))
-            self._param_units = json.load(units_file)
+            filename = os.path.join(module_dir, 'data', 'exoplanet_orbit_database_units.json')
+            with open(filename) as units_file:
+                self._param_units = json.load(units_file)
 
         return self._param_units
 
-    def get_table(self, cache=True, show_progress=True, table_path=None):
+    def get_table(self, *, cache=True, show_progress=True, table_path=None):
         """
         Download (and optionally cache) the `Exoplanet Orbit Database planets
         table <http://www.exoplanets.org>`_.
@@ -84,11 +83,15 @@ class ExoplanetOrbitDatabaseClass(object):
                     except ValueError:
                         print(f"WARNING: Unit {self.param_units[col]} not recognised")
 
-            self._table = QTable(exoplanets_table)
+            # Masked quantities are not supported in older astropy, warnings are raised for <v5.0
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', message='dropping mask in Quantity column',
+                                        category=UserWarning)
+                self._table = QTable(exoplanets_table)
 
         return self._table
 
-    def query_planet(self, planet_name, table_path=None):
+    def query_planet(self, planet_name, *, table_path=None):
         """
         Get table of exoplanet properties.
 

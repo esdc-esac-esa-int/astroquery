@@ -1,5 +1,3 @@
-.. doctest-skip-all
-
 .. _astroquery.svo_fps:
 
 **********************************************************
@@ -14,55 +12,61 @@ Filter Profile Service (`SVO FPS <http://svo2.cab.inta-csic.es/theory/fps/>`_).
 It allows retrieval of filter data (index, transmission data, filter list, etc.)
 from the service as astropy tables.
 
-Get index (master list) of all Filters
---------------------------------------
+Get index list of all Filters
+-----------------------------
 
-The filter index (all available filters with their properties) can be listed
-with `~astroquery.svo_fps.SvoFpsClass.get_filter_index`:
+The filter index (the properties of all available filters in a wavelength
+range) can be listed with
+:meth:`~astroquery.svo_fps.SvoFpsClass.get_filter_index`:
 
-.. code-block:: python
+.. doctest-remote-data::
 
+    >>> from astropy import units as u
     >>> from astroquery.svo_fps import SvoFps
-    >>> index = SvoFps.get_filter_index()
+    >>> index = SvoFps.get_filter_index(12_000*u.angstrom, 12_100*u.angstrom)
     >>> index.info
-    <Table masked=True length=5139>
-            name          dtype  unit
-    -------------------- ------- ----
-    FilterProfileService  object     
-                filterID  object     
-          WavelengthUnit  object     
-           WavelengthUCD  object     
-              PhotSystem  object     
-            DetectorType  object     
-                    Band  object     
-              Instrument  object     
-                Facility  object     
-        ProfileReference  object     
-    CalibrationReference  object     
-             Description  object     
-                Comments  object     
-          WavelengthMean float32   AA
-           WavelengthEff float32   AA
-           WavelengthMin float32   AA
-           WavelengthMax float32   AA
-                WidthEff float32   AA
-           WavelengthCen float32   AA
-         WavelengthPivot float32   AA
-          WavelengthPeak float32   AA
-          WavelengthPhot float32   AA
-                    FWHM float32   AA
-               PhotCalID  object     
-                  MagSys  object     
-               ZeroPoint float32   Jy
-           ZeroPointUnit  object     
-                    Mag0 float32     
-           ZeroPointType  object     
-               AsinhSoft float32     
-        TrasmissionCurve  object     
+    <Table length=15>
+            name          dtype        unit
+    -------------------- ------- ---------------
+    FilterProfileService  object
+                filterID  object
+          WavelengthUnit  object
+           WavelengthUCD  object
+              PhotSystem  object
+            DetectorType  object
+                    Band  object
+              Instrument  object
+                Facility  object
+        ProfileReference  object
+    CalibrationReference  object
+             Description  object
+                Comments  object
+           WavelengthRef float64              AA
+          WavelengthMean float64              AA
+           WavelengthEff float64              AA
+           WavelengthMin float64              AA
+           WavelengthMax float64              AA
+                WidthEff float64              AA
+           WavelengthCen float64              AA
+         WavelengthPivot float64              AA
+          WavelengthPeak float64              AA
+          WavelengthPhot float64              AA
+                    FWHM float64              AA
+                    Fsun float64 erg / (A s cm2)
+               PhotCalID  object
+                  MagSys  object
+               ZeroPoint float64              Jy
+           ZeroPointUnit  object
+                    Mag0 float64
+           ZeroPointType  object
+               AsinhSoft float64
+        TrasmissionCurve  object
 
-There are options to downselect based on the minimum
-and maximum effective wavelength (``wavelength_eff_min``
-and ``wavelength_eff_max``, respectively).
+
+If the wavelength range contains too many entries then a ``TimeoutError`` will
+occur. A smaller wavelength range might succeed, but if a large range really is
+required then you can use the ``timeout`` argument to allow for a longer
+response time.
 
 Get list of Filters under a specified Facilty and Instrument
 ------------------------------------------------------------
@@ -72,46 +76,46 @@ Filters for an arbitrary combination of Facility & Instrument (the Facility
 must be specified, but the Instrument is optional).  The data table returned
 is of the same form as that from `~astroquery.svo_fps.SvoFpsClass.get_filter_index`:
 
-.. code-block:: python
+.. doctest-remote-data::
 
     >>> filter_list = SvoFps.get_filter_list(facility='Keck', instrument='NIRC2')
     >>> filter_list.info
-
-    <Table masked=True length=11>
-            name          dtype  unit
-    -------------------- ------- ----
-    FilterProfileService  object     
-                filterID  object     
-          WavelengthUnit  object     
-           WavelengthUCD  object     
-              PhotSystem  object     
-            DetectorType  object     
-                    Band  object     
-              Instrument  object     
-                Facility  object     
-        ProfileReference  object     
-    CalibrationReference  object     
-             Description  object     
-                Comments  object     
-          WavelengthMean float32   AA
-           WavelengthEff float32   AA
-           WavelengthMin float32   AA
-           WavelengthMax float32   AA
-                WidthEff float32   AA
-           WavelengthCen float32   AA
-         WavelengthPivot float32   AA
-          WavelengthPeak float32   AA
-          WavelengthPhot float32   AA
-                    FWHM float32   AA
-               PhotCalID  object     
-                  MagSys  object     
-               ZeroPoint float32   Jy
-           ZeroPointUnit  object     
-                    Mag0 float32     
-           ZeroPointType  object     
-               AsinhSoft float32     
-        TrasmissionCurve  object 
-
+    <Table length=11>
+            name          dtype        unit
+    -------------------- ------- ---------------
+    FilterProfileService  object
+                filterID  object
+          WavelengthUnit  object
+           WavelengthUCD  object
+              PhotSystem  object
+            DetectorType  object
+                    Band  object
+              Instrument  object
+                Facility  object
+        ProfileReference  object
+    CalibrationReference  object
+             Description  object
+                Comments  object
+           WavelengthRef float64              AA
+          WavelengthMean float64              AA
+           WavelengthEff float64              AA
+           WavelengthMin float64              AA
+           WavelengthMax float64              AA
+                WidthEff float64              AA
+           WavelengthCen float64              AA
+         WavelengthPivot float64              AA
+          WavelengthPeak float64              AA
+          WavelengthPhot float64              AA
+                    FWHM float64              AA
+                    Fsun float64 erg / (A s cm2)
+               PhotCalID  object
+                  MagSys  object
+               ZeroPoint float64              Jy
+           ZeroPointUnit  object
+                    Mag0 float64
+           ZeroPointType  object
+               AsinhSoft float64
+        TrasmissionCurve  object
 
 Get transmission data for a specific Filter
 -------------------------------------------
@@ -122,40 +126,39 @@ If you know the ``filterID`` of the filter (which you can determine with
 transmission curve data using
 `~astroquery.svo_fps.SvoFpsClass.get_transmission_data`:
 
-.. code-block:: python
+.. doctest-remote-data::
 
     >>> data = SvoFps.get_transmission_data('2MASS/2MASS.H')
     >>> print(data)
     Wavelength Transmission
-        AA                 
+        AA
     ---------- ------------
-    12890.0          0.0
-    13150.0          0.0
-    13410.0          0.0
-    13680.0          0.0
-    13970.0          0.0
-    14180.0          0.0
-    14400.0       0.0005
-    14620.0       0.0028
-    14780.0       0.0081
-    14860.0       0.0287
-        ...          ...
-    18030.0       0.1077
-    18100.0       0.0707
-    18130.0       0.0051
-    18180.0         0.02
-    18280.0       0.0004
-    18350.0          0.0
-    18500.0        1e-04
-    18710.0          0.0
-    18930.0          0.0
-    19140.0          0.0
+       12890.0          0.0
+       13150.0          0.0
+       13410.0          0.0
+       13680.0          0.0
+       13970.0          0.0
+       14180.0          0.0
+       14400.0       0.0005
+       14620.0 0.0027999999
+       14780.0 0.0081000002
+       14860.0 0.0286999997
+           ...          ...
+       18030.0 0.1076999977
+       18100.0 0.0706999972
+       18130.0 0.0051000002
+       18180.0 0.0199999996
+       18280.0       0.0004
+       18350.0          0.0
+       18500.0       0.0001
+       18710.0          0.0
+       18930.0          0.0
+       19140.0          0.0
     Length = 58 rows
-
 
 These are the data needed to plot the transmission curve for filter:
 
-.. code-block:: python
+.. doctest-skip::
 
     >>> import matplotlib.pyplot as plt
     >>> plt.plot(data['Wavelength'], data['Transmission'])
@@ -171,6 +174,19 @@ These are the data needed to plot the transmission curve for filter:
    The 2MASS H-band transmission curve
 
 
+Troubleshooting
+===============
+
+If you are repeatedly getting failed queries, or bad/out-of-date results, try clearing your cache:
+
+.. code-block:: python
+
+    >>> from astroquery.svo_fps import SvoFps
+    >>> SvoFps.clear_cache()
+
+If this function is unavailable, upgrade your version of astroquery. 
+The ``clear_cache`` function was introduced in version 0.4.7.dev8479.
+   
 
 Reference/API
 =============

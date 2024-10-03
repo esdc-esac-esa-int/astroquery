@@ -6,6 +6,7 @@ Discovery Portal API
 This module contains various methods for querying the MAST Discovery Portal API.
 """
 
+import difflib
 import warnings
 import uuid
 import json
@@ -16,12 +17,11 @@ import numpy as np
 from urllib.parse import quote as urlencode
 
 from astropy.table import Table, vstack, MaskedColumn
-from astropy.utils import deprecated
 
-from ..query import BaseQuery, QueryWithLogin
+from ..query import BaseQuery
 from ..utils import async_to_sync
 from ..utils.class_or_instance import class_or_instance
-from ..exceptions import InputWarning, NoResultsWarning
+from ..exceptions import InputWarning, InvalidQueryError, NoResultsWarning, RemoteServiceError
 
 from . import conf, utils
 
@@ -45,7 +45,7 @@ def _prepare_service_request_string(json_obj):
     """
 
     # Append cache breaker
-    if not 'cacheBreaker' in json_obj:
+    if 'cacheBreaker' not in json_obj:
         json_obj['cacheBreaker'] = str(uuid.uuid4())
     request_string = json.dumps(json_obj)
     return 'request={}'.format(urlencode(request_string))
@@ -78,13 +78,13 @@ def _json_to_table(json_obj, col_config=None):
         if col == "_selected_":
             continue
 
-        # reading the colum config if given
+        # reading the column config if given
         ignore_value = None
         if col_config:
             col_props = col_config.get(col, {})
             ignore_value = col_props.get("ignoreValue", None)
 
-        # regularlizing the type
+        # regularizing the type
         reg_type = utils.parse_type(atype)
         atype = reg_type[1]
         ignore_value = reg_type[2] if (ignore_value is None) else ignore_value
@@ -94,7 +94,7 @@ def _json_to_table(json_obj, col_config=None):
         if ignore_value is not None:
             col_data[np.where(np.equal(col_data, None))] = ignore_value
 
-        # no consistant way to make the mask because np.equal fails on ''
+        # no consistent way to make the mask because np.equal fails on ''
         # and array == value fails with None
         if atype == 'str':
             col_mask = (col_data == ignore_value)
@@ -110,28 +110,28 @@ def _json_to_table(json_obj, col_config=None):
 @async_to_sync
 class PortalAPI(BaseQuery):
     """
-    MAST Discovery Portal API calss.
+    MAST Discovery Portal API calls.
 
-    Class that allows direct programatic access to the MAST Portal.
+    Class that allows direct programmatic access to the MAST Portal.
     Should be used to facilitate all Portal API queries.
     """
 
+    MAST_REQUEST_URL = conf.server + "/api/v0/invoke"
+    COLUMNS_CONFIG_URL = conf.server + "/portal/Mashup/Mashup.asmx/columnsconfig"
+    MAST_DOWNLOAD_URL = conf.server + "/api/v0.1/Download/file"
+    MAST_BUNDLE_URL = conf.server + "/api/v0.1/Download/bundle"
+
+    TIMEOUT = conf.timeout
+    PAGESIZE = conf.pagesize
+
+    _column_configs = dict()
+    _current_service = None
+
     def __init__(self, session=None):
 
-        super(PortalAPI, self).__init__()
+        super().__init__()
         if session:
             self._session = session
-
-        self.MAST_REQUEST_URL = conf.server + "/api/v0/invoke"
-        self.COLUMNS_CONFIG_URL = conf.server + "/portal/Mashup/Mashup.asmx/columnsconfig"
-        self.MAST_DOWNLOAD_URL = conf.server + "/api/v0.1/Download/file"
-        self.MAST_BUNDLE_URL = conf.server + "/api/v0.1/Download/bundle"
-
-        self.TIMEOUT = conf.timeout
-        self.PAGESIZE = conf.pagesize
-
-        self._column_configs = dict()
-        self._current_service = None
 
     def _request(self, method, url, params=None, data=None, headers=None,
                  files=None, stream=False, auth=None, retrieve_all=True):
@@ -255,7 +255,7 @@ class PortalAPI(BaseQuery):
             self._column_configs[service].update(json_response['data']['Tables'][0]
                                                  ['ExtendedProperties']['continuousHistogram'])
             for col, val in self._column_configs[service].items():
-                val.pop('hist', None)  # don't want to save all this unecessary data
+                val.pop('hist', None)  # don't want to save all this unnecessary data
 
     def _parse_result(self, responses, verbose=False):
         """
@@ -303,7 +303,7 @@ class PortalAPI(BaseQuery):
     @class_or_instance
     def service_request_async(self, service, params, pagesize=None, page=None, **kwargs):
         """
-        Given a Mashup service and parameters, builds and excecutes a Mashup query.
+        Given a Mashup service and parameters, builds and executes a Mashup query.
         See documentation `here <https://mast.stsci.edu/api/v0/class_mashup_1_1_mashup_request.html>`__
         for information about how to build a Mashup request.
 
@@ -351,10 +351,10 @@ class PortalAPI(BaseQuery):
                    "Accept": "text/plain"}
 
         mashup_request = {'service': service,
-                         'params': params,
-                         'format': 'json',
-                         'pagesize': pagesize,
-                         'page': page}
+                          'params': params,
+                          'format': 'json',
+                          'pagesize': pagesize,
+                          'page': page}
 
         for prop, value in kwargs.items():
             mashup_request[prop] = value
@@ -404,11 +404,13 @@ class PortalAPI(BaseQuery):
             if np.isscalar(value,):
                 value = [value]
 
-            # Get the column type and separator
-            col_info = caom_col_config.get(colname)
+            # Get the column type and separator with case-insensitive lookup
+            col_info = next((v for k, v in caom_col_config.items() if k.lower() == colname.lower()), None)
             if not col_info:
-                warnings.warn("Filter {} does not exist. This filter will be skipped.".format(colname), InputWarning)
-                continue
+                closest_match = difflib.get_close_matches(colname, caom_col_config.keys(), n=1)
+                error_msg = f"Filter '{colname}' does not exist. Did you mean '{closest_match[0]}'?" if closest_match \
+                    else f"Filter '{colname}' does not exist."
+                raise InvalidQueryError(error_msg)
 
             colType = "discrete"
             if (col_info.get("vot.datatype", col_info.get("type")) in ("double", "float", "numeric")) \
@@ -422,15 +424,15 @@ class PortalAPI(BaseQuery):
             if colType == "continuous":
                 if len(value) < 2:
                     warning_string = "{} is continuous, ".format(colname) + \
-                                    "and filters based on min and max values.\n" + \
-                                    "Not enough values provided, skipping..."
+                        "and filters based on min and max values.\n" + \
+                        "Not enough values provided, skipping..."
                     warnings.warn(warning_string, InputWarning)
                     continue
                 elif len(value) > 2:
                     warning_string = "{} is continuous, ".format(colname) + \
-                                    "and filters based on min and max values.\n" + \
-                                    "Too many values provided, the first two will be " + \
-                                    "assumed to be the min and max values."
+                        "and filters based on min and max values.\n" + \
+                        "Too many values provided, the first two will be " + \
+                        "assumed to be the min and max values."
                     warnings.warn(warning_string, InputWarning)
             else:  # coltype is discrete, all values should be represented as strings, even if numerical
                 value = [str(x) for x in value]
@@ -441,8 +443,8 @@ class PortalAPI(BaseQuery):
                     if ('*' in val) or ('%' in val):
                         if free_text:  # free_text is already set cannot set again
                             warning_string = ("Only one wildcarded value may be used per filter, "
-                                             "all others must be exact.\n"
-                                             "Skipping {}...".format(val))
+                                              "all others must be exact.\n"
+                                              "Skipping {}...".format(val))
                             warnings.warn(warning_string, InputWarning)
                         else:
                             free_text = val.replace('*', '%')
@@ -454,7 +456,7 @@ class PortalAPI(BaseQuery):
             if separator:
                 entry["separator"] = separator
             if colType == "continuous":
-                entry["values"] = [{"min": value[0], "max":value[1]}]
+                entry["values"] = [{"min": value[0], "max": value[1]}]
             else:
                 entry["values"] = value
             if free_text:
@@ -482,6 +484,7 @@ class PortalAPI(BaseQuery):
         headers = {"User-Agent": self._session.headers["User-Agent"],
                    "Content-type": "application/x-www-form-urlencoded",
                    "Accept": "text/plain"}
+
         response = self._request("POST", self.COLUMNS_CONFIG_URL,
                                  data=("colConfigId={}".format(colconf_name)), headers=headers)
 
@@ -496,7 +499,7 @@ class PortalAPI(BaseQuery):
         examples = []
 
         for colname in column_dict:
-            # skipping the _selected column (gets rmoved in return table)
+            # skipping the _selected column (gets removed in return table)
             if colname == "_selected_":
                 continue
 

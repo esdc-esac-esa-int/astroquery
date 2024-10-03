@@ -13,7 +13,7 @@ def async_to_sync(cls):
     Convert all query_x_async methods to query_x methods
 
     (see
-    http://stackoverflow.com/questions/18048341/add-methods-to-a-class-generated-from-other-methods
+    https://stackoverflow.com/questions/18048341/add-methods-to-a-class-generated-from-other-methods
     for help understanding)
     """
 
@@ -53,7 +53,7 @@ def async_to_sync(cls):
     return cls
 
 
-def async_to_sync_docstr(doc, returntype='table'):
+def async_to_sync_docstr(doc, *, returntype='table'):
     """
     Strip of the "Returns" component of a docstr and replace it with "Returns a
     table" code

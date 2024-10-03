@@ -17,7 +17,7 @@ def handle_keyword_arg(url, key, value):
 
 def handle_radius(url, key, radius):
     """ Handler function for radius keyword with smart conversion to a degrees value """
-    assert(key == "radius")
+    assert (key == "radius")
     if isinstance(radius, (int, float)):
         radius = radius * units.deg
     radius = astropy.coordinates.Angle(radius)
@@ -28,7 +28,7 @@ def handle_radius(url, key, radius):
 
 def handle_coordinates(url, key, coordinates):
     """ Handler function for coordinates """
-    assert(key == "coordinates")
+    assert (key == "coordinates")
     coordinates = commons.parse_coordinates(coordinates)
     if coordinates is not None:
         return "%s/ra=%f/dec=%f" % (url, coordinates.ra.deg, coordinates.dec.deg)
@@ -48,13 +48,13 @@ handlers = {
 }
 
 
-class URLHelper(object):
+class URLHelper:
     def __init__(self, server="https://archive.gemini.edu"):
         """ Make a URL Helper for building URLs to the Gemini Archive REST service. """
         if server is None:
             self.server = "https://archive.gemini.edu"
         elif not server.lower().startswith("http:") \
-            and not server.lower().startswith("https:"):
+                and not server.lower().startswith("https:"):
             self.server = "https://%s" % server
         else:
             self.server = server
@@ -73,8 +73,34 @@ class URLHelper(object):
         -------
         response : `string` url to execute the query
         """
+        qa_parm = ''
+        eng_parm = ''
 
-        url = "%s/jsonsummary/notengineering/NotFail" % self.server
+        # List of args that specify a QA state
+        qa_parameters = (
+            'NotFail',
+            'AnyQA',
+            'Pass',
+            'Lucky',
+            'Win',
+            'Usable',
+            'Undefind',
+            'Fail'
+        )
+
+        # List of args that specify engineering data (or not)
+        engineering_parameters = (
+            'notengineering',
+            'engineering',
+            'includeengineering'
+        )
+
+        if not any(eng_parm in args for eng_parm in engineering_parameters):
+            eng_parm = 'notengineering/'
+        if not any(qa_parm in args for qa_parm in qa_parameters):
+            qa_parm = 'NotFail/'
+        url = "%s/jsonsummary/%s%s" % (self.server, eng_parm, qa_parm)
+        url = url[:-1]  # strip trailing /
 
         for arg in args:
             url = "%s/%s" % (url, arg)

@@ -1,5 +1,3 @@
-.. doctest-skip-all
-
 .. _astroquery.imcce:
 
 ******************************************************************************************************************************************
@@ -11,13 +9,13 @@ Overview
 
 IMCCE provides a number of Solar System-related services, two of which are currently implemented here:
 
-* `SkyBoT <http://vo.imcce.fr/webservices/skybot/>`_: search for and
+* `SkyBoT <https://ssp.imcce.fr/webservices/skybot/>`_: search for and
   identify Solar System objects that are present in a given area of
   the sky at a given time
-* `Miriade <http://vo.imcce.fr/webservices/miriade/>`_: ephemerides service
+* `Miriade <https://ssp.imcce.fr/webservices/miriade/>`_: ephemerides service
 
 Use cases for both services are detailed below.
-  
+
 
 SkyBot - Solar System Body Identification Service
 =================================================
@@ -26,12 +24,12 @@ Cone Search
 -----------
 
 `astroquery.imcce.SkybotClass` provides an interface to the `cone search
-<http://vo.imcce.fr/webservices/skybot/?conesearch>`_ offered by SkyBoT.
+<https://ssp.imcce.fr/webservices/skybot/api/conesearch/>`_ offered by SkyBoT.
 
 A simple cone search for Solar System objects in a circular field
 looks like this:
 
-.. code-block:: python
+.. doctest-remote-data::
 
    >>> from astroquery.imcce import Skybot
    >>> from astropy.coordinates import SkyCoord
@@ -39,19 +37,20 @@ looks like this:
    >>> import astropy.units as u
    >>> field = SkyCoord(0*u.deg, 0*u.deg)
    >>> epoch = Time('2019-05-29 21:42', format='iso')
-   >>> Skybot.cone_search(field, 5*u.arcmin, epoch)  # doctest: +SKIP
-   <QTable length=2>
-   Number    Name            RA         ...      vy          vz       epoch
-			    deg         ...    AU / d      AU / d       d
-   int64    str10         float64       ...   float64     float64    float64
-   ------ ---------- ------------------ ... ----------- ----------- ---------
-   516566  2007 DH36           0.005535 ... 0.008556458 0.002875929 2458630.0
-   163149 2002 CV106 359.98691791666664 ... 0.009078103  0.00267749 2458630.0
+   >>> results = Skybot.cone_search(field, 5*u.arcmin, epoch)
+   >>> results.pprint(max_width=80)  # doctest: +IGNORE_OUTPUT
+    Number    Name             RA          ...      vy          vz       epoch
+                              deg          ...    AU / d      AU / d       d
+    ------ ---------- -------------------- ... ----------- ----------- ---------
+        --  2012 BO42 0.019414999999999998 ... 0.009345668 0.005003011 2458630.0
+    516566  2007 DH36 0.005546249999999999 ...  0.00855646 0.002875928 2458630.0
+        --  2019 SS82    359.9931945833333 ... 0.009809784 0.004636687 2458630.0
+    163149 2002 CV106   359.98692374999996 ... 0.009078104  0.00267749 2458630.0
 
 `~astroquery.imcce.SkybotClass.cone_search` produces a
 `~astropy.table.QTable` object with the properties of all Solar System
-bodies that are present in the cone at the given epoch. 
-   
+bodies that are present in the cone at the given epoch.
+
 The required input arguments for
 `~astroquery.imcce.SkybotClass.cone_search` are the center coordinates
 of the cone, its radius, as well as the epoch of the
@@ -141,17 +140,17 @@ The *Miriade* service enable the query of Solar System object ephemerides.
 The most minimalistic `~astroquery.imcce.MiriadeClass.get_ephemerides`
 query looks like this:
 
-.. code-block:: python
+.. doctest-remote-data::
 
-   >>> from astroquery.miriade import Miriade
-   >>> Miriade.get_ephemerides('Ceres')
-   <Table masked=True length=1>
-    target        epoch                 RA        ...  DEC_rate   delta_rate 
-		    d                  deg        ... arcs / min    km / s   
-   bytes20       float64             float64      ...  float64     float64   
-   ------- -------------------- ----------------- ... ---------- ------------
-     Ceres    2458519.315165116 242.1874308333333 ...   -0.14926  -20.9668673
-   
+   >>> from astroquery.imcce import Miriade
+   >>> Miriade.get_ephemerides('Ceres')  # doctest: +IGNORE_OUTPUT
+   <Table length=1>
+   target        epoch                 RA         ...   DEC_rate    delta_rate
+                   d                  deg         ... arcsec / min    km / s
+   str20        float64             float64       ...   float64      float64
+   ------ -------------------- ------------------ ... ------------ ------------
+    Ceres   2459914.7406457304 178.71843708333333 ...     -0.18976  -21.5458636
+
 This query will return ephemerides for asteroid Ceres, for the current
 epoch, and for a geocentric location. The query output is formatted as
 a `~astropy.table.Table`.
@@ -180,31 +179,29 @@ which means that only a single epoch ``epoch`` will be queried.
 Consider the following example, which queries ephemerides for asteroid
 Pallas over an entire year with a time step of 1 day:
 
-.. code-block:: python
+.. doctest-remote-data::
 
-   >>> from astroquery.miriade import Miriade
+   >>> from astroquery.imcce import Miriade
    >>> Miriade.get_ephemerides('Pallas', epoch='2019-01-01',
-   >>>                         epoch_step='1d', epoch_nsteps=365) # doctest: +SKIP
-   <Table masked=True length=365>
-    target        epoch                 RA         ...  DEC_rate   delta_rate 
-		    d                  deg         ... arcs / min    km / s   
-   bytes20       float64             float64       ...  float64     float64   
-   ------- -------------------- ------------------ ... ---------- ------------
-    Pallas            2458484.5  200.5865645833333 ...    0.15854  -19.3678422
-    Pallas            2458485.5 200.92699458333328 ...    0.16727  -19.4137907
-    Pallas            2458486.5 201.26416541666663 ...    0.17613  -19.4552649
-    Pallas            2458487.5 201.59800958333332 ...    0.18511  -19.4921113
-    Pallas            2458488.5  201.9284608333333 ...    0.19421  -19.5241972
-    Pallas            2458489.5 202.25545124999996 ...    0.20344  -19.5514101
-       ...                  ...                ... ...        ...          ...
-    Pallas            2458843.5  261.1308308333333 ...   0.025007   -2.2916737
-    Pallas            2458844.5  261.5084158333333 ...   0.029542   -2.5107013
-    Pallas            2458845.5 261.88534958333327 ...   0.034077   -2.7290895
-    Pallas            2458846.5        262.2616025 ...   0.038612   -2.9467393
-    Pallas            2458847.5  262.6371470833333 ...   0.043144   -3.1635784
-    Pallas            2458848.5         263.011955 ...   0.047672   -3.3795565
+   ...                         epoch_step='1d', epoch_nsteps=365)  # doctest: +IGNORE_OUTPUT
+   <Table length=365>
+   target        epoch                 RA         ...   DEC_rate    delta_rate
+                   d                  deg         ... arcsec / min    km / s
+   str20        float64             float64       ...   float64      float64
+   ------ -------------------- ------------------ ... ------------ ------------
+   Pallas            2458484.5 200.58653041666665 ...      0.15854  -19.3678426
+   Pallas            2458485.5 200.92696041666662 ...      0.16727  -19.4137911
+   Pallas            2458486.5  201.2641308333333 ...      0.17613  -19.4552654
+   Pallas            2458487.5 201.59797541666663 ...      0.18511  -19.4921119
+   Pallas            2458488.5 201.92842624999997 ...      0.19421  -19.5241979
+      ...                  ...                ... ...          ...          ...
+   Pallas            2458844.5  261.5083995833333 ...     0.029542   -2.5107101
+   Pallas            2458845.5  261.8853333333333 ...     0.034077   -2.7290984
+   Pallas            2458846.5       262.26158625 ...     0.038612   -2.9467484
+   Pallas            2458847.5 262.63713083333334 ...     0.043144   -3.1635878
+   Pallas            2458848.5       263.01193875 ...     0.047672   -3.3795661
 
-    
+
 The observer location is defined through the ``location`` keyword,
 expecting a string containing the official IAU observatory code, a
 spacecraft name, or a set of coordinates (see the `Miriade manual
@@ -215,7 +212,7 @@ details).
 Coordinate Types
 ^^^^^^^^^^^^^^^^
 
-The `Miriade <http://vo.imcce.fr/webservices/miriade/>`_ system offers
+The `Miriade <https://ssp.imcce.fr/webservices/miriade/>`_ system offers
 a range of different *coordinate types* - sets of coordinates and
 properties that can be queried. In agreement with the Miriade webform
 query, the coordinate type in
@@ -306,8 +303,8 @@ to be provided to the keyword ``coordtype`` to use these sets) :
   +------------------+-----------------------------------------------+
   | ``vz_h``         | Z heliocentric vel. vector (au/d, float)      |
   +------------------+-----------------------------------------------+
-   
-   
+
+
 3. Local coordinates:
 
   +------------------+-----------------------------------------------+
@@ -454,8 +451,7 @@ results:
   ecliptical coordinates
 * ``elements``: switch to MPCORB ephemerides instead of ASTORB
 * ``radial_velocity``: provides additional information on target's radial
-  velocity  
-
+  velocity
 
 
 
@@ -463,11 +459,11 @@ Acknowledgements
 ================
 
 This submodule makes use of IMCCE's `SkyBoT
-<http://vo.imcce.fr/webservices/skybot/>`_ VO tool and the `IMCCE
+<https://ssp.imcce.fr/webservices/skybot/>`_ VO tool and the `IMCCE
 Miriade service
-<http://vo.imcce.fr/webservices/miriade/>`_. Additional information on
+<https://ssp.imcce.fr/webservices/miriade//>`_. Additional information on
 SkyBoT can be obtained from `Berthier et al. 2006
-<http://adsabs.harvard.edu/abs/2006ASPC..351..367B>`_.
+<https://adsabs.harvard.edu/abs/2006ASPC..351..367B>`_.
 
 Please consider the following notes from IMCCE:
 
@@ -475,18 +471,17 @@ Please consider the following notes from IMCCE:
   acknowledgment would be appreciated: "*This research has made use of
   IMCCE's SkyBoT VO tool*", or cite the following article
   `2006ASPC..351..367B
-  <http://adsabs.harvard.edu/abs/2006ASPC..351..367B>`_.
+  <https://adsabs.harvard.edu/abs/2006ASPC..351..367B>`_.
 * If Miriade was helpful for your research work, the following
   acknowledgment would be appreciated: "*This research has made use of
   IMCCE's Miriade VO tool*"
 
 The development of this submodule is funded through NASA PDART Grant
-No. 80NSSC18K0987 to the `sbpy project <http://sbpy.org>`_.
+No. 80NSSC18K0987 to the `sbpy project <https://sbpy.org>`_.
 
-     
+
 Reference/API
 =============
 
 .. automodapi:: astroquery.imcce
     :no-inheritance-diagram:
-

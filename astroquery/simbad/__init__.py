@@ -3,10 +3,9 @@
 SIMBAD Query Tool
 =================
 
-The SIMBAD query tool creates a `script query
-<http://simbad.u-strasbg.fr/simbad/sim-fscript>`__ that returns VOtable XML
-data that is then parsed into a SimbadResult object.  This object then
-parses the data and returns a table parsed with `astropy.io.votable.parse`.
+The SIMBAD query tool creates `TAP ADQL queries
+<https://cds.unistra.fr/help/documentation/simbad-more/adql-simbad/>`__ that return VOtable XML
+data. This is then parsed into a `~astropy.table.Table` object.
 """
 from astropy import config as _config
 
@@ -15,8 +14,11 @@ class Conf(_config.ConfigNamespace):
     """
     Configuration parameters for `astroquery.simbad`.
     """
+    # the first item is the default configuration
+    servers_list = ['simbad.cds.unistra.fr', 'simbad.harvard.edu']
+
     server = _config.ConfigItem(
-        ['simbad.u-strasbg.fr', 'simbad.harvard.edu'],
+        servers_list,
         'Name of the SIMBAD mirror to use.')
 
     timeout = _config.ConfigItem(
@@ -24,16 +26,17 @@ class Conf(_config.ConfigNamespace):
         'Time limit for connecting to Simbad server.')
 
     row_limit = _config.ConfigItem(
-        # O defaults to the maximum limit
-        0,
+        # defaults to the maximum limit
+        -1,
         'Maximum number of rows that will be fetched from the result.')
+
+    # should be columns of 'basic'
+    default_columns = ["main_id", "ra", "dec", "coo_err_maj", "coo_err_min",
+                       "coo_err_angle", "coo_wavelength", "coo_bibcode"]
 
 
 conf = Conf()
 
-from .core import Simbad, SimbadClass, SimbadBaseQuery
+from .core import Simbad, SimbadClass
 
-__all__ = ['Simbad', 'SimbadClass',
-           'SimbadBaseQuery',
-           'Conf', 'conf',
-           ]
+__all__ = ['Simbad', 'SimbadClass', 'Conf', 'conf']

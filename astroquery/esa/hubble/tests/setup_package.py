@@ -1,5 +1,13 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import absolute_import
+"""
+=======================
+eHST Test Setup Package
+=======================
+
+European Space Astronomy Centre (ESAC)
+European Space Agency (ESA)
+
+"""
 
 import os
 
@@ -7,10 +15,7 @@ import os
 # setup paths to the test data
 # can specify a single file or a list of files
 def get_package_data():
-    paths = [os.path.join('data', '*.tar'),
-             os.path.join('data', '*.xml'),
-             os.path.join('data', '*.vot'),
-             os.path.join('data', '*.FITS'),
+    paths = [os.path.join('data', '*.vot'),
              os.path.join('data', '*.test'),
              ]  # etc, add other extensions
     # you can also enlist files individually by names

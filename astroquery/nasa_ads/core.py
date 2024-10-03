@@ -8,7 +8,7 @@ Module to search the SAO/NASA Astrophysics Data System
 import os
 
 from astropy.table import Table
-from six.moves.urllib.parse import quote as urlencode
+from urllib.parse import quote as urlencode
 
 from ..query import BaseQuery
 from ..utils import async_to_sync
@@ -17,8 +17,6 @@ from ..utils.class_or_instance import class_or_instance
 from .utils import _get_data_from_xml
 from . import conf
 
-
-from xml.dom import minidom
 
 __all__ = ['ADS', 'ADSClass']
 
@@ -39,10 +37,10 @@ class ADSClass(BaseQuery):
 
     def __init__(self, *args):
         """ set some parameters """
-        super(ADSClass, self).__init__()
+        super().__init__()
 
     @class_or_instance
-    def query_simple(self, query_string, get_query_payload=False,
+    def query_simple(self, query_string, *, get_query_payload=False,
                      get_raw_response=False, cache=True):
         """
         Basic query.  Uses a string and the ADS generic query.
@@ -50,7 +48,7 @@ class ADSClass(BaseQuery):
         request_string = self._args_to_url(query_string)
         request_fields = self._fields_to_url()
         request_sort = self._sort_to_url()
-        request_rows = self._rows_to_url(self.NROWS, self.NSTART)
+        request_rows = self._rows_to_url(nrows=self.NROWS, nstart=self.NSTART)
         request_url = self.QUERY_SIMPLE_URL + request_string + request_fields + request_sort + request_rows
 
         # primarily for debug purposes, but also useful if you want to send
@@ -103,7 +101,7 @@ class ADSClass(BaseQuery):
         request_sort = '&sort=' + urlencode(self.SORT)
         return request_sort
 
-    def _rows_to_url(self, nrows=10, nstart=0):
+    def _rows_to_url(self, *, nrows=10, nstart=0):
         request_rows = '&rows=' + str(nrows) + '&start=' + str(nstart)
         return request_rows
 
@@ -123,9 +121,9 @@ class ADSClass(BaseQuery):
             with open(token_file) as f:
                 self.TOKEN = f.read().strip()
             return self.TOKEN
-        except IOError:
+        except OSError:
             raise RuntimeError('No API token found! Get yours from: '
-                               'https://ui.adsabs.harvard.edu/#user/settings/token '
+                               'https://ui.adsabs.harvard.edu/user/settings/token '
                                'and store it in the API_DEV_KEY environment variable.')
 
 

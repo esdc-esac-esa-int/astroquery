@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 import warnings
 import functools
@@ -40,7 +40,7 @@ def _validate_params(func):
 class CoordParseError(ValueError):
 
     def __init__(self, message='Could not parse `coord` argument.', **kwargs):
-        super(ValueError, self).__init__(message, **kwargs)
+        super().__init__(message, **kwargs)
 
 
 @async_to_sync
@@ -52,11 +52,9 @@ class OgleClass(BaseQuery):
     algorithms = ['NG', 'NN']
     quality_codes = ['GOOD', 'ALL']
     coord_systems = ['RD', 'LB']
-    result_dtypes = ['f8', 'f8', 'f8', 'f8', 'f8', 'f8', 'f8', 'f8', 'i8',
-                     'a2', 'f8']
 
     @_validate_params
-    def _args_to_payload(self, coord=None, algorithm='NG', quality='GOOD',
+    def _args_to_payload(self, *, coord=None, algorithm='NG', quality='GOOD',
                          coord_sys='RD'):
         """
         Query the OGLE-III interstellar extinction calculator.
@@ -143,14 +141,9 @@ class OgleClass(BaseQuery):
         response.raise_for_status()
         return response
 
-    def _parse_result(self, response, verbose=False):
-        # Parse table, ignore last two (blank) lines
-        raw_data = response.text.split('\n')[:-2]
-        # Select first row and skip first character ('#') to find column
-        # headers
-        header = raw_data[0][1:].split()
-        data = self._parse_raw(raw_data)
-        t = Table(data, names=header, dtype=self.result_dtypes)
+    def _parse_result(self, response, *, verbose=False):
+        # Header is in first row starting with #, this works with the default
+        t = Table.read(response.text.split('\n'), format='ascii')
         return t
 
     def _parse_coords(self, coord, coord_sys):

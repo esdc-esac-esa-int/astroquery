@@ -6,7 +6,7 @@ from io import BytesIO
 from numbers import Number
 
 from astropy import units as u
-from astropy.coordinates import (BaseCoordinateFrame, ICRS, SkyCoord,
+from astropy.coordinates import (Angle, BaseCoordinateFrame, ICRS, SkyCoord,
                                  Longitude, Latitude)
 from astropy.io.votable import table
 
@@ -49,7 +49,7 @@ class ConeSearchClass(BaseQuery):
     """
 
     def __init__(self):
-        super(ConeSearchClass, self).__init__()
+        super().__init__()
 
     def query_region_async(self, *args, **kwargs):
         """
@@ -111,6 +111,8 @@ class ConeSearchClass(BaseQuery):
             Use caching for VO Service database. Access to actual VO
             websites referenced by the database still needs internet
             connection.
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         verbose : bool, optional
             Verbose output, including VO table warnings.
@@ -121,7 +123,7 @@ class ConeSearchClass(BaseQuery):
 
         return_astropy_table : bool
             Returned ``result`` will be `astropy.table.Table` rather
-            than `astropy.io.votable.tree.Table`.
+            than `astropy.io.votable.tree.TableElement`.
 
         use_names_over_ids : bool
             When `True` use the ``name`` attributes of columns as the names
@@ -132,7 +134,7 @@ class ConeSearchClass(BaseQuery):
 
         Returns
         -------
-        result : `astropy.table.Table` or `astropy.io.votable.tree.Table`
+        result : `astropy.table.Table` or `astropy.io.votable.tree.TableElement`
             Table from successful VO service request.
             See ``return_astropy_table`` option for the kind of table returned.
 
@@ -180,8 +182,9 @@ class ConeSearchClass(BaseQuery):
         parsed_url = url + '&'.join(query)
 
         # Parse the result
+        pedantic = 'exception' if conf.pedantic else 'warn'
         tab = table.parse(BytesIO(response.content), filename=parsed_url,
-                          pedantic=conf.pedantic)
+                          verify=pedantic)
         try:
             result = vo_tab_parse(tab, url, pars)
         except VOSError as exc:
@@ -226,12 +229,7 @@ def _validate_coord(coordinates):
 
 def _validate_sr(radius):
     """Validate search radius and return value in deg."""
-    if isinstance(radius, Number):
-        sr = radius
-    else:
-        sr = commons.radius_to_unit(radius)
-
-    return sr
+    return radius if isinstance(radius, Number) else Angle(radius).to_value(u.deg)
 
 
 def _validate_verb(verb):

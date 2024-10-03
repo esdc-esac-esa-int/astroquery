@@ -10,14 +10,13 @@ def append_docstr(doc):
     return dec
 
 
-def prepend_docstr_nosections(doc, sections=['Returns', ]):
+def prepend_docstr_nosections(doc, *, sections=['Returns', ]):
     """
     Decorator to prepend to the function's docstr after stripping out the
     list of sections provided (by default "Returns" only).
     """
     def dec(fn):
-        fn.__doc__ = ("\n".join(remove_sections(doc, sections)) +
-                      textwrap.dedent(fn.__doc__))
+        fn.__doc__ = ("\n".join(remove_sections(doc, sections)) + textwrap.dedent(fn.__doc__))
         return fn
     return dec
 

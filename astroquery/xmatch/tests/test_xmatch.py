@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-import os.path
+from pathlib import Path
 
 import requests
 import pytest
@@ -7,10 +7,10 @@ from astropy.io import ascii
 from astropy.table import Table
 from astropy.units import arcsec
 
-from ...utils import commons
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 from ...xmatch import XMatch
 
+DATA_DIR = Path(__file__).parent / "data"
 DATA_FILES = {
     'get': 'tables.csv',  # .action.getVizieRTableNames
     'post': 'query_res.csv',  # .request.xmatch
@@ -21,12 +21,12 @@ DATA_FILES = {
 
 class MockResponseXmatch(MockResponse):
     def __init__(self, method, url, data, **kwargs):
-        super(MockResponseXmatch, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         self.data = data
-        fn = data_path(DATA_FILES[method.lower()])
-        with open(fn, 'rb') as f:
-            self.content = f.read()
+        filename = DATA_DIR / DATA_FILES[method.lower()]
+        with open(filename, "rb") as file:
+            self.content = file.read()
 
     def get_content(self):
         return self.content
@@ -34,21 +34,14 @@ class MockResponseXmatch(MockResponse):
 
 @pytest.fixture
 def patch_request(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(requests, "_request", request_mockreturn)
     return mp
 
 
 def request_mockreturn(method, url, data, **kwargs):
     return MockResponseXmatch(method, url, data)
-
-
-def data_path(filename):
-    data_dir = os.path.join(os.path.dirname(__file__), 'data')
-    return os.path.join(data_dir, filename)
 
 
 def test_xmatch_query_invalid_max_distance():
@@ -81,12 +74,7 @@ def test_xmatch_is_avail_table(monkeypatch):
 def test_xmatch_query_local(monkeypatch):
     xm = XMatch()
     monkeypatch.setattr(xm, '_request', request_mockreturn)
-    monkeypatch.setattr(
-        commons,
-        'send_request',
-        lambda url, data, timeout, request_type='POST', headers={}, **kwargs:
-            request_mockreturn(request_type, url, data, **kwargs))
-    with open(data_path('posList.csv')) as pos_list:
+    with open(DATA_DIR / "posList.csv") as pos_list:
         response = xm.query_async(
             cat1=pos_list, cat2='vizier:II/246/out', max_distance=5 * arcsec,
             colRA1='ra', colDec1='dec')
@@ -102,12 +90,7 @@ def test_xmatch_query_local(monkeypatch):
 def test_xmatch_query_cat1_table_local(monkeypatch):
     xm = XMatch()
     monkeypatch.setattr(xm, '_request', request_mockreturn)
-    monkeypatch.setattr(
-        commons,
-        'send_request',
-        lambda url, data, timeout, request_type='POST', headers={}, **kwargs:
-            request_mockreturn(request_type, url, data, **kwargs))
-    with open(data_path('posList.csv')) as pos_list:
+    with open(DATA_DIR / "posList.csv") as pos_list:
         input_table = Table.read(pos_list.readlines(),
                                  format='ascii.csv',
                                  guess=False)
@@ -121,9 +104,3 @@ def test_xmatch_query_cat1_table_local(monkeypatch):
         'errHalfMaj', 'errHalfMin', 'errPosAng', 'Jmag', 'Hmag', 'Kmag',
         'e_Jmag', 'e_Hmag', 'e_Kmag', 'Qfl', 'Rfl', 'X', 'MeasureJD']
     assert len(table) == 11
-
-
-@pytest.mark.parametrize('datafile', DATA_FILES.values())
-def test_parse_text(datafile):
-    xm = XMatch()
-    xm._parse_text(datafile)

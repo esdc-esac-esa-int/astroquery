@@ -7,7 +7,6 @@ from numpy import fromstring, isnan, array
 import astropy.units as u
 
 from ..query import BaseQuery
-from ..utils import commons
 from ..utils import async_to_sync
 from . import conf
 
@@ -28,7 +27,7 @@ class SBDBClass(BaseQuery):
     # actual query uri
     _uri = None
 
-    def query_async(self, targetid, id_type='search',
+    def query_async(self, targetid, *, id_type='search',
                     neo_only=False,
                     alternate_id=False,
                     full_precision=False,
@@ -108,6 +107,9 @@ class SBDBClass(BaseQuery):
         get_uri : boolean, optional
             Add the query URI to the output as ``query_uri`` field.
             Default: ``False``
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
 
         Returns
         -------
@@ -182,7 +184,7 @@ class SBDBClass(BaseQuery):
 
         return response
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
         """
         internal wrapper to parse queries
 
@@ -200,8 +202,8 @@ class SBDBClass(BaseQuery):
             raise ValueError('Server response not readable.')
 
         # check for query problems
-        if 'code' in src and not (src['code'] == '200' or
-                                  src['code'] == '300'):
+        if 'code' in src and not (src['code'] == '200'
+                                  or src['code'] == '300'):
             raise ValueError(src['message'] + ' ({:s})'.format(src['code']))
 
         src = self._process_data(src)
@@ -231,8 +233,8 @@ class SBDBClass(BaseQuery):
                     continue
 
                 # turn data objects into dictionary
-                elif ('name' in val[0] and 'sigma' in val[0] and
-                        'value' in val[0] and 'units' in val[0]):
+                elif ('name' in val[0] and 'sigma' in val[0]
+                        and 'value' in val[0] and 'units' in val[0]):
 
                     res[key] = self._process_data_element(val)
 
@@ -253,7 +255,7 @@ class SBDBClass(BaseQuery):
                                 val = val.decode('utf-8')
                             try:
                                 res[key] = float(val)
-                            except ValueErro:
+                            except ValueError:
                                 res[key] = val
                         continue
 
@@ -293,10 +295,10 @@ class SBDBClass(BaseQuery):
 
                                 for i in range(len(val)):
                                     # try to process list of dictionaries
-                                    if (isinstance(val[i][field], list) and
-                                            len(val[i][field]) > 0 and
-                                            isinstance(val[i][field][0],
-                                                       dict)):
+                                    if (isinstance(val[i][field], list)
+                                            and len(val[i][field]) > 0
+                                            and isinstance(val[i][field][0],
+                                                           dict)):
                                         res[key][field][i] = \
                                             self._process_data_element(
                                             val[i][field])
@@ -317,9 +319,10 @@ class SBDBClass(BaseQuery):
 
             # use leaf scalars (and apply units, where applicable)
             else:
-                res[key] = val
                 if key in conf.field_unit.keys() and val is not None:
-                    res[key] *= u.Unit(conf.field_unit[key])
+                    res[key] = float(val) * u.Unit(conf.field_unit[key])
+                else:
+                    res[key] = val
 
         return res
 
@@ -336,20 +339,25 @@ class SBDBClass(BaseQuery):
             # change units where necessary
             if q['units'] in conf.data_unit_replace.keys():
                 q['units'] = conf.data_unit_replace[q['units']]
+            # change exponential symbol in unit string from '^' to '**'
+            if (q['units'] is not None) and ('^' in q['units']):
+                q['units'] = q['units'].replace('^', '**')
             try:
                 unit = u.Unit(q['units'])
+            except ValueError:
+                unit = u.Unit(q['units'], format='ogip')
             except TypeError:
                 unit = 1
 
             # try to combine value with units provided
             try:
                 if q['value'] is not None:
-                    eldict[q['name']] = (q['value'] * unit)
+                    eldict[q['name']] = (float(q['value']) * unit)
                 else:
                     eldict[q['name']] = q['value']
                 if q['sigma'] is not None:
-                    eldict[q['name']+'_sig'] = (q['sigma'] *
-                                                unit)
+                    eldict[q['name']+'_sig'] = (float(q['sigma'])
+                                                * unit)
                 else:
                     eldict[q['name']+'_sig'] = q['sigma']
             except ValueError:
@@ -367,7 +375,7 @@ class SBDBClass(BaseQuery):
 
         return eldict
 
-    def schematic(self, d, _prepend='+--'):
+    def schematic(self, d, *, _prepend='+--'):
         """
         Formats the provided dictionary ``d`` into a human-readable tree
         structure schematic. In order to display the structure

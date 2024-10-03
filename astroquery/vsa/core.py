@@ -1,5 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 
 from . import conf
 from ..wfau import BaseWFAUClass, clean_catalog
@@ -57,7 +57,7 @@ class VsaClass(BaseWFAUClass):
     # apparently needed for some queries
     archive = 'VSA'
 
-    def __init__(self, username=None, password=None, community=None,
+    def __init__(self, *, username=None, password=None, community=None,
                  database='VVVDR4', programme_id='all'):
         super(VsaClass, self).__init__(database=database,
                                        programme_id=programme_id,
@@ -65,7 +65,7 @@ class VsaClass(BaseWFAUClass):
                                        community=community,
                                        password=password)
 
-        self.BASE_URL = 'http://horus.roe.ac.uk:8080/vdfs/'
+        self.BASE_URL = "http://vsa.roe.ac.uk:8080/vdfs/"
         self.LOGIN_URL = self.BASE_URL + "DBLogin"
         self.IMAGE_URL = self.BASE_URL + "GetImage"
         self.ARCHIVE_URL = self.BASE_URL + "ImageList"

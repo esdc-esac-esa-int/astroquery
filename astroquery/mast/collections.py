@@ -21,7 +21,7 @@ from ..utils import commons, async_to_sync
 from ..utils.class_or_instance import class_or_instance
 from ..exceptions import InvalidQueryError, MaxResultsWarning, InputWarning
 
-from . import conf, utils
+from . import utils
 from .core import MastQueryWithLogin
 
 
@@ -42,14 +42,15 @@ class CatalogsClass(MastQueryWithLogin):
 
         services = {"panstarrs": {"path": "panstarrs/{data_release}/{table}.json",
                                   "args": {"data_release": "dr2", "table": "mean"}}}
+
         self._service_api_connection.set_service_params(services, "catalogs", True)
 
         self.catalog_limit = None
         self._current_connection = None
 
-    def _parse_result(self, response, verbose=False):
+    def _parse_result(self, response, *, verbose=False):
 
-        results_table = self._current_connection._parse_result(response, verbose)
+        results_table = self._current_connection._parse_result(response, verbose=verbose)
 
         if len(results_table) == self.catalog_limit:
             warnings.warn("Maximum catalog results returned, may not include all sources within radius.",
@@ -58,11 +59,11 @@ class CatalogsClass(MastQueryWithLogin):
         return results_table
 
     @class_or_instance
-    def query_region_async(self, coordinates, radius=0.2*u.deg, catalog="Hsc",
+    def query_region_async(self, coordinates, *, radius=0.2*u.deg, catalog="Hsc",
                            version=None, pagesize=None, page=None, **kwargs):
         """
         Given a sky position and radius, returns a list of catalog entries.
-        See column documentation for specific catalogs `here <https://mast.stsci.edu/api/v0/pages.htmll>`__.
+        See column documentation for specific catalogs `here <https://mast.stsci.edu/api/v0/pages.html>`__.
 
         Parameters
         ----------
@@ -85,8 +86,8 @@ class CatalogsClass(MastQueryWithLogin):
             E.g. when using a slow internet connection.
         page : int, optional
             Default None.
-            Can be used to override the default behavior of all results being returned to
-            obtain a specific page of results.
+            Can be used to override the default behavior of all results being returned to obtain a
+            specific page of results.
         **kwargs
             Other catalog-specific keyword args.
             These can be found in the (service documentation)[https://mast.stsci.edu/api/v0/_services.html]
@@ -97,7 +98,7 @@ class CatalogsClass(MastQueryWithLogin):
         response : list of `~requests.Response`
         """
 
-        # Put coordinates and radius into consistant format
+        # Put coordinates and radius into consistent format
         coordinates = commons.parse_coordinates(coordinates)
 
         # if radius is just a number we assume degrees
@@ -142,9 +143,16 @@ class CatalogsClass(MastQueryWithLogin):
                 if version == 1:
                     service = "Mast.Catalogs.GaiaDR1.Cone"
                 else:
-                    if version not in (2, None):
+                    if version not in (None, 2):
                         warnings.warn("Invalid Gaia version number, defaulting to DR2.", InputWarning)
                     service = "Mast.Catalogs.GaiaDR2.Cone"
+
+            elif catalog.lower() == 'plato':
+                if version in (None, 1):
+                    service = "Mast.Catalogs.Plato.Cone"
+                else:
+                    warnings.warn("Invalid PLATO catalog version number, defaulting to DR1.", InputWarning)
+                    service = "Mast.Catalogs.Plato.Cone"
 
             else:
                 service = "Mast.Catalogs." + catalog + ".Cone"
@@ -154,10 +162,14 @@ class CatalogsClass(MastQueryWithLogin):
         for prop, value in kwargs.items():
             params[prop] = value
 
-        return self._current_connection.service_request_async(service, params, pagesize, page)
+        # Parameters will be passed as JSON objects only when accessing the PANSTARRS API
+        use_json = catalog.lower() == 'panstarrs'
+
+        return self._current_connection.service_request_async(service, params, pagesize=pagesize, page=page,
+                                                              use_json=use_json)
 
     @class_or_instance
-    def query_object_async(self, objectname, radius=0.2*u.deg, catalog="Hsc",
+    def query_object_async(self, objectname, *, radius=0.2*u.deg, catalog="Hsc",
                            pagesize=None, page=None, version=None, **kwargs):
         """
         Given an object name, returns a list of catalog entries.
@@ -197,17 +209,24 @@ class CatalogsClass(MastQueryWithLogin):
 
         coordinates = utils.resolve_object(objectname)
 
-        return self.query_region_async(coordinates, radius, catalog,
-                                       version=version, pagesize=pagesize, page=page, **kwargs)
+        return self.query_region_async(coordinates,
+                                       radius=radius,
+                                       catalog=catalog,
+                                       version=version,
+                                       pagesize=pagesize,
+                                       page=page,
+                                       **kwargs)
 
     @class_or_instance
-    def query_criteria_async(self, catalog, pagesize=None, page=None, **criteria):
+    def query_criteria_async(self, catalog, *, pagesize=None, page=None, **criteria):
         """
         Given an set of filters, returns a list of catalog entries.
-        See column documentation for specific catalogs `here <https://mast.stsci.edu/api/v0/pages.htmll>`__.
+        See column documentation for specific catalogs `here <https://mast.stsci.edu/api/v0/pages.html>`__.
 
         Parameters
         ----------
+        catalog : str
+            The catalog to be queried.
         pagesize : int, optional
             Can be used to override the default pagesize.
             E.g. when using a slow internet connection.
@@ -238,7 +257,7 @@ class CatalogsClass(MastQueryWithLogin):
         response : list of `~requests.Response`
         """
 
-        # Seperating any position info from the rest of the filters
+        # Separating any position info from the rest of the filters
         coordinates = criteria.pop('coordinates', None)
         objectname = criteria.pop('objectname', None)
         radius = criteria.pop('radius', 0.2*u.deg)
@@ -277,7 +296,7 @@ class CatalogsClass(MastQueryWithLogin):
                     service += ".Position"
                 service += ".Rows"  # Using the rowstore version of the query for speed
                 filters = self._current_connection.build_filter_set("Mast.Catalogs.Tess.Cone",
-                                                                     service, **criteria)
+                                                                    service, **criteria)
                 params["columns"] = "*"
             elif catalog.lower() == "ctl":
                 service = "Mast.Catalogs.Filtered.Ctl"
@@ -285,25 +304,29 @@ class CatalogsClass(MastQueryWithLogin):
                     service += ".Position"
                 service += ".Rows"  # Using the rowstore version of the query for speed
                 filters = self._current_connection.build_filter_set("Mast.Catalogs.Tess.Cone",
-                                                                     service, **criteria)
+                                                                    service, **criteria)
                 params["columns"] = "*"
             elif catalog.lower() == "diskdetective":
                 service = "Mast.Catalogs.Filtered.DiskDetective"
                 if coordinates or objectname:
                     service += ".Position"
                 filters = self._current_connection.build_filter_set("Mast.Catalogs.Dd.Cone",
-                                                                     service, **criteria)
+                                                                    service, **criteria)
             else:
                 raise InvalidQueryError("Criteria query not available for {}".format(catalog))
 
             if not filters:
                 raise InvalidQueryError("At least one non-positional criterion must be supplied.")
-            params["filters"] =  filters
+            params["filters"] = filters
 
-        return self._current_connection.service_request_async(service, params, pagesize=pagesize, page=page)
+        # Parameters will be passed as JSON objects only when accessing the PANSTARRS API
+        use_json = catalog.lower() == 'panstarrs'
+
+        return self._current_connection.service_request_async(service, params, pagesize=pagesize, page=page,
+                                                              use_json=use_json)
 
     @class_or_instance
-    def query_hsc_matchid_async(self, match, version=3, pagesize=None, page=None):
+    def query_hsc_matchid_async(self, match, *, version=3, pagesize=None, page=None):
         """
         Returns all the matches for a given Hubble Source Catalog MatchID.
 
@@ -318,10 +341,10 @@ class CatalogsClass(MastQueryWithLogin):
             E.g. when using a slow internet connection.
         page : int, optional
             Can be used to override the default behavior of all results being returned to obtain
-            one sepcific page of results.
+            one specific page of results.
 
         Returns
-        --------
+        -------
         response : list of `~requests.Response`
         """
 
@@ -340,10 +363,10 @@ class CatalogsClass(MastQueryWithLogin):
 
         params = {"input": match}
 
-        return self._current_connection.service_request_async(service, params, pagesize, page)
+        return self._current_connection.service_request_async(service, params, pagesize=pagesize, page=page)
 
     @class_or_instance
-    def get_hsc_spectra_async(self, pagesize=None, page=None):
+    def get_hsc_spectra_async(self, *, pagesize=None, page=None):
         """
         Returns all Hubble Source Catalog spectra.
 
@@ -354,10 +377,10 @@ class CatalogsClass(MastQueryWithLogin):
             E.g. when using a slow internet connection.
         page : int, optional
             Can be used to override the default behavior of all results being returned to obtain
-            one sepcific page of results.
+            one specific page of results.
 
         Returns
-        --------
+        -------
         response : list of `~requests.Response`
         """
 
@@ -368,7 +391,7 @@ class CatalogsClass(MastQueryWithLogin):
 
         return self._current_connection.service_request_async(service, params, pagesize, page)
 
-    def download_hsc_spectra(self, spectra, download_dir=None, cache=True, curl_flag=False):
+    def download_hsc_spectra(self, spectra, *, download_dir=None, cache=True, curl_flag=False):
         """
         Download one or more Hubble Source Catalog spectra.
 
@@ -388,7 +411,7 @@ class CatalogsClass(MastQueryWithLogin):
             will be downloaded that can be used to download the data files at a later time.
 
         Returns
-        --------
+        -------
         response : list of `~requests.Response`
         """
 
@@ -409,11 +432,11 @@ class CatalogsClass(MastQueryWithLogin):
             for spec in spectra:
                 if spec['SpectrumType'] < 2:
                     url_list.append('https://hla.stsci.edu/cgi-bin/getdata.cgi?config=ops&dataset={0}'
-                                   .format(spec['DatasetName']))
+                                    .format(spec['DatasetName']))
 
                 else:
                     url_list.append('https://hla.stsci.edu/cgi-bin/ecfproxy?file_id={0}'
-                                   .format(spec['DatasetName']) + '.fits')
+                                    .format(spec['DatasetName']) + '.fits')
 
                 path_list.append(download_file + "/HSC/" + spec['DatasetName'] + '.fits')
 
@@ -444,7 +467,7 @@ class CatalogsClass(MastQueryWithLogin):
                 url = bundler_response['url']
             else:
                 missing_files = [x for x in bundler_response['statusList'].keys()
-                                if bundler_response['statusList'][x] != 'COMPLETE']
+                                 if bundler_response['statusList'][x] != 'COMPLETE']
                 if len(missing_files):
                     msg = "{} files could not be added to the curl script".format(len(missing_files))
                     url = ",".join(missing_files)
@@ -466,9 +489,9 @@ class CatalogsClass(MastQueryWithLogin):
                 if spec['SpectrumType'] < 2:
                     data_url = f'https://hla.stsci.edu/cgi-bin/getdata.cgi?config=ops&dataset={spec["DatasetName"]}'
                 else:
-                    data_url = f'https://hla.stsci.edu/cgi-bin/ecfproxy?file_id=spec["DatasetName"].fits'
+                    data_url = f'https://hla.stsci.edu/cgi-bin/ecfproxy?file_id={spec["DatasetName"]}.fits'
 
-                local_path = os.path.join(base_dir, "{spec['DatasetName']}.fits")
+                local_path = os.path.join(base_dir, f'{spec["DatasetName"]}.fits')
 
                 status = "COMPLETE"
                 msg = None

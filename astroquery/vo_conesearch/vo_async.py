@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 __all__ = ['AsyncBase']
 
 
-class AsyncBase(object):
+class AsyncBase:
     """Base class for asynchronous VO service requests
     using :py:class:`concurrent.futures.ThreadPoolExecutor`.
 
@@ -49,7 +49,7 @@ class AsyncBase(object):
         except AttributeError:
             return getattr(self.future, what)
 
-    def get(self, timeout=None):
+    def get(self, *, timeout=None):
         """Get result, if available, then shut down thread.
 
         Parameters

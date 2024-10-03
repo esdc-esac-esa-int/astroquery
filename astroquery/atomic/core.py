@@ -1,9 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-from six.moves.urllib import parse as urlparse
-from six.moves import map, zip
-from six import StringIO
-import six
+from io import StringIO
+from urllib import parse as urlparse
 
 from collections import defaultdict
 
@@ -11,6 +9,8 @@ from astropy.io import ascii
 from astropy.table import Table
 from astropy import units as u
 from bs4 import BeautifulSoup
+
+from .. import log
 
 from ..query import BaseQuery
 from ..utils import prepend_docstr_nosections, async_to_sync
@@ -26,20 +26,16 @@ class AtomicLineListClass(BaseQuery):
     TIMEOUT = conf.timeout
 
     def __init__(self):
-        super(AtomicLineListClass, self).__init__()
-        self._default_form_values = None
+        super().__init__()
+        self.__default_form_values = None
 
-    def query_object(self, wavelength_range=None, wavelength_type=None,
-                     wavelength_accuracy=None, element_spectrum=None,
-                     minimal_abundance=None, depl_factor=None,
-                     lower_level_energy_range=None,
-                     upper_level_energy_range=None, nmax=None,
-                     multiplet=None, transitions=None,
-                     show_fine_structure=None,
-                     show_auto_ionizing_transitions=None,
-                     output_columns=('spec', 'type', 'conf',
-                                     'term', 'angm', 'prob',
-                                     'ener')):
+    def query_object(self, *, wavelength_range=None, wavelength_type=None, wavelength_accuracy=None,
+                     element_spectrum=None,
+                     minimal_abundance=None, depl_factor=None, lower_level_energy_range=None,
+                     upper_level_energy_range=None, nmax=None, multiplet=None, transitions=None,
+                     show_fine_structure=None, show_auto_ionizing_transitions=None,
+                     output_columns=('spec', 'type', 'conf', 'term', 'angm', 'prob', 'ener'), cache=True,
+                     get_query_payload=False):
         """
         Queries Atomic Line List for the given parameters adnd returns the
         result as a `~astropy.table.Table`. All parameters are optional.
@@ -144,6 +140,10 @@ class AtomicLineListClass(BaseQuery):
             Angular momentum, Transition probability and Level energies
             respectively.
 
+        cache : bool
+            Defaults to True. If set overrides global caching behavior.
+            See :ref:`caching documentation <astroquery_cache>`.
+
         Returns
         -------
         result : `~astropy.table.Table`
@@ -151,7 +151,7 @@ class AtomicLineListClass(BaseQuery):
 
         References
         ----------
-        .. [1] http://www.pa.uky.edu/~peter/atomic/instruction.html
+        .. [1] https://linelist.pa.uky.edu/atomic/instruction.html
         """
         response = self.query_object_async(
             wavelength_range=wavelength_range, wavelength_type=wavelength_type,
@@ -163,35 +163,28 @@ class AtomicLineListClass(BaseQuery):
             multiplet=multiplet, transitions=transitions,
             show_fine_structure=show_fine_structure,
             show_auto_ionizing_transitions=show_auto_ionizing_transitions,
-            output_columns=output_columns)
+            output_columns=output_columns, cache=cache,
+            get_query_payload=get_query_payload)
+        if get_query_payload:
+            return response
+
         table = self._parse_result(response)
         return table
 
     @prepend_docstr_nosections(query_object.__doc__)
-    def query_object_async(self, wavelength_range=None, wavelength_type='',
-                           wavelength_accuracy=None, element_spectrum=None,
-                           minimal_abundance=None, depl_factor=None,
-                           lower_level_energy_range=None,
-                           upper_level_energy_range=None, nmax=None,
-                           multiplet=None, transitions=None,
-                           show_fine_structure=None,
-                           show_auto_ionizing_transitions=None,
-                           output_columns=('spec', 'type', 'conf',
-                                           'term', 'angm', 'prob',
-                                           'ener')):
+    def query_object_async(self, *, wavelength_range=None, wavelength_type='', wavelength_accuracy=None,
+                           element_spectrum=None, minimal_abundance=None, depl_factor=None,
+                           lower_level_energy_range=None, upper_level_energy_range=None, nmax=None, multiplet=None,
+                           transitions=None, show_fine_structure=None, show_auto_ionizing_transitions=None,
+                           output_columns=('spec', 'type', 'conf', 'term', 'angm', 'prob', 'ener'),
+                           cache=True, get_query_payload=False):
         """
         Returns
         -------
         response : `requests.Response`
             The HTTP response returned from the service.
         """
-        if self._default_form_values is None:
-            response = self._request("GET", url=self.FORM_URL, data={},
-                                     timeout=self.TIMEOUT)
-            bs = BeautifulSoup(response.text)
-            form = bs.find('form')
-            self._default_form_values = self._get_default_form_values(form)
-        default_values = self._default_form_values
+        default_values = self._default_form_values()
         wltype = (wavelength_type or default_values.get('air', '')).lower()
         if wltype in ('air', 'vacuum'):
             air = wltype.capitalize()
@@ -209,8 +202,8 @@ class AtomicLineListClass(BaseQuery):
             raise ValueError('Invalid parameter "transitions": {0!r}'
                              .format(transitions))
         if transitions is None:
-            _type = self._default_form_values.get('type')
-            type2 = self._default_form_values.get('type2')
+            _type = default_values.get('type')
+            type2 = default_values.get('type2')
         else:
             s = str(transitions)
             if len(s.split(',')) > 1:
@@ -232,8 +225,8 @@ class AtomicLineListClass(BaseQuery):
         if upper_level_erange is not None:
             upper_level_erange = upper_level_erange.to(
                 u.cm ** -1, equivalencies=u.spectral()).value
-        input = {
-            'wavl': '-'.join(map(str, wlrange_in_angstroms)),
+        input_payload = {
+            'wavl': ' '.join(map(str, wlrange_in_angstroms)),
             'wave': 'Angstrom',
             'air': air,
             'wacc': wavelength_accuracy,
@@ -250,12 +243,27 @@ class AtomicLineListClass(BaseQuery):
             'hydr': show_fine_structure,
             'auto': show_auto_ionizing_transitions,
             'form': output_columns,
-            'tptype': 'as_a'}
-        response = self._submit_form(input)
+            'jval': 'usej',
+            'tptype': 'as_a',
+        }
+        if get_query_payload:
+            return input_payload
+        response = self._submit_form(input_payload, cache=cache)
         return response
 
     def _parse_result(self, response):
-        data = StringIO(BeautifulSoup(response.text).find('pre').text.strip())
+
+        if 'ERROR: request form contains no information' in response.text:
+            raise ValueError("The server returned an error.  Please check the URL."
+                             f"   The full error message is {response.text}")
+        elif 'ERROR' in response.text:
+            raise ValueError(f"The server returned an error.  The full error message is {response.text}")
+
+        html_pre = BeautifulSoup(response.text, features='html5lib').find('pre')
+        if html_pre is None:
+            raise ValueError("Data format not recognized.  The <pre> tag was missing from the response.")
+
+        data = StringIO(html_pre.text.strip())
         # `header` is e.g.:
         # "u'-LAMBDA-VAC-ANG-|-SPECTRUM--|TT|--------TERM---------|---J-J---|----LEVEL-ENERGY--CM-1----'"
         # `colnames` is then
@@ -267,7 +275,7 @@ class AtomicLineListClass(BaseQuery):
         colnames = [colname.strip('-').replace('-', ' ')
                     for colname in header.split('|') if colname.strip()]
         indices = [i for i, c in enumerate(header) if c == '|']
-        input = []
+        result_data = []
         for line in data:
             row = []
             for start, end in zip([0] + indices, indices + [None]):
@@ -280,39 +288,47 @@ class AtomicLineListClass(BaseQuery):
                     # maintain table dimensions when data missing
                     row.append('None')
             if row:
-                input.append('\t'.join(row))
-        if input:
-            return ascii.read(input, data_start=0, delimiter='\t',
+                result_data.append('\t'.join(row))
+        if result_data:
+            return ascii.read(result_data, data_start=0, delimiter='\t',
                               names=colnames, fast_reader=False)
         else:
             # return an empty table if the query yielded no results
             return Table()
 
-    def _submit_form(self, input=None):
+    def _submit_form(self, input_data=None, cache=True):
         """Fill out the form of the SkyView site and submit it with the
-        values given in `input` (a dictionary where the keys are the form
+        values given in ``input_data`` (a dictionary where the keys are the form
         element's names and the values are their respective values).
 
         """
-        if input is None:
-            input = {}
-        response = self._request("GET", url=self.FORM_URL, data={},
-                                 timeout=self.TIMEOUT)
-        bs = BeautifulSoup(response.text)
-        form = bs.find('form')
-        # cache the default values to save HTTP traffic
-        if self._default_form_values is None:
-            self._default_form_values = self._get_default_form_values(form)
-        # only overwrite payload's values if the `input` value is not None
+        if input_data is None:
+            input_data = {}
+        # only overwrite payload's values if the ``input_data`` value is not None
         # to avoid overwriting of the form's default values
-        payload = self._default_form_values.copy()
-        for k, v in six.iteritems(input):
+        payload = self._default_form_values().copy()
+        for k, v in input_data.items():
             if v is not None:
                 payload[k] = v
-        url = urlparse.urljoin(self.FORM_URL, form.get('action'))
+        url = self._form_action_url
+        log.debug(f"final payload = {payload} from url={url}")
         response = self._request("POST", url=url, data=payload,
-                                 timeout=self.TIMEOUT)
+                                 timeout=self.TIMEOUT, cache=cache)
+        response.raise_for_status()
+        log.debug("Retrieved data from POST request")
         return response
+
+    def _default_form_values(self):
+        if self.__default_form_values is None:
+            response = self._request("GET", url=self.FORM_URL, params={},
+                                     timeout=self.TIMEOUT, cache=False)
+            bs = BeautifulSoup(response.text, features='html5lib')
+            form = bs.find('form')
+            default_form_values = self._get_default_form_values(form)
+            self._form_action_url = urlparse.urljoin(self.FORM_URL, form.get('action'))
+            self.__default_form_values = default_form_values
+
+        return self.__default_form_values
 
     def _get_default_form_values(self, form):
         """Return the already selected values of a given form (a BeautifulSoup
@@ -328,8 +344,8 @@ class AtomicLineListClass(BaseQuery):
                 continue
             # check boxes: enabled boxes have the value "on" if not specified
             # otherwise. Found out by debugging, perhaps not documented.
-            if (elem.get('type') == 'checkbox' and
-                    elem.get('checked') in ["", "checked"]):
+            if (elem.get('type') == 'checkbox'
+                    and elem.get('checked') in ["", "checked"]):
                 value = elem.get('value', 'on')
             # radio buttons and simple input fields
             if elem.get('type') == 'radio' and\
@@ -346,7 +362,7 @@ class AtomicLineListClass(BaseQuery):
 
         # avoid values with size 1 lists
         d = dict(res)
-        for k, v in six.iteritems(d):
+        for k, v in d.items():
             if len(v) == 1:
                 d[k] = v[0]
         return d

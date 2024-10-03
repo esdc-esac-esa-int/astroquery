@@ -1,10 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import print_function
+
 import os
 import requests
 import pytest
 import astropy.coordinates as coord
-from ...utils.testing_tools import MockResponse
+from astroquery.utils.mocks import MockResponse
 from ... import fermi
 
 DATA_FILES = {'async': "query_result_m31.html",
@@ -21,10 +21,8 @@ def data_path(filename):
 
 @pytest.fixture
 def patch_post(request):
-    try:
-        mp = request.getfixturevalue("monkeypatch")
-    except AttributeError:  # pytest < 3
-        mp = request.getfuncargvalue("monkeypatch")
+    mp = request.getfixturevalue("monkeypatch")
+
     mp.setattr(fermi.FermiLAT, '_request', post_mockreturn)
     mp.setattr(requests, 'post', post_mockreturn)
     return mp

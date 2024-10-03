@@ -45,7 +45,7 @@ class JobSaxParser(xml.sax.ContentHandler):
     classdocs
     '''
 
-    def __init__(self, async_job=False):
+    def __init__(self, *, async_job=False):
         '''
         Constructor
         '''
@@ -120,7 +120,6 @@ class JobSaxParser(xml.sax.ContentHandler):
         elif UWS_OWNERID == nameLower:
             self.__job.ownerid = value
         elif UWS_PHASE == nameLower:
-            print("phase was set")
             self.__job._phase = value
         elif UWS_QUOTE == nameLower:
             self.__job.quote = value

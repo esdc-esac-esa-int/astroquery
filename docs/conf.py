@@ -29,24 +29,15 @@ import datetime
 import os
 import sys
 
-try:
-    import astropy_helpers
-except ImportError:
-    # Building from inside the docs/ directory?
-    if os.path.basename(os.getcwd()) == 'docs':
-        a_h_path = os.path.abspath(os.path.join('..', 'astropy_helpers'))
-        if os.path.isdir(a_h_path):
-            sys.path.insert(1, a_h_path)
-
 # Load all of the global Astropy configuration
-from astropy_helpers.sphinx.conf import *
-from six.moves import urllib
-
-# Get configuration information from setup.cfg
 try:
-    from ConfigParser import ConfigParser
+    from sphinx_astropy.conf.v1 import *  # noqa
 except ImportError:
-    from configparser import ConfigParser
+    print('ERROR: the documentation requires the sphinx-astropy package to '
+          'be installed')
+    sys.exit(1)
+
+from configparser import ConfigParser
 conf = ConfigParser()
 
 conf.read([os.path.join(os.path.dirname(__file__), '..', 'setup.cfg')])
@@ -73,28 +64,30 @@ rst_epilog += """
 
 del intersphinx_mapping['scipy']
 del intersphinx_mapping['h5py']
+
+# Using astropy latest in the mapping is temporary, change it back to stable once 6.0 is out
 intersphinx_mapping.update({
-    'astropy': ('http://docs.astropy.org/en/stable/', None),
+    'astropy': ('https://docs.astropy.org/en/latest/', None),
     'requests': ('https://requests.kennethreitz.org/en/stable/', None),
-    'pyregion': ('http://pyregion.readthedocs.io/en/stable/', None),
-    'regions': ('http://astropy-regions.readthedocs.io/en/stable/', None),
+    'regions': ('https://astropy-regions.readthedocs.io/en/stable/', None),
     'mocpy': ('https://cds-astro.github.io/mocpy/', None),
+    'pyvo': ('https://pyvo.readthedocs.io/en/stable/', None),
 })
 
 # -- Project information ------------------------------------------------------
 
 # This does not *have* to match the package name, but typically does
-project = setup_cfg['package_name']
+project = setup_cfg['name']
 author = setup_cfg['author']
 copyright = '{0}, {1}'.format(
-    datetime.datetime.now().year, setup_cfg['author'])
+    datetime.datetime.now(datetime.timezone.utc).year, setup_cfg['author'])
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 
-__import__(setup_cfg['package_name'])
-package = sys.modules[setup_cfg['package_name']]
+__import__(project)
+package = sys.modules[project]
 
 # The short X.Y version.
 version = package.__version__.split('-', 1)[0]
@@ -162,6 +155,10 @@ man_pages = [('index', project.lower(), project + u' Documentation',
               [author], 1)]
 
 
+# Setting this URL is requited by sphinx-astropy
+github_issues_url = 'https://github.com/astropy/astroquery/issues/'
+
+
 # read the docs mocks
 class Mock(object):
     def __init__(self, *args, **kwargs):
@@ -196,7 +193,7 @@ if eval(setup_cfg.get('edit_on_github')):
     if versionmod.release:
         edit_on_github_branch = "v" + versionmod.version
     else:
-        edit_on_github_branch = "master"
+        edit_on_github_branch = "main"
 
     edit_on_github_source_root = ""
     edit_on_github_doc_root = "docs"
