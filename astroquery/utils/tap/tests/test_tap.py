@@ -4,30 +4,27 @@
 TAP plus
 =============
 
-@author: Juan Carlos Segovia
-@contact: juan.carlos.segovia@sciops.esa.int
-
 European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
-
-Created on 30 jun. 2016
 """
+import gzip
+import os
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import quote_plus, urlencode
 
-import gzip
 import numpy as np
 import pytest
+from astropy.io.registry import IORegistryError
+from astropy.table import Table
+from astropy.utils.data import get_pkg_data_filename
 from requests import HTTPError
 
-from astroquery.utils.tap.model.tapcolumn import TapColumn
-
+from astroquery.utils.tap import taputils
 from astroquery.utils.tap.conn.tests.DummyConnHandler import DummyConnHandler
 from astroquery.utils.tap.conn.tests.DummyResponse import DummyResponse
 from astroquery.utils.tap.core import TapPlus
-from astroquery.utils.tap import taputils
-from astropy.table import Table
+from astroquery.utils.tap.model.tapcolumn import TapColumn
 
 
 def read_file(filename):
@@ -38,7 +35,7 @@ def read_file(filename):
         return filename.read_text()
 
 
-TEST_DATA = {f.name: read_file(f) for f in Path(__file__).with_name("data").iterdir()}
+TEST_DATA = {f.name: read_file(f) for f in Path(__file__).with_name("data").iterdir() if os.path.isfile(f)}
 
 
 def test_load_tables():
@@ -872,7 +869,7 @@ def test_rename_table():
 
 def __find_table(schemaName, tableName, tables):
     qualifiedName = f"{schemaName}.{tableName}"
-    for table in (tables):
+    for table in tables:
         if table.get_qualified_name() == qualifiedName:
             return table
     # not found: raise exception
@@ -880,7 +877,7 @@ def __find_table(schemaName, tableName, tables):
 
 
 def __find_column(columnName, columns):
-    for c in (columns):
+    for c in columns:
         if c.name == columnName:
             return c
     # not found: raise exception
@@ -906,11 +903,11 @@ def __check_results_column(results, columnName, description, unit,
 def test_login(mock_login):
     conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
-    tap.login("user", "password")
+    tap.login(user="user", password="password")
     assert (mock_login.call_count == 1)
     mock_login.side_effect = HTTPError("Login error")
     with pytest.raises(HTTPError):
-        tap.login("user", "password")
+        tap.login(user="user", password="password")
     assert (mock_login.call_count == 2)
 
 
@@ -923,7 +920,7 @@ def test_login_gui(mock_login_gui, mock_login):
     assert (mock_login_gui.call_count == 0)
     mock_login_gui.side_effect = HTTPError("Login error")
     with pytest.raises(HTTPError):
-        tap.login("user", "password")
+        tap.login(user="user", password="password")
     assert (mock_login.call_count == 1)
 
 
@@ -939,7 +936,7 @@ def test_logout(mock_logout):
     assert (mock_logout.call_count == 2)
 
 
-def test_upload_table():
+def test_upload_table_exception():
     conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     a = [1, 2, 3]
@@ -951,3 +948,59 @@ def test_upload_table():
         tap.upload_table(upload_resource=table, table_name=table_name)
 
     assert str(exc_info.value) == f"Table name is not allowed to contain a dot: {table_name}"
+
+
+def test_upload_table():
+    conn_handler = DummyConnHandler()
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
+
+    jobid = '12345'
+    dummyResponse = DummyResponse(303)
+    conn_handler.set_default_response(dummyResponse)
+    launchResponseHeaders = [
+        ['location', f'http://test:1111/tap/async/{jobid}']
+    ]
+    dummyResponse.set_data(method='POST', headers=launchResponseHeaders)
+
+    package = "astroquery.utils.tap.tests"
+
+    table_name = 'my_table'
+    file_csv = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result.csv'),
+                                     package=package)
+    job = tap.upload_table(upload_resource=file_csv, table_name=table_name)
+
+    assert (job.jobid == jobid)
+
+    file_ecsv = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result.ecsv'),
+                                      package=package)
+    job = tap.upload_table(upload_resource=file_ecsv, table_name=table_name)
+
+    assert (job.jobid == jobid)
+
+    file_fits = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result.fits'),
+                                      package=package)
+    job = tap.upload_table(upload_resource=file_fits, table_name=table_name)
+
+    assert (job.jobid == jobid)
+
+    file_vot = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result.vot'),
+                                     package=package)
+    job = tap.upload_table(upload_resource=file_vot, table_name=table_name)
+
+    assert (job.jobid == jobid)
+
+    file_plain_vot = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result_plain.vot'),
+                                           package=package)
+    job = tap.upload_table(upload_resource=file_plain_vot, table_name=table_name)
+
+    assert (job.jobid == jobid)
+
+    file_json = get_pkg_data_filename(os.path.join("data", 'test_upload_file', '1744351221317O-result.json'),
+                                      package=package)
+    with pytest.raises(IORegistryError) as exc_info:
+        job = tap.upload_table(upload_resource=file_json, table_name=table_name)
+
+    assert (
+                "Format could not be identified based on the file name or contents, please provide a 'format' "
+                "argument." in str(
+            exc_info.value))
