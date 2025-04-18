@@ -40,7 +40,7 @@ TEST_DATA = {f.name: read_file(f) for f in Path(__file__).with_name("data").iter
 
 def test_load_tables():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     responseLoadTable = DummyResponse(500)
     responseLoadTable.set_data(method='GET', body=TEST_DATA["test_tables.xml"])
     tableRequest = "tables"
@@ -77,7 +77,7 @@ def test_load_tables():
 
 def test_load_tables_parameters():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     responseLoadTable = DummyResponse(200)
     responseLoadTable.set_data(method='GET', body=TEST_DATA["test_tables.xml"])
     tableRequest = "tables"
@@ -113,7 +113,7 @@ def test_load_tables_parameters():
 
 def test_load_table():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
 
     # No arguments
     with pytest.raises(Exception):
@@ -144,7 +144,7 @@ def test_load_table():
 
 def test_launch_sync_job():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     responseLaunchJob = DummyResponse(500)
     responseLaunchJob.set_data(method='POST', body=TEST_DATA["job_1.vot"])
     query = 'select top 5 * from table'
@@ -198,7 +198,7 @@ def test_launch_sync_job():
 
 def test_launch_sync_job_secure():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="https://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="https://test:1111/tap", connhandler=conn_handler)
     responseLaunchJob = DummyResponse(500)
     responseLaunchJob.set_data(method='POST', body=TEST_DATA["job_1.vot"])
     query = 'select top 5 * from table'
@@ -252,7 +252,7 @@ def test_launch_sync_job_secure():
 
 def test_launch_sync_job_redirect():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     responseLaunchJob = DummyResponse(500)
     jobid = '12345'
     resultsReq = f'sync/{jobid}'
@@ -332,7 +332,7 @@ def test_launch_sync_job_redirect():
 
 def test_launch_async_job():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     jobid = '12345'
     # Launch response
     responseLaunchJob = DummyResponse(500)
@@ -408,7 +408,7 @@ def test_launch_async_job():
 
 def test_start_job():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     jobid = '12345'
     # Phase POST response
     responsePhase = DummyResponse(200)
@@ -463,7 +463,7 @@ def test_start_job():
 
 def test_abort_job():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     jobid = '12345'
     # Phase POST response
     responsePhase = DummyResponse(200)
@@ -502,7 +502,7 @@ def test_abort_job():
 
 def test_job_parameters():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     jobid = '12345'
     # Launch response
     responseLaunchJob = DummyResponse(303)
@@ -561,7 +561,7 @@ def test_job_parameters():
 
 def test_list_async_jobs():
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     response = DummyResponse(500)
     response.set_data(method='GET', body=TEST_DATA["jobs_list.xml"])
     req = "async"
@@ -582,7 +582,7 @@ def test_data():
     conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap",
                   data_context="data",
-                  connhandler=connHandler)
+                  connhandler=conn_handler)
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = "?ID=1%2C2&format=votable"
@@ -615,7 +615,7 @@ def test_datalink():
     conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap",
                   datalink_context="datalink",
-                  connhandler=connHandler)
+                  connhandler=conn_handler)
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = "links?ID=1,2"
@@ -778,7 +778,7 @@ def test_get_current_column_values_for_update():
 def test_update_user_table():
     tableName = 'table'
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     dummyResponse = DummyResponse(200)
     dummyResponse.set_data(method='GET', body=TEST_DATA["test_table_update.xml"])
     tableRequest = f"tables?tables={tableName}"
@@ -844,7 +844,7 @@ def test_rename_table():
     newTableName = 'user_test.table_test_rename_new'
     newColumnNames = {'ra': 'alpha', 'dec': 'delta'}
     conn_handler = DummyConnHandler()
-    tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
+    tap = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     dummyResponse = DummyResponse(200)
     dummyResponse.set_data(method='GET', body=TEST_DATA["test_table_rename.xml"])
 
