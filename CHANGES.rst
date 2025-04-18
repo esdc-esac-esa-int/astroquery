@@ -29,13 +29,9 @@ heasarc
 utils.tap
 ^^^^^^^^^
 
-- The method upload_table accepts file formats defined in https://docs.astropy.org/en/stable/io/unified.html#built-in-table-readers-writers [#3295]
-
-
-utils.tap
-^^^^^^^^^
-
 - Get the cookie associated to the keys JSESSIONID or SESSION due to the tap library release at ESAC. [#3289]
+
+- The method upload_table accepts file formats defined in https://docs.astropy.org/en/stable/io/unified.html#built-in-table-readers-writers [#3295]
 
 
 Infrastructure, Utility and Other Changes and Additions
