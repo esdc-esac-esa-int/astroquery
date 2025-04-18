@@ -868,12 +868,12 @@ def test_rename_table():
 
 
 def __find_table(schemaName, tableName, tables):
-    qualifiedName = f"{schemaName}.{tableName}"
+    qualified_name = f"{schemaName}.{tableName}"
     for table in tables:
-        if table.get_qualified_name() == qualifiedName:
+        if table.get_qualified_name() == qualified_name:
             return table
     # not found: raise exception
-    pytest.fail(f"Table '{qualifiedName}' not found")
+    pytest.fail(f"Table '{qualified_name}' not found")
 
 
 def __find_column(columnName, columns):
