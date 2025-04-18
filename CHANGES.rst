@@ -26,6 +26,11 @@ heasarc
 - Heasarc.locate_data returns empty rows with an error in the error_message column if there are
   no data associated with that row rather than filtering it out. [#3275]
 
+utils.tap
+^^^^^^^^^
+
+- The method upload_table accepts file formats defined in https://docs.astropy.org/en/stable/io/unified.html#built-in-table-readers-writers [#3295]
+
 
 utils.tap
 ^^^^^^^^^
