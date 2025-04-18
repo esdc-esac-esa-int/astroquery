@@ -1,5 +1,4 @@
 .. _astroquery.esa.euclid:
-.. _astroquery.esa.euclid:
 
 ********************************************
 ESA EUCLID Archive (`astroquery.esa.euclid`)
