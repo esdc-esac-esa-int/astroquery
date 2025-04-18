@@ -39,12 +39,12 @@ TEST_DATA = {f.name: read_file(f) for f in Path(__file__).with_name("data").iter
 
 
 def test_load_tables():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     responseLoadTable = DummyResponse(500)
     responseLoadTable.set_data(method='GET', body=TEST_DATA["test_tables.xml"])
     tableRequest = "tables"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
     with pytest.raises(Exception):
         tap.load_tables()
 
@@ -76,43 +76,43 @@ def test_load_tables():
 
 
 def test_load_tables_parameters():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     responseLoadTable = DummyResponse(200)
     responseLoadTable.set_data(method='GET', body=TEST_DATA["test_tables.xml"])
     tableRequest = "tables"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
 
     # empty request
     tap.load_tables()
-    assert connHandler.request == tableRequest
+    assert conn_handler.request == tableRequest
 
     # flag only_names=false & share_accessible=false: equals to
     # empty request
     tap.load_tables(only_names=False, include_shared_tables=False)
-    assert connHandler.request == tableRequest
+    assert conn_handler.request == tableRequest
 
     # flag only_names
     tableRequest = "tables?only_tables=true"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
     tap.load_tables(only_names=True)
-    assert connHandler.request == tableRequest
+    assert conn_handler.request == tableRequest
 
     # flag share_accessible=true
     tableRequest = "tables?share_accessible=true"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
     tap.load_tables(include_shared_tables=True)
-    assert connHandler.request == tableRequest
+    assert conn_handler.request == tableRequest
 
     # flag only_names=true & share_accessible=true
     tableRequest = "tables?only_tables=true&share_accessible=true"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
     tap.load_tables(only_names=True, include_shared_tables=True)
-    assert connHandler.request == tableRequest
+    assert conn_handler.request == tableRequest
 
 
 def test_load_table():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
 
     # No arguments
@@ -125,7 +125,7 @@ def test_load_table():
     tableName = "table1"
     fullQualifiedTableName = f"{tableSchema}.{tableName}"
     tableRequest = f"tables?tables={fullQualifiedTableName}"
-    connHandler.set_response(tableRequest, responseLoadTable)
+    conn_handler.set_response(tableRequest, responseLoadTable)
 
     with pytest.raises(Exception):
         tap.load_table(fullQualifiedTableName)
@@ -143,7 +143,7 @@ def test_load_table():
 
 
 def test_launch_sync_job():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     responseLaunchJob = DummyResponse(500)
     responseLaunchJob.set_data(method='POST', body=TEST_DATA["job_1.vot"])
@@ -157,7 +157,7 @@ def test_launch_sync_job():
         "QUERY": quote_plus(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     jobRequest = f"sync?{sortedKey}"
-    connHandler.set_response(jobRequest, responseLaunchJob)
+    conn_handler.set_response(jobRequest, responseLaunchJob)
 
     with pytest.raises(Exception):
         tap.launch_job(query, maxrec=10)
@@ -197,7 +197,7 @@ def test_launch_sync_job():
 
 
 def test_launch_sync_job_secure():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="https://test:1111/tap", connhandler=connHandler)
     responseLaunchJob = DummyResponse(500)
     responseLaunchJob.set_data(method='POST', body=TEST_DATA["job_1.vot"])
@@ -211,7 +211,7 @@ def test_launch_sync_job_secure():
         "QUERY": quote_plus(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     jobRequest = f"sync?{sortedKey}"
-    connHandler.set_response(jobRequest, responseLaunchJob)
+    conn_handler.set_response(jobRequest, responseLaunchJob)
 
     with pytest.raises(Exception):
         tap.launch_job(query, maxrec=10)
@@ -251,7 +251,7 @@ def test_launch_sync_job_secure():
 
 
 def test_launch_sync_job_redirect():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     responseLaunchJob = DummyResponse(500)
     jobid = '12345'
@@ -271,11 +271,11 @@ def test_launch_sync_job_redirect():
         "QUERY": quote_plus(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     jobRequest = f"sync?{sortedKey}"
-    connHandler.set_response(jobRequest, responseLaunchJob)
+    conn_handler.set_response(jobRequest, responseLaunchJob)
     # Results response
     responseResultsJob = DummyResponse(500)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
-    connHandler.set_response(resultsReq, responseResultsJob)
+    conn_handler.set_response(resultsReq, responseResultsJob)
 
     with pytest.raises(Exception):
         tap.launch_job(query)
@@ -331,7 +331,7 @@ def test_launch_sync_job_redirect():
 
 
 def test_launch_async_job():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     jobid = '12345'
     # Launch response
@@ -351,17 +351,17 @@ def test_launch_async_job():
         "QUERY": str(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     req = f"async?{sortedKey}"
-    connHandler.set_response(req, responseLaunchJob)
+    conn_handler.set_response(req, responseLaunchJob)
     # Phase response
     responsePhase = DummyResponse(500)
     responsePhase.set_data(method='GET', body="COMPLETED")
     req = f"async/{jobid}/phase"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
     # Results response
     responseResultsJob = DummyResponse(500)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = f"async/{jobid}/results/result"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
 
     with pytest.raises(Exception):
         tap.launch_job_async(query)
@@ -407,14 +407,14 @@ def test_launch_async_job():
 
 
 def test_start_job():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     jobid = '12345'
     # Phase POST response
     responsePhase = DummyResponse(200)
     responsePhase.set_data(method='POST')
     req = f"async/{jobid}/phase?PHASE=RUN"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
     # Launch response
     responseLaunchJob = DummyResponse(303)
     # list of list (httplib implementation for headers in response)
@@ -431,17 +431,17 @@ def test_start_job():
         "QUERY": str(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     req = f"async?{sortedKey}"
-    connHandler.set_response(req, responseLaunchJob)
+    conn_handler.set_response(req, responseLaunchJob)
     # Phase response
     responsePhase = DummyResponse(200)
     responsePhase.set_data(method='GET', body="COMPLETED")
     req = f"async/{jobid}/phase"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
     # Results response
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = f"async/{jobid}/results/result"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
 
     responseResultsJob.set_status_code(200)
     job = tap.launch_job_async(query, autorun=False)
@@ -462,14 +462,14 @@ def test_start_job():
 
 
 def test_abort_job():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     jobid = '12345'
     # Phase POST response
     responsePhase = DummyResponse(200)
     responsePhase.set_data(method='POST')
     req = f"async/{jobid}/phase?PHASE=ABORT"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
     # Launch response
     responseLaunchJob = DummyResponse(303)
     # list of list (httplib implementation for headers in response)
@@ -487,7 +487,7 @@ def test_abort_job():
         "QUERY": str(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     req = f"async?{sortedKey}"
-    connHandler.set_response(req, responseLaunchJob)
+    conn_handler.set_response(req, responseLaunchJob)
 
     job = tap.launch_job_async(query, autorun=False, maxrec=10)
     assert job is not None
@@ -501,7 +501,7 @@ def test_abort_job():
 
 
 def test_job_parameters():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     jobid = '12345'
     # Launch response
@@ -521,17 +521,17 @@ def test_job_parameters():
         "QUERY": str(query)}
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     req = f"async?{sortedKey}"
-    connHandler.set_response(req, responseLaunchJob)
+    conn_handler.set_response(req, responseLaunchJob)
     # Phase response
     responsePhase = DummyResponse(200)
     responsePhase.set_data(method='GET', body="COMPLETED")
     req = f"async/{jobid}/phase"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
     # Results response
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = f"async/{jobid}/results/result"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
 
     responseResultsJob.set_status_code(200)
     job = tap.launch_job_async(query, maxrec=10, autorun=False)
@@ -542,12 +542,12 @@ def test_job_parameters():
     responseParameters = DummyResponse(200)
     responseParameters.set_data(method='GET')
     req = f"async/{jobid}?param1=value1"
-    connHandler.set_response(req, responseParameters)
+    conn_handler.set_response(req, responseParameters)
     # Phase POST response
     responsePhase = DummyResponse(200)
     responsePhase.set_data(method='POST')
     req = f"async/{jobid}/phase?PHASE=RUN"
-    connHandler.set_response(req, responsePhase)
+    conn_handler.set_response(req, responsePhase)
 
     # send parameter OK
     job.send_parameter(name="param1", value="value1")
@@ -560,12 +560,12 @@ def test_job_parameters():
 
 
 def test_list_async_jobs():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     response = DummyResponse(500)
     response.set_data(method='GET', body=TEST_DATA["jobs_list.xml"])
     req = "async"
-    connHandler.set_response(req, response)
+    conn_handler.set_response(req, response)
     with pytest.raises(Exception):
         tap.list_async_jobs()
 
@@ -579,16 +579,16 @@ def test_list_async_jobs():
 
 
 def test_data():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap",
                   data_context="data",
                   connhandler=connHandler)
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = "?ID=1%2C2&format=votable"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
     req = "?ID=1%2C2"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
 
     # error
     responseResultsJob.set_status_code(500)
@@ -612,14 +612,14 @@ def test_data():
 
 
 def test_datalink():
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap",
                   datalink_context="datalink",
                   connhandler=connHandler)
     responseResultsJob = DummyResponse(200)
     responseResultsJob.set_data(method='GET', body=TEST_DATA["job_1.vot"])
     req = "links?ID=1,2"
-    connHandler.set_response(req, responseResultsJob)
+    conn_handler.set_response(req, responseResultsJob)
 
     # error
     responseResultsJob.set_status_code(500)
@@ -777,12 +777,12 @@ def test_get_current_column_values_for_update():
 
 def test_update_user_table():
     tableName = 'table'
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     dummyResponse = DummyResponse(200)
     dummyResponse.set_data(method='GET', body=TEST_DATA["test_table_update.xml"])
     tableRequest = f"tables?tables={tableName}"
-    connHandler.set_response(tableRequest, dummyResponse)
+    conn_handler.set_response(tableRequest, dummyResponse)
 
     with pytest.raises(Exception):
         tap.update_user_table()
@@ -833,7 +833,7 @@ def test_update_user_table():
     }
     sortedKey = taputils.taputil_create_sorted_dict_key(dictTmp)
     req = f"tableEdit?{sortedKey}"
-    connHandler.set_response(req, responseEditTable)
+    conn_handler.set_response(req, responseEditTable)
 
     list_of_changes = [['alpha', 'flags', 'Ra'], ['delta', 'flags', 'Dec']]
     tap.update_user_table(table_name=tableName, list_of_changes=list_of_changes)
@@ -843,7 +843,7 @@ def test_rename_table():
     tableName = 'user_test.table_test_rename'
     newTableName = 'user_test.table_test_rename_new'
     newColumnNames = {'ra': 'alpha', 'dec': 'delta'}
-    connHandler = DummyConnHandler()
+    conn_handler = DummyConnHandler()
     tap = TapPlus(url="http://test:1111/tap", connhandler=connHandler)
     dummyResponse = DummyResponse(200)
     dummyResponse.set_data(method='GET', body=TEST_DATA["test_table_rename.xml"])
@@ -863,7 +863,7 @@ def test_rename_table():
         "new_table_name": newTableName,
         "table_name": tableName,
     }
-    connHandler.set_response(f"TableTool?{urlencode(dictArgs)}", responseRenameTable)
+    conn_handler.set_response(f"TableTool?{urlencode(dictArgs)}", responseRenameTable)
     tap.rename_table(table_name=tableName, new_table_name=newTableName, new_column_names_dict=newColumnNames)
 
 
