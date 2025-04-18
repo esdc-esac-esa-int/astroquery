@@ -1001,6 +1001,6 @@ def test_upload_table():
         job = tap.upload_table(upload_resource=file_json, table_name=table_name)
 
     assert (
-                "Format could not be identified based on the file name or contents, please provide a 'format' "
-                "argument." in str(
-            exc_info.value))
+            "Format could not be identified based on the file name or contents, please provide a 'format' "
+            "argument." in str(
+        exc_info.value))
