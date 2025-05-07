@@ -66,7 +66,7 @@ to query the messier object M1:
     main_id    ra     dec   ... coo_wavelength     coo_bibcode     matched_id
               deg     deg   ...
     ------- ------- ------- ... -------------- ------------------- ----------
-      M   1 83.6287 22.0147 ...              R 1995AuJPh..48..143S      M   1
+      M   1 83.6324 22.0174 ...              X 2022A&A...661A..38P      M   1
 
 `Wildcards`_ are supported. Note that this makes the query case-sensitive.
 This allows, for instance, to query messier objects from 1 through 9:
@@ -155,6 +155,156 @@ associated with an object.
             NAME North Star
                   WEB  2438
 
+Query hierarchy: to get all parents (or children, or siblings) of an object
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SIMBAD also records hierarchy links between objects. For example, two galaxies in a pair
+of galaxies are siblings, a cluster of stars is composed of stars: its children. This
+information can be accessed with the `~astroquery.simbad.SimbadClass.query_hierarchy`
+method.
+
+Whenever available, membership probabilities are recorded in SIMBAD as given by
+the authors, though rounded to an integer. When authors do not give a value but
+assessments, they are translated in SIMBAD as follows:
+
++-------------------+------------------------+
+| assessment        | membership certainty   |
++===================+========================+
+| member            | 100                    |
++-------------------+------------------------+
+| likely member     | 75                     |
++-------------------+------------------------+
+| possible member   | 50                     |
++-------------------+------------------------+
+| likely not member | 25                     |
++-------------------+------------------------+
+| non member        | 0                      |
++-------------------+------------------------+
+
+For gravitational lens systems, double stars, and blends (superposition of two
+non-physically linked objects), the SIMBAD team does not assign a probability
+value (this will be a ``None``).
+
+You can find more details in the `hierarchy documentation 
+<https://simbad.cds.unistra.fr/guide/dataHierarchy.htx>`_ of SIMBAD's webpages.
+
+Let's find the galaxies composing the galaxy pair ``Mrk 116``:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> galaxies = Simbad.query_hierarchy("Mrk 116",
+    ...                                   hierarchy="children", criteria="otype='G..'")
+    >>> galaxies[["main_id", "ra", "dec", "membership_certainty"]]
+    <Table length=2>
+     main_id         ra            dec       membership_certainty
+                    deg            deg             percent       
+      object      float64        float64            int16        
+    --------- --------------- -------------- --------------------
+    Mrk  116A 143.50821525019 55.24105273196                   --
+    Mrk  116B      143.509956      55.239762                   --
+
+Alternatively, if we know one member of a group, we can find the others by asking for
+``siblings``:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> galaxies = Simbad.query_hierarchy("Mrk 116A",
+    ...                                   hierarchy="siblings", criteria="otype='G..'")
+    >>> galaxies[["main_id", "ra", "dec", "membership_certainty"]]
+    <Table length=2>
+     main_id         ra            dec       membership_certainty
+                    deg            deg             percent       
+      object      float64        float64            int16        
+    --------- --------------- -------------- --------------------
+    Mrk  116A 143.50821525019 55.24105273196                   --
+    Mrk  116B      143.509956      55.239762                   --
+
+Note that if we had not added the criteria on the object type, we would also get
+some stars that are part of these galaxies in the result.
+
+And the other way around, let's find which cluster of stars contains
+``2MASS J18511048-0615470``:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> cluster = Simbad.query_hierarchy("2MASS J18511048-0615470", 
+    ...                                  hierarchy="parents", detailed_hierarchy=False)
+    >>> cluster[["main_id", "ra", "dec"]]
+    <Table length=1>
+     main_id     ra     dec
+                deg     deg
+      object  float64 float64
+    --------- ------- -------
+    NGC  6705 282.766  -6.272
+
+By default, we get a more detailed report with the two extra columns:
+ - ``hierarchy_bibcode`` : the paper in which the hierarchy is established,
+ - ``membership_certainty``: if present in the paper, a certainty index (100 meaning
+   100% sure).
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> cluster = Simbad.query_hierarchy("2MASS J18511048-0615470", 
+    ...                                  hierarchy="parents",
+    ...                                  detailed_hierarchy=True)
+    >>> cluster[["main_id", "ra", "dec", "hierarchy_bibcode", "membership_certainty"]]
+    <Table length=13>
+     main_id     ra     dec    hierarchy_bibcode  membership_certainty
+                deg     deg                             percent
+      object  float64 float64        object              int16
+    --------- ------- ------- ------------------- --------------------
+    NGC  6705 282.766  -6.272 2014A&A...563A..44M                  100
+    NGC  6705 282.766  -6.272 2015A&A...573A..55T                  100
+    NGC  6705 282.766  -6.272 2016A&A...591A..37J                  100
+    NGC  6705 282.766  -6.272 2018A&A...618A..93C                  100
+    NGC  6705 282.766  -6.272 2020A&A...633A..99C                  100
+    NGC  6705 282.766  -6.272 2020A&A...640A...1C                  100
+    NGC  6705 282.766  -6.272 2020A&A...643A..71G                  100
+    NGC  6705 282.766  -6.272 2020ApJ...903...55P                  100
+    NGC  6705 282.766  -6.272 2020MNRAS.496.4701J                  100
+    NGC  6705 282.766  -6.272 2021A&A...647A..19T                  100
+    NGC  6705 282.766  -6.272 2021A&A...651A..84M                  100
+    NGC  6705 282.766  -6.272 2021MNRAS.503.3279S                   99
+    NGC  6705 282.766  -6.272 2022MNRAS.509.1664J                  100
+
+Here, we see that the SIMBAD team found 13 papers mentioning the fact that 
+``2MASS J18511048-0615470`` is a member of ``NGC  6705`` and that the authors of these
+articles gave high confidence indices for this membership (``membership_certainty`` is
+close to 100 for all bibcodes).
+
+A note of caution on hierarchy
+""""""""""""""""""""""""""""""
+
+In some tricky cases, low membership values represent extremely important information.
+Let's for example look at the star ``V* V787 Cep``:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> parents = Simbad.query_hierarchy("V* V787 Cep", 
+    ...                                  hierarchy="parents",
+    ...                                  detailed_hierarchy=True)
+    >>> parents[["main_id", "ra", "dec", "hierarchy_bibcode", "membership_certainty"]]
+    <Table length=4>
+     main_id          ra           dec    hierarchy_bibcode  membership_certainty
+                     deg           deg                             percent       
+      object       float64       float64        object              int16
+    --------- ------------------ ------- ------------------- --------------------
+    NGC   188 11.797999999999998  85.244 2003AJ....126.2922P                   46
+    NGC   188 11.797999999999998  85.244 2004PASP..116.1012S                   46
+    NGC   188 11.797999999999998  85.244 2018A&A...616A..10G                  100
+    NGC   188 11.797999999999998  85.244 2021MNRAS.503.3279S                    1
+
+Here, we see that the link between ``V* V787 Cep`` and the open cluster ``NGC 188`` is
+opened for debate: the only way to build an opinion is to read the four articles.
+This information would be hidden if we did not print the detailed hierarchy report.
+
+These somewhat contradictory results are an inherent part of SIMBAD, which simply
+translates the literature into a database.
 
 Query a region
 ^^^^^^^^^^^^^^
@@ -203,12 +353,12 @@ If the center is defined by coordinates, then the best solution is to use a
     >>> Simbad.query_region(SkyCoord(31.0087, 14.0627, unit=(u.deg, u.deg),
     ...                     frame='galactic'), radius=2 * u.arcsec)
     <Table length=2>
-          main_id               ra        ... coo_wavelength     coo_bibcode
-                               deg        ...
-           object            float64      ...      str1             object
-    ------------------- ----------------- ... -------------- -------------------
-               GJ 699 b 269.4520769586187 ...              O 2020yCat.1350....0G
-    NAME Barnard's star 269.4520769586187 ...              O 2020yCat.1350....0G
+           main_id                ra        ... coo_wavelength     coo_bibcode    
+                                 deg        ...                                   
+            object             float64      ...      str1             object      
+    --------------------- ----------------- ... -------------- -------------------
+    NAME Barnard's Star b 269.4520769586187 ...              O 2020yCat.1350....0G
+      NAME Barnard's star 269.4520769586187 ...              O 2020yCat.1350....0G
 
 .. Note::
 
@@ -292,6 +442,9 @@ For example to get the 10 biggest catalogs in SIMBAD, it looks like this:
         LEDA                              Lyon-Meudon Extragalactic DatabaseA
 
 Where you can remove ``TOP 10`` to get **all** the catalogues (there's a lot of them).
+
+.. warning::
+    This method is case-sensitive since version 0.4.8 
 
 Bibliographic queries
 ---------------------
@@ -421,6 +574,7 @@ Some query methods outputs can be customized. This is the case for:
 - `~astroquery.simbad.SimbadClass.query_objects`
 - `~astroquery.simbad.SimbadClass.query_region`
 - `~astroquery.simbad.SimbadClass.query_catalog`
+- `~astroquery.simbad.SimbadClass.query_hierarchy`
 - `~astroquery.simbad.SimbadClass.query_bibobj`
 
 For these methods, the default columns in the output are:
@@ -466,30 +620,30 @@ with:
 
     >>> from astroquery.simbad import Simbad
     >>> Simbad.list_votable_fields()[["name", "description"]]
-    <Table length=115>
-        name                          description                      
-       object                            object                        
-    ----------- -------------------------------------------------------
-    mesDiameter                        Collection of stellar diameters.
-          mesPM                           Collection of proper motions.
-         mesISO         Infrared Space Observatory (ISO) observing log.
-         mesSpT                           Collection of spectral types.
-      allfluxes        all flux/magnitudes U,B,V,I,J,H,K,u_,g_,r_,i_,z_
-          ident                   Identifiers of an astronomical object
-           flux Magnitude/Flux information about an astronomical object
-         mesPLX                 Collection of trigonometric parallaxes.
-       otypedef          all names and definitions for the object types
-            ...                                                     ...
-              K                                             Magnitude K
-              u                                        Magnitude SDSS u
-              g                                        Magnitude SDSS g
-              r                                        Magnitude SDSS r
-              i                                        Magnitude SDSS i
-              z                                        Magnitude SDSS z
-              G                                        Magnitude Gaia G
-          F150W                                       JWST NIRCam F150W
-          F200W                                       JWST NIRCam F200W
-          F444W                                       JWST NIRCan F444W
+    <Table length=...>
+        name                           description                       
+       object                             object                         
+    ----------- ---------------------------------------------------------
+    mesDiameter                          Collection of stellar diameters.
+          mesPM                             Collection of proper motions.
+         mesISO           Infrared Space Observatory (ISO) observing log.
+         mesSpT                             Collection of spectral types.
+      allfluxes          all flux/magnitudes U,B,V,I,J,H,K,u_,g_,r_,i_,z_
+          ident                     Identifiers of an astronomical object
+           flux   Magnitude/Flux information about an astronomical object
+       mesOtype Other object types associated with an object with origins
+         mesPLX                   Collection of trigonometric parallaxes.
+            ...                                                       ...
+              K                                               Magnitude K
+              u                                          Magnitude SDSS u
+              g                                          Magnitude SDSS g
+              r                                          Magnitude SDSS r
+              i                                          Magnitude SDSS i
+              z                                          Magnitude SDSS z
+              G                                          Magnitude Gaia G
+          F150W                                         JWST NIRCam F150W
+          F200W                                         JWST NIRCam F200W
+          F444W                                         JWST NIRCan F444W
 
 You can also access a single field description with
 `~astroquery.simbad.SimbadClass.get_field_description`
@@ -508,6 +662,72 @@ And the columns in the output can be reset to their default value with
     A detailed description on the ways to add fluxes is available in the
     :ref:`optical filters` section.
 
+Measurement fields vs. Basic fields
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some field names start with ``mes``. These denote what SIMBAD calls a
+"measurement table". These tables store the history on past measurements of a physical
+parameter for each object.
+
+Let's look at the star ``HD 200207`` with the parallax measurements table ``mesplx``:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> simbad = Simbad()
+    >>> simbad.add_votable_fields("mesplx")
+    >>> hd_200207 = simbad.query_object("HD 200207")
+    >>> hd_200207[["main_id", "mesplx.plx", "mesplx.plx_err", "mesplx.bibcode"]]
+    <Table length=5>
+     main_id  mesplx.plx mesplx.plx_err    mesplx.bibcode
+                 mas          mas
+      object   float32      float32            object
+    --------- ---------- -------------- -------------------
+    HD 200207     3.4084         0.0195 2020yCat.1350....0G
+    HD 200207     3.4552         0.0426 2018yCat.1345....0G
+    HD 200207       3.35           0.76 1997A&A...323L..49P
+    HD 200207       3.72           0.62 2007A&A...474..653V
+    HD 200207       3.25           0.22 2016A&A...595A...2G
+
+This field adds one line per parallax measurement: five articles have measured it
+for this star.
+
+If you are only interested in the most precise measure recorded by the SIMBAD team, some
+measurements fields have an equivalent in the basic fields. These fields only give one
+line per object with the most precise currently known value:
+
++-------------------+---------------+
+| measurement field | basic field   |
++===================+===============+
+| mesplx            | parallax      |
++-------------------+---------------+
+| mespm             | propermotions |
++-------------------+---------------+
+| messpt            | sp            |
++-------------------+---------------+
+| mesvelocities     | velocity      |
++-------------------+---------------+
+
+Here, ``mesplx`` has an equivalent in the basic fields so we could have done:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> simbad = Simbad()
+    >>> simbad.add_votable_fields("parallax")
+    >>> hd_200207 = simbad.query_object("HD 200207")
+    >>> hd_200207[["main_id", "plx_value", "plx_err", "plx_bibcode"]]
+    <Table length=1>
+     main_id  plx_value plx_err     plx_bibcode
+                 mas      mas
+      object   float64  float32        object
+    --------- --------- ------- -------------------
+    HD 200207    3.4084  0.0195 2020yCat.1350....0G
+
+And we only have one line per object with the value selected by SIMBAD's team.
+
+Thus, choosing to add a measurement field or a basic field depends on your goal.
+
 Additional criteria
 -------------------
 
@@ -523,6 +743,7 @@ Most query methods take a ``criteria`` argument. They are listed here:
 - `~astroquery.simbad.SimbadClass.query_objects`
 - `~astroquery.simbad.SimbadClass.query_region`
 - `~astroquery.simbad.SimbadClass.query_catalog`
+- `~astroquery.simbad.SimbadClass.query_hierarchy`
 - `~astroquery.simbad.SimbadClass.query_bibobj`
 - `~astroquery.simbad.SimbadClass.query_bibcode`
 - `~astroquery.simbad.SimbadClass.query_objectids`
@@ -584,11 +805,12 @@ constraint on the first character of the ``mespm.bibcode`` column
     >>> simbad.add_votable_fields("mesPM", "otype")
     >>> pm_measurements = simbad.query_object("BD+30  2512", criteria=criteria)
     >>> pm_measurements[["main_id", "mespm.pmra", "mespm.pmde", "mespm.bibcode"]]
-    <Table length=6>
+    <Table length=7>
       main_id   mespm.pmra mespm.pmde    mespm.bibcode
                  mas / yr   mas / yr
        object    float32    float32          object
     ----------- ---------- ---------- -------------------
+    BD+30  2512     -631.6     -289.5 2016ApJ...817..112S
     BD+30  2512   -631.662   -308.469 2020yCat.1350....0G
     BD+30  2512     -631.6     -289.5 2016ApJS..224...36K
     BD+30  2512   -631.625   -308.495 2018yCat.1345....0G
@@ -606,6 +828,30 @@ Query TAP
 
 Troubleshooting
 ===============
+
+Longer queries
+--------------
+
+It can be useful to execute longer queries in asynchronous mode by setting the
+``async_job`` argument to ``True``. This may take longer to start, depending on the
+current number of other people using the asynchronous SIMBAD queue, but it is more
+robust against transient errors. Asynchronous queries will take the ``timeout`` property
+in account:
+
+.. doctest-remote-data::
+
+    >>> from astroquery.simbad import Simbad
+    >>> simbad = Simbad(timeout=2000) # in seconds
+    >>> simbad.query_tap("select otype, description from otypedef where otype = 'N*'",
+    ...                  async_job=True)
+    <Table length=1>
+    otype  description
+    object    object
+    ------ ------------
+        N* Neutron Star
+
+Clearing the cache
+------------------
 
 If you are repeatedly getting failed queries, or bad/out-of-date results, try clearing
 your cache:

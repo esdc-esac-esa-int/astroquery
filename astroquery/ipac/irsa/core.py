@@ -10,12 +10,10 @@ Module to query the IRSA archive.
 import warnings
 from astropy.coordinates import SkyCoord, Angle
 from astropy import units as u
-from astropy.utils.decorators import deprecated_renamed_argument
+from astropy.utils.decorators import deprecated, deprecated_renamed_argument
 
-from pyvo.dal import TAPService
-
-from pyvo.dal.sia2 import SIA2Service, SIA2_PARAMETERS_DESC
-
+from pyvo.dal import TAPService, SIA2Service, SSAService
+from pyvo.dal.sia2 import SIA2_PARAMETERS_DESC
 from astroquery import log
 from astroquery.query import BaseVOQuery
 from astroquery.utils.commons import parse_coordinates
@@ -31,8 +29,10 @@ class IrsaClass(BaseVOQuery):
     def __init__(self):
         super().__init__()
         self.sia_url = conf.sia_url
+        self.ssa_url = conf.ssa_url
         self.tap_url = conf.tap_url
         self._sia = None
+        self._ssa = None
         self._tap = None
 
     @property
@@ -42,12 +42,18 @@ class IrsaClass(BaseVOQuery):
         return self._sia
 
     @property
+    def ssa(self):
+        if not self._ssa:
+            self._ssa = SSAService(baseurl=self.ssa_url, session=self._session)
+        return self._ssa
+
+    @property
     def tap(self):
         if not self._tap:
             self._tap = TAPService(baseurl=self.tap_url, session=self._session)
         return self._tap
 
-    def query_tap(self, query, *, maxrec=None):
+    def query_tap(self, query, *, async_job=False, maxrec=None):
         """
         Send query to IRSA TAP. Results in `~pyvo.dal.TAPResults` format.
         result.to_qtable in `~astropy.table.QTable` format
@@ -56,7 +62,9 @@ class IrsaClass(BaseVOQuery):
         ----------
         query : str
             ADQL query to be executed
-        maxrec : int
+        async_job : bool, optional
+            if True query is run in asynchronous mode
+        maxrec : int, optional
             maximum number of records to return
 
         Returns
@@ -69,8 +77,12 @@ class IrsaClass(BaseVOQuery):
             TAP query result as `~astropy.table.QTable`
 
         """
-        log.debug(f'TAP query: {query}')
-        return self.tap.search(query, language='ADQL', maxrec=maxrec)
+        log.debug(f'Query is run in async mode: {async_job}\n TAP query: {query}')
+
+        if async_job:
+            return self.tap.run_async(query, language='ADQL', maxrec=maxrec)
+        else:
+            return self.tap.run_sync(query, language='ADQL', maxrec=maxrec)
 
     def query_sia(self, *, pos=None, band=None, time=None, pol=None,
                   field_of_view=None, spatial_resolution=None,
@@ -90,10 +102,10 @@ class IrsaClass(BaseVOQuery):
 
         Returns
         -------
-        Results in `pyvo.dal.SIAResults` format.
-        result.table in Astropy table format
+        Results in `~astropy.table.Table` format.
+
         """
-        return self.sia.search(
+        results = self.sia.search(
             pos=pos,
             band=band,
             time=time,
@@ -114,25 +126,92 @@ class IrsaClass(BaseVOQuery):
             maxrec=maxrec,
             **kwargs)
 
+        return results.to_table()
+
     query_sia.__doc__ = query_sia.__doc__.replace('_SIA2_PARAMETERS', SIA2_PARAMETERS_DESC)
 
-    def list_collections(self):
+    def query_ssa(self, *, pos=None, radius=None, band=None, time=None, collection=None):
+        """
+        Use standard SSA attributes to query the IRSA SSA service.
+
+        Parameters
+        ----------
+        pos : `~astropy.coordinates.SkyCoord` class or sequence of two floats
+            the position of the center of the circular search region.
+            assuming icrs decimal degrees if unit is not specified.
+        raidus : `~astropy.units.Quantity` class or scalar float
+            the radius of the circular region around pos in which to search.
+            assuming icrs decimal degrees if unit is not specified.
+        band : `~astropy.units.Quantity` class or sequence of two floats
+            the bandwidth range the observations belong to.
+            assuming meters if unit is not specified.
+        time : `~astropy.time.Time` class or sequence of two strings
+            the datetime range the observations were made in.
+            assuming iso 8601 if format is not specified.
+        collection : str
+           Name of the collection that the data belongs to.
+
+        Returns
+        -------
+        Results in `~astropy.table.Table` format.
+        """
+
+        if radius is None:
+            diameter = None
+        else:
+            diameter = 2 * radius
+
+        results = self.ssa.search(pos=pos, diameter=diameter, band=band, time=time,
+                                  format='all', collection=collection)
+        return results.to_table()
+
+    def list_collections(self, *, servicetype=None, filter=None):
         """
         Return information of available IRSA SIAv2 collections to be used in ``query_sia`` queries.
+
+        Parameters
+        ----------
+        servicetype : str or None
+            Service type to list collections for. Returns all collections when not provided.
+            Currently supported service types are: 'SIA', 'SSA'.
+        filter : str or None
+            If specified we only return collections then their collection_name
+            contains the filter string.
 
         Returns
         -------
         collections : A `~astropy.table.Table` object.
             A table listing all the possible collections for IRSA SIA queries.
         """
-        query = "SELECT DISTINCT collection from caom.observation ORDER by collection"
-        collections = self.query_tap(query=query)
-        return collections.to_table()
+
+        if not servicetype:
+            query = "SELECT DISTINCT collection from caom.observation ORDER by collection"
+        else:
+            servicetype = servicetype.upper()
+            if servicetype == 'SIA':
+                query = ("SELECT DISTINCT o.collection FROM caom.observation o "
+                         "JOIN caom.plane p ON o.obsid = p.obsid "
+                         "WHERE (p.dataproducttype = 'image' OR p.dataproducttype = 'cube') "
+                         "order by collection")
+            elif servicetype == 'SSA':
+                query = ("SELECT DISTINCT o.collection FROM caom.observation o "
+                         "JOIN caom.plane p ON o.obsid = p.obsid "
+                         "WHERE (p.dataproducttype = 'spectrum' OR p.dataproducttype = 'cube') "
+                         "order by collection")
+            else:
+                raise ValueError("if specified, servicetype should be 'SIA' or 'SSA'")
+
+        collections = self.query_tap(query=query).to_table()
+
+        if filter:
+            mask = [filter in collection for collection in collections['collection']]
+            collections = collections[mask]
+        return collections
 
     @deprecated_renamed_argument(("selcols", "cache", "verbose"), ("columns", None, None), since="0.4.7")
     def query_region(self, coordinates=None, *, catalog=None, spatial='Cone',
                      radius=10 * u.arcsec, width=None, polygon=None,
-                     get_query_payload=False, columns='*',
+                     get_query_payload=False, columns='*', async_job=False,
                      verbose=False, cache=True):
         """
         Queries the IRSA TAP server around a coordinate and returns a `~astropy.table.Table` object.
@@ -167,6 +246,8 @@ class IrsaClass(BaseVOQuery):
             Defaults to `False`.
         columns : str, optional
             Target column list with value separated by a comma(,)
+        async_job : bool, optional
+            if True query is run in asynchronous mode
 
         Returns
         -------
@@ -177,9 +258,11 @@ class IrsaClass(BaseVOQuery):
 
         adql = f'SELECT {columns} FROM {catalog}'
 
-        if spatial == 'All-Sky':
+        spatial = spatial.lower()
+
+        if spatial == 'all-sky' or spatial == 'allsky':
             where = ''
-        elif spatial == 'Polygon':
+        elif spatial == 'polygon':
             try:
                 coordinates_list = [parse_coordinates(coord).icrs for coord in polygon]
             except TypeError:
@@ -198,12 +281,12 @@ class IrsaClass(BaseVOQuery):
             coords_icrs = parse_coordinates(coordinates).icrs
             ra, dec = coords_icrs.ra.deg, coords_icrs.dec.deg
 
-            if spatial == 'Cone':
+            if spatial == 'cone':
                 if isinstance(radius, str):
                     radius = Angle(radius)
                 where = (" WHERE CONTAINS(POINT('ICRS',ra,dec),"
                          f"CIRCLE('ICRS',{ra},{dec},{radius.to(u.deg).value}))=1")
-            elif spatial == 'Box':
+            elif spatial == 'box':
                 if isinstance(width, str):
                     width = Angle(width)
                 where = (" WHERE CONTAINS(POINT('ICRS',ra,dec),"
@@ -216,34 +299,63 @@ class IrsaClass(BaseVOQuery):
 
         if get_query_payload:
             return adql
-        response = self.query_tap(query=adql)
+        response = self.query_tap(query=adql, async_job=async_job)
 
         return response.to_table()
 
     @deprecated_renamed_argument("cache", None, since="0.4.7")
-    def list_catalogs(self, full=False, cache=False):
+    def list_catalogs(self, *, full=False, filter=None, cache=False):
         """
         Return information of available IRSA catalogs.
 
         Parameters
         ----------
         full : bool
-            If True returns the full schema VOTable. If False returns a dictionary of the table names and
-            their description.
+            If True returns the full schema as a `~astropy.table.Table`.
+            If False returns a dictionary of the table names and their description.
+        filter : str or None
+            If specified we only return catalogs when their catalog_name
+            contains the filter string.
         """
-        tap_tables = Irsa.query_tap("SELECT * FROM TAP_SCHEMA.tables")
+        tap_tables = self.query_tap("SELECT * FROM TAP_SCHEMA.tables").to_table()
+
+        if filter:
+            mask = [filter in name for name in tap_tables['table_name']]
+            tap_tables = tap_tables[mask]
 
         if full:
             return tap_tables
         else:
             return {tap_table['table_name']: tap_table['description'] for tap_table in tap_tables}
 
-    # TODO, deprecate this as legacy
+    @deprecated(since="0.4.10", alternative="list_catalogs")
     def print_catalogs(self):
         catalogs = self.list_catalogs()
 
         for catname in catalogs:
             print("{:30s}  {:s}".format(catname, catalogs[catname]))
+
+    def list_columns(self, catalog, *, full=False):
+        """
+        Return list of columns of a given IRSA catalog.
+
+        Parameters
+        ----------
+        catalog : str
+            The name of the catalog.
+        full : bool
+            If True returns the full schema as a `~astropy.table.Table`.
+            If False returns a dictionary of the column names and their description.
+        """
+
+        query = f"SELECT * from TAP_SCHEMA.columns where table_name='{catalog}'"
+
+        column_table = self.query_tap(query).to_table()
+
+        if full:
+            return column_table
+        else:
+            return {column['column_name']: column['description'] for column in column_table}
 
 
 Irsa = IrsaClass()

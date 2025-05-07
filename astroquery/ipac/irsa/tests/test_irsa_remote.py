@@ -61,19 +61,44 @@ class TestIrsa:
         assert isinstance(result, Table)
         assert len(result) == 7
 
+    def test_list_columns(self):
+        columns = Irsa.list_columns('slphotdr4')
+        assert len(columns) == 203
+        assert isinstance(columns, dict)
+
+        full_columns = Irsa.list_columns('slphotdr4', full=True)
+        assert isinstance(full_columns, Table)
+
     def test_list_catalogs(self):
         catalogs = Irsa.list_catalogs()
         # Number of available catalogs may change over time, test only for significant drop.
         # (at the time of writing there are 933 tables in the list).
         assert len(catalogs) > 900
+        assert isinstance(catalogs, dict)
 
-    def test_list_collections(self):
-        collections = Irsa.list_collections()
+    def test_list_catalogs_filter(self):
+        spitzer_catalogs = Irsa.list_catalogs(filter='spitzer')
+
+        assert len(spitzer_catalogs) == 142
+
+    @pytest.mark.parametrize('servicetype', (None, 'sia', 'ssa'))
+    def test_list_collections(self, servicetype):
+        collections = Irsa.list_collections(servicetype=servicetype)
         # Number of available collections may change over time, test only for significant drop.
-        # (at the time of writing there are 110 collections in the list).
-        assert len(collections) > 100
-        assert 'spitzer_seip' in collections['collection']
-        assert 'wise_allwise' in collections['collection']
+        # (at the time of writing there are 104 SIA and 35 SSA collections in the list).
+        assert isinstance(collections, Table)
+        if servicetype == 'ssa':
+            assert len(collections) > 30
+            assert 'sofia_exes' in collections['collection']
+        else:
+            assert len(collections) > 100
+            assert 'spitzer_seip' in collections['collection']
+            assert 'wise_allwise' in collections['collection']
+
+    def test_list_collections_filter(self):
+        spitzer_collections = Irsa.list_collections(filter='spitzer')
+
+        assert len(spitzer_collections) == 47
 
     def test_tap(self):
         query = "SELECT TOP 5 ra,dec FROM cosmos2015"
@@ -82,3 +107,10 @@ class TestIrsa:
             result = Irsa.query_tap(query=query)
         assert len(result) == 5
         assert result.to_table().colnames == ['ra', 'dec']
+
+    def test_ssa(self):
+        coord = SkyCoord.from_name("Eta Carina")
+        result = Irsa.query_ssa(pos=coord)
+        assert len(result) > 260
+        collections = set(result['dataid_collection'])
+        assert {'champ', 'iso_sws', 'sofia_forcast', 'sofia_great', 'spitzer_sha'}.issubset(collections)

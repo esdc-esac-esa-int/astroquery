@@ -39,6 +39,8 @@ UNIT_MAPPER = {
     "BKJD": None,  # TODO: optionally support mapping columns to Time objects
     "D_L": u.pc,
     "D_S": u.pc,
+    "micron": u.um,
+    "microns": u.um,
     "Earth flux": u.L_sun / (4 * np.pi * u.au**2),
     "Earth Flux": u.L_sun / (4 * np.pi * u.au**2),
     "Fearth": u.L_sun / (4 * np.pi * u.au**2),
@@ -65,6 +67,7 @@ UNIT_MAPPER = {
     "degrees": u.deg,
     "dexincgs": u.dex(u.cm / u.s ** 2),
     "hours": u.hr,
+    "hour": u.hr,
     "hrs": u.hr,
     "kelvin": u.K,
     "logLsun": u.dex(u.L_sun),
@@ -72,6 +75,7 @@ UNIT_MAPPER = {
     "log(Solar)": u.dex(u.L_sun),
     "mags": u.mag,
     "microas": u.uas,
+    "uas": u.uas,
     "perc": u.percent,
     "pi_E": None,
     "pi_EE": None,
@@ -229,7 +233,7 @@ class NasaExoplanetArchiveClass(BaseVOQuery, BaseQuery):
         if cache is None:
             cache = self.CACHE
 
-        if table in self.TAP_TABLES:
+        if table in [tab.lower() for tab in self.TAP_TABLES]:
             tap = pyvo.dal.tap.TAPService(baseurl=self.URL_TAP, session=self._session)
             # construct query from table and request_payload (including format)
             tap_query = self._request_to_sql(request_payload)

@@ -35,7 +35,7 @@ Radius is an optional parameter and the default is 0.2 degrees.
 
    >>> from astroquery.mast import Observations
    ...
-   >>> obs_table = Observations.query_object("M8",radius=".02 deg")
+   >>> obs_table = Observations.query_object("M8", radius=".02 deg")
    >>> print(obs_table[:10])  # doctest: +IGNORE_OUTPUT
    intentType obs_collection provenance_name ... srcDen    obsid    distance
    ---------- -------------- --------------- ... ------ ----------- --------
@@ -82,36 +82,45 @@ However, only one wildcarded value can be processed per criterion.
 
 RA and Dec must be given in decimal degrees, and datetimes in MJD.
 
+`~astroquery.mast.ObservationsClass.query_criteria` can be used to perform non-positional criteria queries.
+
 .. doctest-remote-data::
 
    >>> from astroquery.mast import Observations
    ...
-   >>> obs_table = Observations.query_criteria(dataproduct_type=["image"],
-   ...                                         proposal_pi="Osten*",
-   ...                                         s_dec=[43.5,45.5])
-   >>> print(obs_table)  # doctest: +IGNORE_OUTPUT
-   dataproduct_type calib_level obs_collection ... intentType   obsid      objID
-   ---------------- ----------- -------------- ... ---------- ---------- ----------
-              image           1            HST ...    science 2003520267 2023816094
-              image           1            HST ...    science 2003520266 2023816134
-              image           1            HST ...    science 2003520268 2025756935
+   >>> obs_table = Observations.query_criteria(dataproduct_type="image",
+   ...                                         proposal_pi="Osten*")
+   >>> print(obs_table[:5])  # doctest: +IGNORE_OUTPUT
+   intentType obs_collection provenance_name ... srcDen  obsid     objID  
+   ---------- -------------- --------------- ... ------ -------- ---------
+      science            HST          CALCOS ...    nan 24139596 144540274
+      science            HST          CALCOS ...    nan 24139591 144540276
+      science            HST          CALCOS ...    nan 24139580 144540277
+      science            HST          CALCOS ...    nan 24139597 144540280
+      science            HST          CALCOS ...    nan 24139575 144540281
    ...
-   >>> obs_table = Observations.query_criteria(filters=["*UV","Kepler"],objectname="M101")
+
+You can also perform positional queries with additional criteria by passing in ``objectname``, ``coordinates``,
+and/or ``radius`` as keyword arguments.
+
+.. doctest-remote-data::
+
+   >>> from astroquery.mast import Observations
+   ...
+   >>> obs_table = Observations.query_criteria(objectname="M10",
+   ...                                         radius="0.1 deg",
+   ...                                         filters=["*UV","Kepler"],
+   ...                                         obs_collection="GALEX")
    >>> print(obs_table)  # doctest: +IGNORE_OUTPUT
-   dataproduct_type calib_level obs_collection ...   objID1        distance
-   ---------------- ----------- -------------- ... ---------- ------------------
-              image           2          GALEX ... 1000045952                0.0
-              image           2          GALEX ... 1000001327 371.71837196246395
-              image           2          GALEX ... 1000016641                0.0
-              image           2          GALEX ... 1000016644 229.81061601101433
-              image           2          GALEX ... 1000001326                0.0
-              image           2          GALEX ... 1000004203                0.0
-              image           2          GALEX ... 1000004937 3.8329068532314046
-              image           2          GALEX ... 1000045953 371.71837196246395
-              image           2          GALEX ... 1000048357                0.0
-              image           2          GALEX ... 1000048943 3.8329068532314046
-              image           2          GALEX ... 1000055044                0.0
-              image           2          GALEX ... 1000055047 229.81061601101433
+   intentType obs_collection provenance_name ... objID objID1 distance
+   ---------- -------------- --------------- ... ----- ------ --------
+      science          GALEX             AIS ... 61675  61675      0.0
+      science          GALEX             GII ...  7022   7022      0.0
+      science          GALEX             GII ... 78941  78941      0.0
+      science          GALEX             AIS ... 61673  61673      0.0
+      science          GALEX             GII ...  7023   7023      0.0
+      science          GALEX             AIS ... 61676  61676      0.0
+      science          GALEX             AIS ... 61674  61674      0.0
 
 We encourage the use of wildcards particularly when querying for JWST instruments
 with the instrument_name criteria. This is because of the varying instrument names
@@ -138,17 +147,14 @@ This can be useful if trying to decide whether the available memory is sufficien
 
    >>> from astroquery.mast import Observations
    ...
-   >>> print(Observations.query_region_count("322.49324 12.16683"))  # doctest: +IGNORE_OUTPUT
-   2364
+   >>> print(Observations.query_region_count("322.49324 12.16683", radius=0.001))  # doctest: +IGNORE_OUTPUT
+   6338
    ...
    >>> print(Observations.query_object_count("M8",radius=".02 deg"))  # doctest: +IGNORE_OUTPUT
    469
    ...
-   >>> print(Observations.query_criteria_count(dataproduct_type="image",
-   ...                                         filters=["NUV","FUV"],
-   ...                                         t_max=[52264.4586,54452.8914]))  # doctest: +IGNORE_OUTPUT
-   59033
-
+   >>> print(Observations.query_criteria_count(proposal_id=8880))  # doctest: +IGNORE_OUTPUT
+   8
 
 
 Metadata Queries
@@ -162,7 +168,7 @@ use the `~astroquery.mast.ObservationsClass.list_missions` function.
    >>> from astroquery.mast import Observations
    ...
    >>> print(Observations.list_missions())
-   ['BEFS', 'EUVE', 'FIMS-SPEAR', 'FUSE', 'GALEX', 'HLA', 'HLSP', 'HST', 'HUT', 'IUE', 'JWST', 'K2', 'K2FFI', 'Kepler', 'KeplerFFI', 'OPO', 'PS1', 'SPITZER_SHA', 'SWIFT', 'TESS', 'TUES', 'WUPPE']
+   ['BEFS', 'EUVE', 'FIMS-SPEAR', 'FUSE', 'GALEX', 'HLA', 'HLSP', 'HST', 'HUT', 'IUE', 'JWST', 'K2', 'K2FFI', 'Kepler', 'KeplerFFI', 'OPO', 'PS1', 'SDSS', 'SPITZER_SHA', 'SWIFT', 'TESS', 'TUES', 'WUPPE']
 
 To get a table of metadata associated with observation or product lists use the
 `~astroquery.mast.ObservationsClass.get_metadata` function.
@@ -300,7 +306,7 @@ To return only unique data products for an observation, use `~astroquery.mast.Ob
    ...                                   proposal_id=['12062'],
    ...                                   dataRights='PUBLIC')
    >>> unique_products = Observations.get_unique_product_list(obs)
-   INFO: 180 of 370 products were duplicates. Only returning 190 unique product(s). [astroquery.mast.observations]
+   INFO: 180 of 370 products were duplicates. Only returning 190 unique product(s). [astroquery.mast.utils]
    INFO: To return all products, use `Observations.get_product_list` [astroquery.mast.observations]
    >>> print(unique_products[:10]['dataURI'])
                                  dataURI                              
@@ -391,7 +397,9 @@ curl script that can be used to download the files at a later time.
    >>> single_obs = Observations.query_criteria(obs_collection="IUE", obs_id="lwp13058")
    >>> data_products = Observations.get_product_list(single_obs)
    ...
-   >>> table = Observations.download_products(data_products, productType="SCIENCE", curl_flag=True)   # doctest: +IGNORE_OUTPUT
+   >>> table = Observations.download_products(data_products, 
+   ...                                        productType="SCIENCE", 
+   ...                                        curl_flag=True)   # doctest: +IGNORE_OUTPUT
    Downloading URL https://mast.stsci.edu/portal/Download/stage/anonymous/public/514cfaa9-fdc1-4799-b043-4488b811db4f/mastDownload_20170629162916.sh to ./mastDownload_20170629162916.sh ... [Done]
 
 
@@ -469,7 +477,8 @@ To get a list of S3 URIs, use the following workflow:
    >>> import os
    >>> from astroquery.mast import Observations
    ...
-   >>> # Simply call the `enable_cloud_dataset` method from `Observations`. The default provider is `AWS`, but we will write it in manually for this example:
+   >>> # Simply call the `enable_cloud_dataset` method from `Observations`. 
+   >>> # The default provider is `AWS`, but we will write it in manually for this example:
    >>> Observations.enable_cloud_dataset(provider='AWS')
    INFO: Using the S3 STScI public dataset [astroquery.mast.core]
    ...
@@ -506,7 +515,7 @@ This approach is recommended for code brevity. Query criteria are supplied as ke
    ...                                       proposal_id=['12062'],
    ...                                       dataRights='PUBLIC',
    ...                                       filter_products={'productSubGroupDescription': 'DRZ'})
-   INFO: 2 of 4 products were duplicates. Only returning 2 unique product(s). [astroquery.mast.observations]
+   INFO: 2 of 4 products were duplicates. Only returning 2 unique product(s). [astroquery.mast.utils]
    >>> print(s3_uris)
    ['s3://stpubdata/hst/public/jbev/jbeveo010/jbeveo010_drz.fits', 's3://stpubdata/hst/public/jbev/jbevet010/jbevet010_drz.fits']
    >>> Observations.disable_cloud_dataset()

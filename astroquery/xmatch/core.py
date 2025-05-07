@@ -42,7 +42,7 @@ class XMatchClass(BaseQuery):
             If the table is uploaded or accessed through a URL, it must be
             in VOTable or CSV format with the positions in J2000
             equatorial frame and as decimal degrees numbers.
-        cat2 : str or file
+        cat2 : str, file or `~astropy.table.Table`
             Identifier of the second table. Follows the same rules as *cat1*.
         max_distance : `~astropy.units.Quantity`
             Maximum distance to look for counterparts.
@@ -94,7 +94,7 @@ class XMatchClass(BaseQuery):
             The HTTP response returned from the service.
         """
         if max_distance > 180 * u.arcsec:
-            raise ValueError('max_distance argument must not be greater than 180')
+            raise ValueError('max_distance argument must not be greater than 180".')
         payload = {'request': 'xmatch',
                    'distMaxArcsec': max_distance.to(u.arcsec).value,
                    'RESPONSEFORMAT': 'votable',
@@ -111,6 +111,14 @@ class XMatchClass(BaseQuery):
 
         response = self._request(method='POST', url=self.URL, data=payload,
                                  timeout=self.TIMEOUT, cache=cache, **kwargs)
+
+        if response.status_code == 403:
+            raise HTTPError("Your IP address has been banned from the XMatch server. "
+                            "This means that you sent too many cross-matching jobs in "
+                            "parallel to the service, blocking other astronomers. Please"
+                            " contact the CDS team at cds-question[at]unistra.fr to "
+                            "find a solution.")
+
         try:
             response.raise_for_status()
         except HTTPError as err:
@@ -126,22 +134,36 @@ class XMatchClass(BaseQuery):
         '''
         catstr = 'cat{0}'.format(cat_index)
         if isinstance(cat, str):
+            if (self.is_table_available(cat) and not cat.startswith("vizier:")):
+                # if we detect that the given name is a vizier table, we can make
+                # it comply to the API, see issue #3191
+                cat = f"vizier:{cat}"
             payload[catstr] = cat
-        elif isinstance(cat, Table):
-            # write the Table's content into a new, temporary CSV-file
-            # so that it can be pointed to via the `files` option
-            # file will be closed when garbage-collected
-            fp = StringIO()
-            cat.write(fp, format='ascii.csv')
-            fp.seek(0)
-            kwargs['files'] = {catstr: ('cat1.csv', fp.read())}
         else:
-            # assume it's a file-like object, support duck-typing
-            kwargs['files'] = {catstr: ('cat1.csv', cat.read())}
+            # create the dictionary of uploaded files
+            if "files" not in kwargs:
+                kwargs["files"] = {}
+            if isinstance(cat, Table):
+                # write the Table's content into a new, temporary CSV-file
+                # so that it can be pointed to via the `files` option
+                # file will be closed when garbage-collected
+
+                fp = StringIO()
+                cat.write(fp, format='ascii.csv')
+                fp.seek(0)
+                kwargs['files'].update({catstr: (f'cat{cat_index}.csv', fp.read())})
+            else:
+                # assume it's a file-like object, support duck-typing
+                kwargs['files'].update({catstr: (f'cat{cat_index}.csv', cat.read())})
 
         if not self.is_table_available(cat):
             if ((colRA is None) or (colDec is None)):
-                raise ValueError('Specify the name of the RA/Dec columns in the input table.')
+                raise ValueError(
+                    f"'{cat}' is not available on the XMatch server. If you are "
+                    "using a VizieR table name, note that only tables with "
+                    "coordinates are available on the XMatch server. If you are "
+                    f"using a local table, the arguments 'colRA{cat_index}' and "
+                    f"'colDec{cat_index}' must be provided.")
             # if `cat1` is not a VizieR table,
             # it is assumed it's either a URL or an uploaded table
             payload['colRA{0}'.format(cat_index)] = colRA
@@ -171,7 +193,7 @@ class XMatchClass(BaseQuery):
         if not isinstance(table_id, str):
             return False
 
-        if (table_id[:7] == 'vizier:'):
+        if table_id.startswith('vizier:'):
             table_id = table_id[7:]
 
         return table_id in self.get_available_tables()

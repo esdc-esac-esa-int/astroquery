@@ -78,7 +78,7 @@ class VizierClass(BaseQuery):
         self.column_filters = column_filters
         self.catalog = catalog
         self._keywords = None
-        self.ucd = ucd
+        self._ucd = ucd
         if keywords:
             self.keywords = keywords
         self.TIMEOUT = timeout
@@ -233,7 +233,7 @@ class VizierClass(BaseQuery):
             data_payload["-obsolete"] = None
 
         if self.ucd != "":
-            data_payload["ucd"] = self.ucd
+            data_payload["-ucd"] = self.ucd
 
         params = "&".join([k if v is None else f"{k}={v}" for k, v in data_payload.items()])
 
@@ -844,7 +844,7 @@ def _parse_vizier_votable(data, *, verbose=False, invalid='warn',
                     name = t.name
                 if name not in table_dict.keys():
                     table_dict[name] = []
-                table_dict[name] += [t.to_table()]
+                table_dict[name] += [t.to_table(use_names_over_ids=True)]
         for name in table_dict.keys():
             if len(table_dict[name]) > 1:
                 table_dict[name] = tbl.vstack(table_dict[name])

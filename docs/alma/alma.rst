@@ -104,7 +104,7 @@ via the ALMA OIDC (OpenID Connect) service, Keycloak.
     Successfully logged in to asa.alma.cl
 
 Your password will be stored by the `keyring
-<https://pypi.python.org/pypi/keyring>`_ module.
+<https://pypi.org/project/keyring>`_ module.
 You can choose not to store your password by passing the argument
 ``store_password=False`` to ``Alma.login``.  You can delete your password later
 with the command ``keyring.delete_password('astroquery:asa.alma.cl',
@@ -178,7 +178,28 @@ or if you wanted all projects by a given PI:
 
     >>> Alma.query(payload=dict(pi_name='Ginsburg, Adam'))
 
-The ''query_sia'' method offers another way to query ALMA using the IVOA SIA
+Querying For Proprietary Data
+-----------------------------
+
+To query for proprietary (non-public) data, set ``public=False`` or ``public=None``.
+If you want to download the products, you need to first authenticate using the ``login`` method.
+
+.. doctest-skip::
+
+    >>> from astroquery.alma import Alma
+    >>> alma = Alma()
+    >>> # First login to access proprietary data
+    >>> alma.login("username")  # Will prompt for password
+    >>> # include both public and proprietary data using public=None
+    >>> proprietary_data = alma.query(payload=dict(project_code='2017.1.01355.L', public=None))
+    >>> # restrict to only proprietary data with public=False
+    >>> only_proprietary = alma.query_region('W51', radius=25*u.arcmin, public=False)
+
+Setting ``public=False`` will include only proprietary data, while
+``public=None`` will include both public and proprietary data.
+
+
+The ``query_sia`` method offers another way to query ALMA using the IVOA SIA
 subset of keywords returning results in 'ObsCore' format.  For example,
 to query for all images that have ``'XX'`` polarization (note that this query is too large
 to run, it is just shown as an example):
@@ -187,9 +208,9 @@ to run, it is just shown as an example):
 
     >>> Alma.query_sia(pol='XX')  # doctest: +SKIP
 
-Finally, the ''query_tap'' method is the most general way of querying the ALMA
+Finally, the ``query_tap`` method is the most general way of querying the ALMA
 metadata. This method is used to send queries to the service using the
-'ObsCore' columns as constraints. The returned result is also in 'ObsCore'
+``ObsCore`` columns as constraints. The returned result is also in ``ObsCore``
 format.
 
 .. doctest-remote-data::
@@ -210,8 +231,37 @@ One can also query by keyword, spatial resolution, etc:
     ...                "in ('Disks around high-mass stars', 'Asymptotic Giant Branch (AGB) stars') "
     ...                "AND science_observation='T'")  # doctest: +IGNORE_OUTPUT
 
+``query_tap`` also supports uploading temporary tables that can be used to join to in queries.
+These temporary tables can be defined as ''astropy.table.Table'' instances or references to file names or
+file like handles (`~io.StringIO` instances for example) of table definitions in IVOA VOTable format.
+Below is a very simple example of using `~astropy.table.Table` temporary table with the ``proj_codes`` name.
+Note that the table name must always be prefixed with the ``TAP_UPLOAD`` schema when referenced in queries.
 
-Use the ``help_tap`` method to learn about the ALMA 'ObsCore' keywords and
+.. doctest-remote-data::
+
+    >>> from astropy.table import Table
+    >>> tmp_table = Table([['2013.1.01365.S', '2013.A.00014.S']], names=['prop_id'], dtype=['S'])
+    >>> Alma.query_tap('select distinct target_name from ivoa.ObsCore oc join TAP_UPLOAD.proj_codes pc on oc.proposal_id=pc.prop_id order by target_name',
+    ...                uploads={'proj_codes': tmp_table})
+    <DALResultsTable length=13>
+    target_name
+       str256
+    ------------
+           Ceres
+      J0042-4030
+      J0334-4008
+       J1733-130
+      J1751+0939
+       J1751+096
+      J1851+0035
+      J1924-2914
+         Neptune
+    SGP-UR-54092
+           Titan
+          Uranus
+         W43-MM1
+
+Use the ``help_tap`` method to learn about the ALMA ``ObsCore`` keywords and
 their types.
 
 .. doctest-remote-data::

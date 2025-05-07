@@ -1,4 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+import numpy as np
 import pytest
 
 from astropy.coordinates import SkyCoord
@@ -55,6 +56,17 @@ class TestSimbad:
         result = self.simbad.query_catalog('M')
         assert len(result) == 110
 
+    def test_query_hierarchy(self):
+        self.simbad.ROW_LIMIT = -1
+        obj = "NGC 4038"
+        parents = self.simbad.query_hierarchy(obj, hierarchy="parents")
+        assert len(parents) == 4
+        children = self.simbad.query_hierarchy(obj, hierarchy="children")
+        assert len(children) >= 45  # as of 2025, but more could be added
+        siblings = self.simbad.query_hierarchy(obj, hierarchy="siblings",
+                                               criteria="otype='G..'")
+        assert len(siblings) >= 29
+
     def test_query_region(self):
         self.simbad.ROW_LIMIT = 10
         result = self.simbad.query_region(ICRS_COORDS_M42, radius="1d")
@@ -67,6 +79,13 @@ class TestSimbad:
                                           radius=1 * u.arcmin, criteria="main_id LIKE 'M %'")
         # filtering on main_id to retrieve the two cone centers
         assert {"M  81", "M  10"} == set(result["main_id"].data.data)
+
+    def test_query_regions_long_list(self):
+        self.simbad.ROW_LIMIT = -1
+        # we create a list of centers longer than 300 to trigger the TAP upload case
+        centers = SkyCoord(np.arange(0, 360, 1), np.arange(0, 180, 0.5) - 90, unit="deg")
+        result = self.simbad.query_region(centers, radius="1m")
+        assert len(result) > 90
 
     def test_query_object_ids(self):
         self.simbad.ROW_LIMIT = -1
@@ -97,16 +116,23 @@ class TestSimbad:
         simbad_instance = Simbad()
         simbad_instance.add_votable_fields("flux")
         response = simbad_instance.query_object('algol', criteria="filter='V'")
-        # this is bugged, it should be "flux.qual", see https://github.com/gmantele/vollt/issues/154
-        # when the issue upstream in vollt (the TAP software used in SIMBAD) is fixed we can rewrite this test
-        assert "qual" in response.colnames
-        # replace "filter" by "flux.filter" when upstream bug is fixed
-        assert response["filter"][0] == "V"
+        assert "flux.qual" in response.colnames
+        assert response["flux.filter"][0] == "V"
 
     def test_query_object(self):
         self.simbad.ROW_LIMIT = 5
         result = self.simbad.query_object("NGC [0-9]*", wildcard=True)
         assert all(matched_id.startswith("NGC") for matched_id in result["matched_id"].data.data)
+
+    def test_query_object_with_measurement_table(self):
+        # regression for #3197
+        self.simbad.reset_votable_fields()
+        self.simbad.add_votable_fields("mesdistance")
+        vega = self.simbad.query_object("vega")
+        # there is one response line
+        assert len(vega) == 1
+        # even if the measurement table is empty
+        assert bool(vega["mesdistance.dist"][0].mask)
 
     def test_query_criteria(self):
         simbad_instance = Simbad()
@@ -141,6 +167,12 @@ class TestSimbad:
         assert _cached_query_tap.cache_info().currsize != 0
         Simbad.clear_cache()
         assert _cached_query_tap.cache_info().currsize == 0
+
+    def test_async_query(self):
+        adql = "select top 1 main_id from basic"
+        sync_job = Simbad.query_tap(adql)
+        async_job = Simbad.query_tap(adql, async_job=True)
+        assert sync_job["main_id"] == async_job["main_id"]
 
     def test_empty_response_warns(self):
         with pytest.warns(NoResultsWarning, match="The request executed correctly, but *"):
@@ -188,7 +220,8 @@ class TestSimbad:
         # tables also require a join
         assert _Join("otypes",
                      _Column("basic", "oid"),
-                     _Column("otypes", "oidref")) == simbad_instance.joins[0]
+                     _Column("otypes", "oidref"),
+                     "LEFT JOIN") == simbad_instance.joins[0]
         # tables that have been renamed should warn
         with pytest.warns(DeprecationWarning, match="'iue' has been renamed 'mesiue'.*"):
             simbad_instance.add_votable_fields("IUE")
@@ -204,3 +237,10 @@ class TestSimbad:
         simbad_instance.add_votable_fields("u")
         result = simbad_instance.query_object("HD 147933")
         assert all(filtername in result.colnames for filtername in {"u", "U", "V"})
+
+    def test_double_ident_in_query_objects(self):
+        simbad = Simbad()
+        simbad.add_votable_fields("ident")
+        result = simbad.query_objects(['HD 1'])
+        assert len(result) > 1
+        assert all(result["main_id"] == "HD      1")

@@ -138,7 +138,7 @@ ALMA_FORM_KEYS = {
     'Project': {
         'Project code': ['project_code', 'proposal_id', _gen_str_sql],
         'Project title': ['project_title', 'obs_title', _gen_str_sql],
-        'PI name': ['pi_name', 'obs_creator_name', _gen_str_sql],
+        'PI name': ['pi_name', 'pi_name', _gen_str_sql],
         'Proposal authors': ['proposal_authors', 'proposal_authors', _gen_str_sql],
         'Project abstract': ['project_abstract', 'proposal_abstract', _gen_str_sql],
         'Publication count': ['publication_count', 'NA', _gen_str_sql],
@@ -217,7 +217,7 @@ def get_enhanced_table(result):
     except ImportError:
         print(
             "Could not import astropy-regions, which is a requirement for get_enhanced_table function in alma."
-            "Please refer to http://astropy-regions.readthedocs.io/en/latest/installation.html for how to install it.")
+            "Please refer to https://astropy-regions.readthedocs.io/en/latest/installation.html for how to install it.")
         raise
 
     def _parse_stcs_string(input):
@@ -594,6 +594,11 @@ class AlmaClass(QueryWithLogin):
         if science is not None:
             payload['science_observation'] = science
         if public is not None:
+            if 'public_data' in kwargs:
+                warnings.warn("Both public and public_data are set. "
+                              "The ``public`` kwarg takes precedence. "
+                              "If you want ``public_data`` to be respected, "
+                              "set ``public=None``.")
             payload['public_data'] = public
 
         query = _gen_sql(payload)
@@ -652,8 +657,8 @@ class AlmaClass(QueryWithLogin):
 
         Returns
         -------
-        Results in ``pyvo.dal.sia2.SIA2Results`` format.
-        result.table in Astropy table format
+        Results in `~pyvo.dal.sia2.SIA2Results` format.
+        result.to_qtable in `~astropy.table.QTable` format
         """
         return self.sia.search(
             pos=pos,
@@ -678,19 +683,38 @@ class AlmaClass(QueryWithLogin):
 
     query_sia.__doc__ = query_sia.__doc__.replace('_SIA2_PARAMETERS', SIA2_PARAMETERS_DESC)
 
-    def query_tap(self, query, maxrec=None):
+    def query_tap(self, query, *, maxrec=None, uploads=None):
         """
-        Send query to the ALMA TAP. Results in pyvo.dal.TapResult format.
-        result.table in Astropy table format
+        Send query to the ALMA TAP. Results in `~pyvo.dal.TAPResults` format.
+        result.to_qtable in `~astropy.table.QTable` format
 
         Parameters
         ----------
+        query : str
+            ADQL query to be executed
         maxrec : int
             maximum number of records to return
+        uploads : dict
+            a mapping from temporary table names to objects containing a votable. These
+            temporary tables can be referred to in queries. The keys in the dictionary are
+            the names of temporary tables which need to be prefixed with the TAP_UPLOAD
+            schema in the actual query. The values are either astropy.table.Table instances
+            or file names or file like handles such as io.StringIO to table definition in
+            IVOA VOTable format.
+
+    Examples
+    --------
+    >>> uploads = {'tmptable': '/tmp/tmptable_def.xml'}
+    >>> rslt = query_tap(self, query, maxrec=None, uploads=uploads)
+
+        Return
+        ------
+        result : `~pyvo.dal.TAPResults`
+            TAP query result
 
         """
         log.debug('TAP query: {}'.format(query))
-        return self.tap.search(query, language='ADQL', maxrec=maxrec)
+        return self.tap.search(query, language='ADQL', maxrec=maxrec, uploads=uploads)
 
     def help_tap(self):
         print('Table to query is "voa.ObsCore".')
@@ -1129,7 +1153,7 @@ class AlmaClass(QueryWithLogin):
         List the file contents of a UID from Cycle 0.  Will raise an error
         if the UID is from cycle 1+, since those data have been released in
         a different and more consistent format.  See
-        https://almascience.org/documents-and-tools/cycle-2/ALMAQA2Productsv1.01.pdf
+        https://almascience.nrao.edu/documents-and-tools/cycle-2/ALMAQA2Productsv1.01.pdf
         for details.
         """
 

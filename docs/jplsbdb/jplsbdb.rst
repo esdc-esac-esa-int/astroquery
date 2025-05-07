@@ -10,7 +10,7 @@ Overview
 
 The :class:`~astroquery.jplsbdb.SBDBClass` class provides
 an interface to the `Small-Body Database Browser
-<https://ssd.jpl.nasa.gov/sbdb.cgi>`_ (SBDB) maintained by the `JPL
+<https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html>`_ (SBDB) maintained by the `JPL
 Solar System Dynamics group <https://ssd.jpl.nasa.gov/>`_.
 
 The SBDB provides detailed information on a specific known small body,
@@ -156,7 +156,7 @@ item:
 .. code-block:: python
 
    >>> sbdb['orbit']['moid_jup']   # doctest: +REMOTE_DATA
-   <Quantity 0.429 AU>
+   <Quantity 0.428 AU>
 
 Note that many of the items in the output dictionary are associated
 with `~astropy.units` which can be readily used for
@@ -167,7 +167,7 @@ orbit intersection distance of the target with respect to Jupiter
 .. code-block:: python
 
    >>> print(sbdb['orbit']['moid_jup'].to('km'))    # doctest: +REMOTE_DATA
-   64177486.53029999 km
+   64027888.6596 km
 
 The vast majority of parameter names are identical to those used in
 the `SBDB API documentation
@@ -202,7 +202,7 @@ per target, but only a list of objects matching this pattern:
 .. code-block:: python
 
     >>> sbdb['list']     # doctest: +REMOTE_DATA
-    OrderedDict({'pdes': ['2018 AA4', '2018 AA12', '2018 AA74'], 'name': ['(2018 AA4)', '(2018 AA12)', '(2018 AA74)']})
+    OrderedDict({'name': ['(2018 AA4)', '(2018 AA12)', '(2018 AA74)'], 'pdes': ['2018 AA4', '2018 AA12', '2018 AA74']})
 
 Customizing your Query
 ======================
@@ -279,7 +279,7 @@ Acknowledgements
 ================
 
 This submodule makes use of the `JPL Horizons
-<https://ssd.jpl.nasa.gov/sbdb.cgi>`_ system.
+<https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html>`_ system.
 
 The development of this submodule is funded through NASA PDART
 Grant No. 80NSSC18K0987 to the `sbpy project <https://sbpy.org>`_.
@@ -295,7 +295,7 @@ If you are repeatedly getting failed queries, or bad/out-of-date results, try cl
     >>> from astroquery.jplsbdb import SBDB
     >>> SBDB.clear_cache()
 
-If this function is unavailable, upgrade your version of astroquery. 
+If this function is unavailable, upgrade your version of astroquery.
 The ``clear_cache`` function was introduced in version 0.4.7.dev8479.
 
 

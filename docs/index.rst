@@ -2,7 +2,7 @@ Astroquery
 ==========
 
 This is the documentation for the Astroquery coordinated package of `astropy
-<http://www.astropy.org>`__.
+<https://www.astropy.org>`__.
 
 Code and issue tracker are on `GitHub <https://github.com/astropy/astroquery>`_.
 
@@ -99,24 +99,24 @@ Astroquery works with Python 3.9 or later.
 
 The following packages are required for astroquery installation & use:
 
-* `numpy <http://www.numpy.org>`_ >= 1.20
-* `astropy <http://www.astropy.org>`__ (>=5.0)
+* `numpy <https://numpy.org>`_ >= 1.20
+* `astropy <https://www.astropy.org>`__ (>=5.0)
 * `pyVO`_ (>=1.5)
 * `requests <https://requests.readthedocs.io/en/latest/>`_
-* `keyring <https://pypi.python.org/pypi/keyring>`_
+* `keyring <https://pypi.org/project/keyring>`_
 * `Beautiful Soup <https://www.crummy.com/software/BeautifulSoup/>`_
-* `html5lib <https://pypi.python.org/pypi/html5lib>`_
+* `html5lib <https://pypi.org/project/html5lib>`_
 
 and for running the tests:
 
-* `curl <https://curl.haxx.se/>`__
+* `curl <https://curl.se/>`__
 * `pytest-astropy <https://github.com/astropy/pytest-astropy>`__
 * `pytest-rerunfailures <https://github.com/pytest-dev/pytest-rerunfailures>`__
 
 The following packages are optional dependencies and are required for the
 full functionality of the `~astroquery.mocserver`, `~astroquery.alma`, and `~astroquery.xmatch` modules:
 
-* `astropy-healpix <http://astropy-healpix.readthedocs.io/en/latest/>`_
+* `astropy-healpix <https://astropy-healpix.readthedocs.io/en/latest/>`_
 * `regions <https://astropy-regions.readthedocs.io/en/latest/>`_
 * `mocpy <https://cds-astro.github.io/mocpy/>`_ >= 0.9
 
@@ -128,7 +128,7 @@ For the `~astroquery.vamdc` module:
 The following packages are optional dependencies and are required for the
 full functionality of the `~astroquery.mast` module:
 
-* `boto3 <https://boto3.readthedocs.io/>`_
+* `boto3 <https://boto3.amazonaws.com/v1/documentation/api/latest/index.html>`_
 
 Using astroquery
 ----------------
@@ -141,10 +141,11 @@ queries based on coordinates or object names.  Some simple examples, using SIMBA
     >>> from astroquery.simbad import Simbad
     >>> result_table = Simbad.query_object("m1")
     >>> result_table.pprint()
-    main_id    ra     dec   coo_err_maj ... coo_err_angle coo_wavelength     coo_bibcode     matched_id
-              deg     deg       mas     ...      deg                                                   
-    ------- ------- ------- ----------- ... ------------- -------------- ------------------- ----------
-      M   1 83.6287 22.0147     18500.0 ...             0              R 1995AuJPh..48..143S      M   1
+
+    main_id    ra     dec   coo_err_maj coo_err_min coo_err_angle coo_wavelength     coo_bibcode     matched_id
+              deg     deg       mas         mas          deg
+    ------- ------- ------- ----------- ----------- ------------- -------------- ------------------- ----------
+      M   1 83.6324 22.0174      5000.0      5000.0            90              X 2022A&A...661A..38P      M   1
 
 All query tools allow coordinate-based queries:
 
@@ -156,14 +157,14 @@ All query tools allow coordinate-based queries:
     >>> r = 5 * u.arcminute
     >>> result_table = Simbad.query_region(c, radius=r)
     >>> result_table.pprint(show_unit=True, max_width=80, max_lines=5)
-           main_id                ra        ... coo_wavelength     coo_bibcode    
-                                 deg        ...                                   
-    --------------------- ----------------- ... -------------- -------------------
-    COUP J053515.3-052225 83.81426666666665 ...              O 1999AJ....117.1375S
-                      ...               ... ...            ...                 ...
-            * tet01 Ori H 83.81580416666667 ...              I 2003yCat.2246....0C
-              [H97b] 9009    83.79990004111 ...              O 2020yCat.1350....0G
-    Length = 3270 rows
+              main_id                  ra       ...     coo_bibcode
+                                      deg       ...
+    ---------------------------- -------------- ... -------------------
+    ALMA J053514.4142-052220.792  83.8100591667 ... 2023MNRAS.522...56V
+                             ...            ... ...                 ...
+         2MASS J05351163-0522515 83.79846499816 ... 2020yCat.1350....0G
+                     [H97b] 9009 83.79990004111 ... 2020yCat.1350....0G
+    Length = 3324 rows
 
 For additional guidance and examples, read the documentation for the individual services below.
 
@@ -182,7 +183,7 @@ uncomment the relevant configuration item(s), and insert your desired value(s).
 
 
 .. _astroquery_cache:
- 
+
 Caching
 -------
 
@@ -222,7 +223,7 @@ Each service's cache is cleared with the ``clear_cache`` function within that se
 
 Astroquery-wide settings
 ^^^^^^^^^^^^^^^^^^^^^^^^
-    
+
 Whether caching is active and when cached files expire are controlled centrally through the
 astroquery ``cache_conf`` module, and shared among all services.
 Astroquery uses the Astropy configuration infrastructure, information about
@@ -255,9 +256,10 @@ The following modules have been completed using a common API:
   cadc/cadc.rst
   casda/casda.rst
   linelists/cdms/cdms.rst
-  dace/dace.rst
+  esa/euclid/euclid.rst
   esa/hsa/hsa.rst
   esa/hubble/hubble.rst
+  esa/integral/integral.rst
   esa/iso/iso.rst
   esa/jwst/jwst.rst
   esa/xmm_newton/xmm_newton.rst

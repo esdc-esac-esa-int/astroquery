@@ -65,13 +65,11 @@ rst_epilog += """
 del intersphinx_mapping['scipy']
 del intersphinx_mapping['h5py']
 
-# Using astropy latest in the mapping is temporary, change it back to stable once 6.0 is out
 intersphinx_mapping.update({
-    'astropy': ('https://docs.astropy.org/en/latest/', None),
-    'requests': ('https://requests.kennethreitz.org/en/stable/', None),
-    'regions': ('https://astropy-regions.readthedocs.io/en/stable/', None),
-    'mocpy': ('https://cds-astro.github.io/mocpy/', None),
-    'pyvo': ('https://pyvo.readthedocs.io/en/stable/', None),
+    'requests': ('https://requests.kennethreitz.org/en/stable', None),
+    'regions': ('https://astropy-regions.readthedocs.io/en/stable', None),
+    'mocpy': ('https://cds-astro.github.io/mocpy', None),
+    'pyvo': ('https://pyvo.readthedocs.io/en/stable', None),
 })
 
 # -- Project information ------------------------------------------------------
@@ -200,3 +198,14 @@ if eval(setup_cfg.get('edit_on_github')):
 
 nitpicky = True
 nitpick_ignore = [('py:class', 'astroquery.mast.core.MastQueryWithLogin')]
+
+
+# -- Linkcheck builder options ----------------------------------------------
+#
+
+# These anchors don't resolve with the linkchecker, but work well from the browser
+linkcheck_ignore = ['https://mast.stsci.edu/search/ui/#/jwst',
+                    'https://mast.stsci.edu/search/ui/#/hst',
+                    'https://nxsa.esac.esa.int/nxsa-web/#aio',
+                    'https://ssd.jpl.nasa.gov/horizons/manual.html#center',
+                    'https://splatalogue.online/#/basic']

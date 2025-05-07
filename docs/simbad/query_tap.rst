@@ -139,22 +139,22 @@ some tables, add their name. To get the columns of the tables ``ref`` and ``bibl
     >>> from astroquery.simbad import Simbad
     >>> Simbad.list_columns("ref", "biblio")
     <Table length=13>
-    table_name column_name   datatype  ...  unit          ucd
-      object      object      object   ... object        object
-    ---------- ----------- ----------- ... ------ --------------------
-        biblio      biblio        TEXT ...        meta.record;meta.bib
-        biblio      oidref      BIGINT ...         meta.record;meta.id
-           ref    abstract UNICODECHAR ...                 meta.record
-           ref     bibcode        CHAR ...            meta.bib.bibcode
-           ref         doi     VARCHAR ...          meta.code;meta.bib
-           ref     journal     VARCHAR ...            meta.bib.journal
-           ref   last_page     INTEGER ...               meta.bib.page
-           ref    nbobject     INTEGER ...                 meta.number
-           ref      oidbib      BIGINT ...        meta.record;meta.bib
-           ref        page     INTEGER ...               meta.bib.page
-           ref       title UNICODECHAR ...                  meta.title
-           ref      volume     INTEGER ...             meta.bib.volume
-           ref        year    SMALLINT ...          meta.note;meta.bib
+    table_name column_name   datatype  ...  unit         ucd       
+      object      object      object   ... object       object     
+    ---------- ----------- ----------- ... ------ -----------------
+        biblio      biblio     VARCHAR ...         meta.bib.bibcode
+        biblio      oidref      BIGINT ...              meta.record
+           ref      "year"    SMALLINT ...           time.publiYear
+           ref    abstract UNICODECHAR ...              meta.record
+           ref     bibcode        CHAR ...         meta.bib.bibcode
+           ref         doi     VARCHAR ...             meta.ref.doi
+           ref     journal     VARCHAR ...         meta.bib.journal
+           ref   last_page     INTEGER ...            meta.bib.page
+           ref    nbobject     INTEGER ...        meta.id;arith.sum
+           ref      oidbib      BIGINT ...              meta.record
+           ref        page     INTEGER ...            meta.bib.page
+           ref       title UNICODECHAR ...               meta.title
+           ref      volume     INTEGER ...          meta.bib.volume
 
 `~astroquery.simbad.SimbadClass.list_columns` can also be called with a keyword argument.
 This returns columns from any table for witch the given keyword is either in the table name,
@@ -195,22 +195,25 @@ that is the measurement table for rotations. Their common column is ``oidref``.
 .. doctest-remote-data::
 
     >>> from astroquery.simbad import Simbad
-    >>> query = """SELECT bibcode AS "Rotation Measurements Bibcodes"
+    >>> query = """SELECT DISTINCT bibcode AS "Rotation Measurements Bibcodes"
     ...     FROM ident JOIN mesrot USING(oidref)
     ...     WHERE id = 'Sirius';
     ...     """
-    >>> Simbad.query_tap(query)
-    <Table length=7>
+    >>> bibcodes = Simbad.query_tap(query)
+    >>> bibcodes.sort("Rotation Measurements Bibcodes")
+    >>> bibcodes
+    <Table length=8>
     Rotation Measurements Bibcodes
-                object
+                object            
     ------------------------------
-               2023ApJS..266...11B
-               2016A&A...589A..83G
-               2002A&A...393..897R
-               1995ApJS...99..135A
-               1970CoKwa.189....0U
                1970CoAsi.239....1B
+               1970CoKwa.189....0U
+               1995ApJS...99..135A
+               2002A&A...393..897R
+               2005yCat.3244....0G
                2011A&A...531A.143D
+               2016A&A...589A..83G
+               2023ApJS..266...11B
 
 This returns six papers in which the SIMBAD team found rotation data for Sirius.
 

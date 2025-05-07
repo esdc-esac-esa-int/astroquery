@@ -19,8 +19,9 @@ from requests import HTTPError
 import astropy.units as u
 import astropy.coordinates as coord
 
-from astropy.table import Table, Row, unique, vstack
+from astropy.table import Table, Row, vstack
 from astroquery import log
+from astroquery.mast.cloud import CloudAccess
 
 from ..utils import commons, async_to_sync
 from ..utils.class_or_instance import class_or_instance
@@ -118,13 +119,18 @@ class ObservationsClass(MastQueryWithLogin):
 
         return self._portal_api_connection._get_columnsconfig_metadata(colconf_name)
 
-    def _parse_caom_criteria(self, **criteria):
+    def _parse_caom_criteria(self, *, resolver=None, **criteria):
         """
         Helper function that takes dictionary of criteria and parses them into
         position (none if there are no coordinates/object name) and a filter set.
 
         Parameters
         ----------
+        resolver : str, optional
+            The resolver to use when resolving a named target into coordinates. Valid options are "SIMBAD" and "NED".
+            If not specified, the default resolver order will be used. Please see the
+            `STScI Archive Name Translation Application (SANTA) <https://mastresolver.stsci.edu/Santa-war/>`__
+            for more information. Default is None.
         **criteria
             Criteria to apply.
             Valid criteria are coordinates, objectname, radius (as in `query_region` and `query_object`),
@@ -153,7 +159,9 @@ class ObservationsClass(MastQueryWithLogin):
             mashup_filters = self._portal_api_connection.build_filter_set(self._caom_cone,
                                                                           self._caom_filtered_position,
                                                                           **criteria)
-            coordinates = utils.parse_input_location(coordinates, objectname)
+            coordinates = utils.parse_input_location(coordinates=coordinates,
+                                                     objectname=objectname,
+                                                     resolver=resolver)
         else:
             mashup_filters = self._portal_api_connection.build_filter_set(self._caom_cone,
                                                                           self._caom_filtered,
@@ -170,6 +178,30 @@ class ObservationsClass(MastQueryWithLogin):
             position = ', '.join([str(x) for x in (coordinates.ra.deg, coordinates.dec.deg, radius.deg)])
 
         return position, mashup_filters
+
+    def enable_cloud_dataset(self, provider="AWS", profile=None, verbose=True):
+        """
+        Enable downloading public files from S3 instead of MAST.
+        Requires the boto3 library to function.
+
+        Parameters
+        ----------
+        provider : str
+            Which cloud data provider to use.  We may in the future support multiple providers,
+            though at the moment this argument is ignored.
+        profile : str
+            Profile to use to identify yourself to the cloud provider (usually in ~/.aws/config).
+        verbose : bool
+            Default True.
+            Logger to display extra info and warning.
+        """
+        self._cloud_connection = CloudAccess(provider, profile, verbose)
+
+    def disable_cloud_dataset(self):
+        """
+        Disables downloading public files from S3 instead of MAST.
+        """
+        self._cloud_connection = None
 
     @class_or_instance
     def query_region_async(self, coordinates, *, radius=0.2*u.deg, pagesize=None, page=None):
@@ -215,7 +247,7 @@ class ObservationsClass(MastQueryWithLogin):
         return self._portal_api_connection.service_request_async(service, params, pagesize=pagesize, page=page)
 
     @class_or_instance
-    def query_object_async(self, objectname, *, radius=0.2*u.deg, pagesize=None, page=None):
+    def query_object_async(self, objectname, *, radius=0.2*u.deg, pagesize=None, page=None, resolver=None):
         """
         Given an object name, returns a list of MAST observations.
         See column documentation `here <https://mast.stsci.edu/api/v0/_c_a_o_mfields.html>`__.
@@ -237,18 +269,23 @@ class ObservationsClass(MastQueryWithLogin):
             Defaulte None.
             Can be used to override the default behavior of all results being returned
             to obtain a specific page of results.
+        resolver : str, optional
+            The resolver to use when resolving a named target into coordinates. Valid options are "SIMBAD" and "NED".
+            If not specified, the default resolver order will be used. Please see the
+            `STScI Archive Name Translation Application (SANTA) <https://mastresolver.stsci.edu/Santa-war/>`__
+            for more information. Default is None.
 
         Returns
         -------
         response : list of `~requests.Response`
         """
 
-        coordinates = utils.resolve_object(objectname)
+        coordinates = utils.resolve_object(objectname, resolver=resolver)
 
         return self.query_region_async(coordinates, radius=radius, pagesize=pagesize, page=page)
 
     @class_or_instance
-    def query_criteria_async(self, *, pagesize=None, page=None, **criteria):
+    def query_criteria_async(self, *, pagesize=None, page=None, resolver=None, **criteria):
         """
         Given an set of criteria, returns a list of MAST observations.
         Valid criteria are returned by ``get_metadata("observations")``
@@ -261,6 +298,11 @@ class ObservationsClass(MastQueryWithLogin):
         page : int, optional
             Can be used to override the default behavior of all results being returned to obtain
             one specific page of results.
+        resolver : str, optional
+            The resolver to use when resolving a named target into coordinates. Valid options are "SIMBAD" and "NED".
+            If not specified, the default resolver order will be used. Please see the
+            `STScI Archive Name Translation Application (SANTA) <https://mastresolver.stsci.edu/Santa-war/>`__
+            for more information. Default is None.
         **criteria
             Criteria to apply. At least one non-positional criteria must be supplied.
             Valid criteria are coordinates, objectname, radius (as in `query_region` and `query_object`),
@@ -278,7 +320,7 @@ class ObservationsClass(MastQueryWithLogin):
         response : list of `~requests.Response`
         """
 
-        position, mashup_filters = self._parse_caom_criteria(**criteria)
+        position, mashup_filters = self._parse_caom_criteria(resolver=resolver, **criteria)
 
         if not mashup_filters:
             raise InvalidQueryError("At least one non-positional criterion must be supplied.")
@@ -336,7 +378,7 @@ class ObservationsClass(MastQueryWithLogin):
 
         return int(self._portal_api_connection.service_request(service, params, pagesize, page)[0][0])
 
-    def query_object_count(self, objectname, *, radius=0.2*u.deg, pagesize=None, page=None):
+    def query_object_count(self, objectname, *, radius=0.2*u.deg, pagesize=None, page=None, resolver=None):
         """
         Given an object name, returns the number of MAST observations.
 
@@ -354,17 +396,22 @@ class ObservationsClass(MastQueryWithLogin):
         page : int, optional
             Can be used to override the default behavior of all results being returned to obtain
             one specific page of results.
+        resolver : str, optional
+            The resolver to use when resolving a named target into coordinates. Valid options are "SIMBAD" and "NED".
+            If not specified, the default resolver order will be used. Please see the
+            `STScI Archive Name Translation Application (SANTA) <https://mastresolver.stsci.edu/Santa-war/>`__
+            for more information. Default is None.
 
         Returns
         -------
         response : int
         """
 
-        coordinates = utils.resolve_object(objectname)
+        coordinates = utils.resolve_object(objectname, resolver=resolver)
 
         return self.query_region_count(coordinates, radius=radius, pagesize=pagesize, page=page)
 
-    def query_criteria_count(self, *, pagesize=None, page=None, **criteria):
+    def query_criteria_count(self, *, pagesize=None, page=None, resolver=None, **criteria):
         """
         Given an set of filters, returns the number of MAST observations meeting those criteria.
 
@@ -376,6 +423,11 @@ class ObservationsClass(MastQueryWithLogin):
         page : int, optional
             Can be used to override the default behavior of all results being returned to obtain
             one specific page of results.
+        resolver : str, optional
+            The resolver to use when resolving a named target into coordinates. Valid options are "SIMBAD" and "NED".
+            If not specified, the default resolver order will be used. Please see the
+            `STScI Archive Name Translation Application (SANTA) <https://mastresolver.stsci.edu/Santa-war/>`__
+            for more information. Default is None.
         **criteria
             Criteria to apply. At least one non-positional criterion must be supplied.
             Valid criteria are coordinates, objectname, radius (as in `query_region` and `query_object`),
@@ -393,7 +445,7 @@ class ObservationsClass(MastQueryWithLogin):
         response : int
         """
 
-        position, mashup_filters = self._parse_caom_criteria(**criteria)
+        position, mashup_filters = self._parse_caom_criteria(resolver=resolver, **criteria)
 
         # send query
         if position:
@@ -791,7 +843,7 @@ class ObservationsClass(MastQueryWithLogin):
         products = self.filter_products(products, mrp_only=mrp_only, **filters)
 
         # remove duplicate products
-        products = self._remove_duplicate_products(products)
+        products = utils.remove_duplicate_products(products, 'dataURI')
 
         if not len(products):
             warnings.warn("No products to download.", NoResultsWarning)
@@ -829,9 +881,9 @@ class ObservationsClass(MastQueryWithLogin):
 
         Parameters
         ----------
-        data_products : `~astropy.table.Table`
-            Table containing products to be converted into cloud data uris. If provided, this will supercede
-            page_size, page, or any keyword arguments passed in as criteria.
+        data_products : `~astropy.table.Table`, list
+            Table containing products or list of MAST uris to be converted into cloud data uris.
+            If provided, this will supercede page_size, page, or any keyword arguments passed in as criteria.
         include_bucket : bool
             Default True. When False, returns the path of the file relative to the
             top level cloud storage location.
@@ -895,16 +947,23 @@ class ObservationsClass(MastQueryWithLogin):
                 # Return list of associated data products
                 data_products = self.get_product_list(obs)
 
-        # Filter product list
-        data_products = self.filter_products(data_products, mrp_only=mrp_only, extension=extension, **filter_products)
+        if isinstance(data_products, Table):
+            # Filter product list
+            data_products = self.filter_products(data_products, mrp_only=mrp_only, extension=extension,
+                                                 **filter_products)
+        else:  # data_products is a list of URIs
+            # Warn if trying to supply filters
+            if filter_products or extension or mrp_only:
+                warnings.warn('Filtering is not supported when providing a list of MAST URIs. '
+                              'To apply filters, please provide query criteria or a table of data products '
+                              'as returned by `Observations.get_product_list`', InputWarning)
 
         if not len(data_products):
-            warnings.warn("No matching products to fetch associated cloud URIs.", NoResultsWarning)
+            warnings.warn('No matching products to fetch associated cloud URIs.', NoResultsWarning)
             return
 
         # Remove duplicate products
-        data_products = self._remove_duplicate_products(data_products)
-
+        data_products = utils.remove_duplicate_products(data_products, 'dataURI')
         return self._cloud_connection.get_cloud_uri_list(data_products, include_bucket, full_url)
 
     def get_cloud_uri(self, data_product, *, include_bucket=True, full_url=False):
@@ -916,7 +975,7 @@ class ObservationsClass(MastQueryWithLogin):
 
         Parameters
         ----------
-        data_product : `~astropy.table.Row`
+        data_product : `~astropy.table.Row`, str
             Product to be converted into cloud data uri.
         include_bucket : bool
             Default True. When false returns the path of the file relative to the
@@ -941,30 +1000,6 @@ class ObservationsClass(MastQueryWithLogin):
         # Query for product URIs
         return self._cloud_connection.get_cloud_uri(data_product, include_bucket, full_url)
 
-    def _remove_duplicate_products(self, data_products):
-        """
-        Removes duplicate data products that have the same dataURI.
-
-        Parameters
-        ----------
-        data_products : `~astropy.table.Table`
-            Table containing products to be checked for duplicates.
-
-        Returns
-        -------
-        unique_products : `~astropy.table.Table`
-            Table containing products with unique dataURIs.
-
-        """
-        number = len(data_products)
-        unique_products = unique(data_products, keys="dataURI")
-        number_unique = len(unique_products)
-        if number_unique < number:
-            log.info(f"{number - number_unique} of {number} products were duplicates. "
-                     f"Only returning {number_unique} unique product(s).")
-
-        return unique_products
-
     def get_unique_product_list(self, observations):
         """
         Given a "Product Group Id" (column name obsid), returns a list of associated data products with
@@ -984,7 +1019,7 @@ class ObservationsClass(MastQueryWithLogin):
             Table containing products with unique dataURIs.
         """
         products = self.get_product_list(observations)
-        unique_products = self._remove_duplicate_products(products)
+        unique_products = utils.remove_duplicate_products(products, 'dataURI')
         if len(unique_products) < len(products):
             log.info("To return all products, use `Observations.get_product_list`")
         return unique_products

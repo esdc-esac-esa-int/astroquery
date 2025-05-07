@@ -5,7 +5,7 @@ import os
 
 from astropy import units as u
 from astropy.table import Table
-from astroquery.linelists.cdms.core import CDMS, parse_letternumber
+from astroquery.linelists.cdms.core import CDMS, parse_letternumber, build_lookup
 from astroquery.utils.mocks import MockResponse
 
 colname_set = set(['FREQ', 'ERR', 'LGINT', 'DR', 'ELO', 'GUP', 'TAG', 'QNFMT',
@@ -72,7 +72,8 @@ def test_query(patch_post):
     tbl = CDMS.query_lines(min_frequency=100 * u.GHz,
                            max_frequency=1000 * u.GHz,
                            min_strength=-500,
-                           molecule="CO")
+                           molecule='028503 CO, v=0'
+                           )
     assert isinstance(tbl, Table)
     assert len(tbl) == 8
     assert set(tbl.keys()) == colname_set
@@ -109,7 +110,7 @@ def test_hc7s(patch_post):
     CDMS.query_lines_async(100*u.GHz, 100.755608*u.GHz, molecule='HC7S', parse_name_locally=True)
     """
 
-    tbl = CDMS.query_lines(100*u.GHz, 100.755608*u.GHz, molecule='HC7S',)
+    tbl = CDMS.query_lines(100*u.GHz, 100.755608*u.GHz, molecule='117501 HC7S',)
     assert isinstance(tbl, Table)
     assert len(tbl) == 5
     assert set(tbl.keys()) == colname_set
@@ -139,7 +140,7 @@ def test_hc7n(patch_post):
     CDMS.query_lines(200*u.GHz, 230.755608*u.GHz, molecule='HC7N',parse_name_locally=True)
     """
 
-    tbl = CDMS.query_lines(200*u.GHz, 230.755608*u.GHz, molecule='HC7N')
+    tbl = CDMS.query_lines(200*u.GHz, 230.755608*u.GHz, molecule='099501 HC7N, v=0')
     assert isinstance(tbl, Table)
     assert len(tbl) == 27
     assert set(tbl.keys()) == colname_set
@@ -159,3 +160,44 @@ def test_hc7n(patch_post):
     assert tbl['F1u'][0].mask
     assert tbl['F1l'][0].mask
     assert tbl['Lab'][0]
+
+
+def test_retrieve_species_table_local():
+    species_table = CDMS.get_species_table(use_cached=True)
+    assert len(species_table) == 1306
+    assert 'int' in species_table['tag'].dtype.name
+    assert 'int' in species_table['#lines'].dtype.name
+    assert 'float' in species_table['lg(Q(1000))'].dtype.name
+
+
+def test_lut_multitable():
+    # Regression test for the different names used in the partition table and the other tables
+    lut = build_lookup()
+
+    assert lut.find('ethyl formate', 0)['ethyl formate'] == 74514
+    assert lut.find('C2H5OCHO', 0)['C2H5OCHO'] == 74514
+    assert lut.find('C2H4O', 0)['c-C2H4O'] == 44504
+    assert lut.find('Ethylene oxide', 0)['Ethylene oxide'] == 44504
+
+
+def test_lut_literal():
+    # regression for 2901
+    lut = build_lookup()
+
+    hcop = lut.find('HCO+', 0)
+    assert len(hcop) >= 16
+
+    hcopv0 = lut.find('HCO+, v=0', 0)
+    assert len(hcopv0) == 1
+    assert hcopv0['HCO+, v=0'] == 29507
+
+    # two spacings exist in the tables
+    hcopv0 = lut.find('HCO+, v = 0', 0)
+    assert len(hcopv0) == 1
+    assert hcopv0['HCO+, v = 0'] == 29507
+
+    thirteenco = lut.find('13CO', 0)
+    assert len(thirteenco) == 1
+    assert thirteenco['13CO'] == 29501
+    thirteencostar = lut.find('13CO*', 0)
+    assert len(thirteencostar) >= 252

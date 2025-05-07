@@ -13,12 +13,13 @@ import warnings
 import astropy.coordinates as coord
 from astropy.table import Table, Column, vstack
 import astropy.units as u
-from astropy.utils import isiterable, deprecated
+from astropy.utils import deprecated
 from astropy.utils.decorators import deprecated_renamed_argument
+import numpy as np
 
 from astroquery.query import BaseVOQuery
 from astroquery.utils import commons
-from astroquery.exceptions import LargeQueryWarning, NoResultsWarning
+from astroquery.exceptions import NoResultsWarning
 from astroquery.simbad.utils import (_catch_deprecated_fields_with_arguments,
                                      _wildcard_to_regexp, CriteriaTranslator,
                                      query_criteria_fields)
@@ -49,7 +50,7 @@ def _adql_parameter(entry: str):
 
 
 @lru_cache(256)
-def _cached_query_tap(tap, query: str, *, maxrec=10000):
+def _cached_query_tap(tap, query: str, *, maxrec=10000, async_job=False, timeout=None):
     """Cache version of query TAP.
 
     This private function is called when query_tap is executed without an
@@ -66,12 +67,22 @@ def _cached_query_tap(tap, query: str, *, maxrec=10000):
         Astronomical Data Query Language (ADQL).
     maxrec : int, optional
         The number of records to be returned. Its maximum value is 2000000.
+    async_job: bool, optional
+        When set to `True`, the query will be executed in asynchronous mode. This is
+        better for very long queries, as it prevents transient failures to abort the
+        query execution.
+        Defaults to `False`.
+    timeout: int, optional
+        The execution duration for the asynchronous query. If 'async_job' is true, then
+        this has to be provided.
 
     Returns
     -------
     `~astropy.table.Table`
         The response returned by SIMBAD.
     """
+    if async_job:
+        return tap.run_async(query, maxrec=maxrec, execution_duration=timeout).to_table()
     return tap.search(query, maxrec=maxrec).to_table()
 
 
@@ -90,6 +101,7 @@ class _Join:
     column_left: Any
     column_right: Any
     join_type: str = field(default="JOIN")
+    alias: str = field(default=None)
 
 
 class SimbadClass(BaseVOQuery):
@@ -101,17 +113,19 @@ class SimbadClass(BaseVOQuery):
     """
     SIMBAD_URL = 'https://' + conf.server + '/simbad/sim-script'
 
-    def __init__(self, ROW_LIMIT=None):
+    def __init__(self, ROW_LIMIT=None, *, timeout=None):
         super().__init__()
         # to create the TAPService
         self._server = conf.server
         self._tap = None
         self._hardlimit = None
+        self._uploadlimit = None
         # attributes to construct ADQL queries
         self._columns_in_output = None  # a list of _Column
         self.joins = []  # a list of _Join
         self.criteria = []  # a list of strings
         self.ROW_LIMIT = ROW_LIMIT
+        self.timeout = timeout
 
     @property
     def ROW_LIMIT(self):
@@ -127,6 +141,28 @@ class SimbadClass(BaseVOQuery):
             raise ValueError("ROW_LIMIT can be either -1 to set the limit to SIMBAD's "
                              "maximum capability, 0 to retrieve an empty table, "
                              "or a positive integer.")
+
+    @property
+    def timeout(self):
+        """The execution time for asynchronous queries.
+
+        Returns
+        -------
+        int
+            The execution time before the query times out, in seconds.
+        """
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, timeout):
+        if timeout is None:
+            self._timeout = conf.timeout
+        elif timeout <= self.tap.capabilities[0].executionduration.hard:
+            self._timeout = timeout
+        else:
+            raise ValueError(
+                "'timeout' cannot exceed the maximum time duration set by this mirror: "
+                f"{self.tap.capabilities[0].executionduration.hard} seconds.")
 
     @property
     def server(self):
@@ -166,6 +202,12 @@ class SimbadClass(BaseVOQuery):
         return self._hardlimit
 
     @property
+    def uploadlimit(self):
+        if self._uploadlimit is None:
+            self._uploadlimit = self.tap.get_tap_capability().uploadlimit.hard.content
+        return self._uploadlimit
+
+    @property
     def columns_in_output(self):
         """A list of _Column.
 
@@ -175,6 +217,7 @@ class SimbadClass(BaseVOQuery):
         - `query_objects`,
         - `query_region`,
         - `query_catalog`,
+        - `query_hierarchy`,
         - `query_bibobj`,
         - `query_criteria`.
 
@@ -233,7 +276,7 @@ class SimbadClass(BaseVOQuery):
         >>> # to print only the available bundles of columns
         >>> options[options["type"] == "bundle of basic columns"][["name", "description"]] # doctest: +REMOTE_DATA
         <Table length=8>
-            name                         description
+             name                         description
             object                           object
         ------------- ----------------------------------------------------
           coordinates                  all fields related with coordinates
@@ -344,7 +387,7 @@ class SimbadClass(BaseVOQuery):
         self.columns_in_output += [_Column(table, column, alias)
                                    for column, alias in zip(columns, alias)]
         self.joins += [_Join(table, _Column("basic", link["target_column"]),
-                             _Column(table, link["from_column"]))]
+                             _Column(table, link["from_column"]), "LEFT JOIN")]
 
     def add_votable_fields(self, *args):
         """Add columns to the output of a SIMBAD query.
@@ -358,6 +401,7 @@ class SimbadClass(BaseVOQuery):
         - `query_objects`,
         - `query_region`,
         - `query_catalog`,
+        - `query_hierarchy`,
         - `query_bibobj`,
         - `query_criteria`.
 
@@ -377,9 +421,10 @@ class SimbadClass(BaseVOQuery):
         """
 
         # the legacy way of adding fluxes
-        args = list(args)
+        args = set(args)
         fluxes_to_add = []
-        for arg in args:
+        args_copy = args.copy()
+        for arg in args_copy:
             if arg.startswith("flux_"):
                 raise ValueError("The votable fields 'flux_***(filtername)' are removed and replaced "
                                  "by 'flux' that will add all information for every filters. "
@@ -387,19 +432,22 @@ class SimbadClass(BaseVOQuery):
                                  "https://astroquery.readthedocs.io/en/latest/simbad/simbad_evolution.html"
                                  " to see the new ways to interact with SIMBAD's fluxes.")
             if re.match(r"^flux.*\(.+\)$", arg):
-                warnings.warn("The notation 'flux(U)' is deprecated since 0.4.8 in favor of 'U'. "
-                              "See section on filters in "
+                filter_name = re.findall(r"\((\w+)\)", arg)[0]
+                warnings.warn(f"The notation 'flux({filter_name})' is deprecated since 0.4.8 in favor of "
+                              f"'{filter_name}'. You will see the column appearing with its new name "
+                              "in the output. See section on filters in "
                               "https://astroquery.readthedocs.io/en/latest/simbad/simbad_evolution.html "
                               "to see the new ways to interact with SIMBAD's fluxes.", DeprecationWarning, stacklevel=2)
-                fluxes_to_add.append(re.findall(r"\((\w+)\)", arg)[0])
+                fluxes_to_add.append(filter_name)
                 args.remove(arg)
 
         # output options
         output_options = self.list_votable_fields()
         # fluxes are case-dependant
-        fluxes = output_options[output_options["type"] == "filter name"]["name"]
+        fluxes = set(output_options[output_options["type"] == "filter name"]["name"])
         # add fluxes
-        fluxes_to_add += [flux for flux in args if flux in fluxes]
+        fluxes_from_names = set(flux for flux in args if flux in fluxes)
+        fluxes_to_add += fluxes_from_names
         if fluxes_to_add:
             self.joins.append(_Join("allfluxes", _Column("basic", "oid"),
                               _Column("allfluxes", "oidref")))
@@ -410,6 +458,10 @@ class SimbadClass(BaseVOQuery):
                     self.columns_in_output.append(_Column("allfluxes", flux + "_", flux))
                 else:
                     self.columns_in_output.append(_Column("allfluxes", flux))
+        # remove the arguments already added
+        args -= fluxes_from_names
+        # remove filters from output options
+        output_options = output_options[output_options["type"] != "filter name"]
 
         # casefold args because we allow case difference for every other argument (legacy behavior)
         args = set(map(str.casefold, args))
@@ -486,6 +538,7 @@ class SimbadClass(BaseVOQuery):
         - `query_objects`,
         - `query_region`,
         - `query_catalog`,
+        - `query_hierarchy`,
         - `query_bibobj`,
         - `query_criteria`.
 
@@ -519,8 +572,8 @@ class SimbadClass(BaseVOQuery):
 
     @deprecated_renamed_argument(["verbose"], new_name=[None],
                                  since=['0.4.8'], relax=True)
-    def query_object(self, object_name, *, wildcard=False,
-                     criteria=None, get_query_payload=False, verbose=False):
+    def query_object(self, object_name, *, wildcard=False, criteria=None,
+                     get_query_payload=False, async_job=False, verbose=False):
         """Query SIMBAD for the given object.
 
         Object names may also be specified with wildcards. See examples below.
@@ -539,6 +592,11 @@ class SimbadClass(BaseVOQuery):
         get_query_payload : bool, optional
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
+            Defaults to `False`.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
             Defaults to `False`.
 
         Returns
@@ -596,12 +654,13 @@ class SimbadClass(BaseVOQuery):
             instance_criteria.append(f"({criteria})")
 
         return self._query(top, columns, joins, instance_criteria,
-                           get_query_payload=get_query_payload)
+                           get_query_payload=get_query_payload, async_job=async_job)
 
     @deprecated_renamed_argument(["verbose", "cache"], new_name=[None, None],
                                  since=['0.4.8', '0.4.8'], relax=True)
     def query_objects(self, object_names, *, wildcard=False, criteria=None,
-                      get_query_payload=False, verbose=False, cache=False):
+                      get_query_payload=False, async_job=False, verbose=False,
+                      cache=False):
         """Query SIMBAD for the specified list of objects.
 
         Object names may be specified with wildcards.
@@ -623,9 +682,11 @@ class SimbadClass(BaseVOQuery):
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
             Defaults to `False`.
-        cache : Deprecated since 0.4.8. The cache is now automatically emptied at the
-            end of the python session. It can also be emptied manually with
-            `~astroquery.simbad.SimbadClass.clear_cache` but cannot be deactivated.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
 
         Returns
         -------
@@ -661,7 +722,7 @@ class SimbadClass(BaseVOQuery):
             instance_criteria += [f'({" OR ".join(list_criteria)})']
 
             return self._query(top, columns, joins, instance_criteria,
-                               get_query_payload=get_query_payload)
+                               get_query_payload=get_query_payload, async_job=async_job)
 
         # There is a faster way to do the query if there is no wildcard: the first table
         # can be the uploaded one and we use a LEFT JOIN for the other ones.
@@ -670,10 +731,11 @@ class SimbadClass(BaseVOQuery):
         upload_name = "TAP_UPLOAD.script_infos"
         columns.append(_Column(upload_name, "*"))
 
+        # join on ident needs an alias in case the users want to add the votable field ident
         left_joins = [_Join("ident", _Column(upload_name, "user_specified_id"),
-                            _Column("ident", "id"), "LEFT JOIN"),
+                            _Column("ident", "id"), "LEFT JOIN", "ident_upload"),
                       _Join("basic", _Column("basic", "oid"),
-                            _Column("ident", "oidref"), "LEFT JOIN")]
+                            _Column("ident_upload", "oidref"), "LEFT JOIN")]
         for join in joins:
             left_joins.append(_Join(join.table, join.column_left,
                                     join.column_right, "LEFT JOIN"))
@@ -684,10 +746,9 @@ class SimbadClass(BaseVOQuery):
 
     @deprecated_renamed_argument(["equinox", "epoch", "cache"],
                                  new_name=[None]*3,
-                                 alternative=["astropy.coordinates.SkyCoord"]*3,
                                  since=['0.4.8']*3, relax=True)
     def query_region(self, coordinates, radius=2*u.arcmin, *,
-                     criteria=None, get_query_payload=False,
+                     criteria=None, get_query_payload=False, async_job=False,
                      equinox=None, epoch=None, cache=None):
         """Query SIMBAD in a cone around the specified coordinates.
 
@@ -704,9 +765,11 @@ class SimbadClass(BaseVOQuery):
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
             Defaults to `False`.
-        cache : Deprecated since 0.4.8. The cache is now automatically emptied at the
-            end of the python session. It can also be emptied manually with
-            `~astroquery.simbad.SimbadClass.clear_cache` but cannot be deactivated.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
 
         Returns
         -------
@@ -716,28 +779,29 @@ class SimbadClass(BaseVOQuery):
         Examples
         --------
 
-        Look for large galaxies in two cones
+        Look for largest galaxies in two cones
 
         >>> from astroquery.simbad import Simbad
         >>> from astropy.coordinates import SkyCoord
         >>> simbad = Simbad()
         >>> simbad.ROW_LIMIT = 5
-        >>> simbad.add_votable_fields("otype") # doctest: +REMOTE_DATA
+        >>> simbad.add_votable_fields("otype", "dim") # doctest: +REMOTE_DATA
         >>> coordinates = SkyCoord([SkyCoord(186.6, 12.7, unit=("deg", "deg")),
         ...                         SkyCoord(170.75, 23.9, unit=("deg", "deg"))])
         >>> result = simbad.query_region(coordinates, radius="2d5m",
-        ...                              criteria="otype = 'Galaxy..' AND galdim_majaxis>8") # doctest: +REMOTE_DATA
-        >>> result.sort("main_id") # doctest: +REMOTE_DATA
-        >>> result["main_id", "otype"] # doctest: +REMOTE_DATA
+        ...                              criteria="otype = 'Galaxy..' AND galdim_majaxis>8.5") # doctest: +REMOTE_DATA
+        >>> result.sort("galdim_majaxis", reverse=True) # doctest: +REMOTE_DATA
+        >>> result["main_id", "otype", "galdim_majaxis"] # doctest: +REMOTE_DATA
         <Table length=5>
-          main_id    otype
-           object    object
-        ------------ ------
-        LEDA   40577    GiG
-        LEDA   41362    GiC
-               M  86    GiG
-               M  87    AGN
-           NGC  4438    LIN
+          main_id    otype  galdim_majaxis
+                                arcmin
+           object    object    float32
+        ------------ ------ --------------
+        LEDA   41362    GiC           11.0
+               M  86    GiG          10.47
+        LEDA   40917    AG?           10.3
+               M  87    AGN           9.12
+           NGC  4438    LIN           8.91
 
         Notes
         -----
@@ -753,47 +817,59 @@ class SimbadClass(BaseVOQuery):
         center = center.transform_to("icrs")
 
         top, columns, joins, instance_criteria = self._get_query_parameters()
+        if criteria:
+            instance_criteria.append(f"({criteria})")
 
         if center.isscalar:
             radius = coord.Angle(radius)
             instance_criteria.append(f"CONTAINS(POINT('ICRS', basic.ra, basic.dec), "
                                      f"CIRCLE('ICRS', {center.ra.deg}, {center.dec.deg}, "
                                      f"{radius.to(u.deg).value})) = 1")
+            return self._query(top, columns, joins, instance_criteria,
+                               get_query_payload=get_query_payload)
 
+        # from uploadLimit in SIMBAD's capabilities
+        # http://simbad.cds.unistra.fr/simbad/sim-tap/capabilities
+        if len(center) > self.uploadlimit:
+            raise ValueError(f"'query_region' can process up to {self.uploadlimit} "
+                             "centers. For larger queries, split your centers list.")
+
+        # `radius` as `str` is iterable, but contains only one value.
+        if np.iterable(radius) and not isinstance(radius, str):
+            if len(radius) != len(center):
+                raise ValueError(f"Mismatch between radii of length {len(radius)}"
+                                 f" and center coordinates of length {len(center)}.")
+            radius = [coord.Angle(item).to(u.deg).value for item in radius]
         else:
-            if len(center) > 10000:
-                warnings.warn(
-                    "For very large queries, you may receive a timeout error.  SIMBAD suggests"
-                    " splitting queries with >10000 entries into multiple threads",
-                    LargeQueryWarning, stacklevel=2
-                )
+            radius = [coord.Angle(radius).to(u.deg).value] * len(center)
 
-            # `radius` as `str` is iterable, but contains only one value.
-            if isiterable(radius) and not isinstance(radius, str):
-                if len(radius) != len(center):
-                    raise ValueError(f"Mismatch between radii of length {len(radius)}"
-                                     f" and center coordinates of length {len(center)}.")
-                radius = [coord.Angle(item) for item in radius]
-            else:
-                radius = [coord.Angle(radius)] * len(center)
-
+        # for small number of centers, not using the upload method is faster
+        if len(center) <= 300:
             cone_criteria = [(f"CONTAINS(POINT('ICRS', basic.ra, basic.dec), CIRCLE('ICRS', "
-                             f"{center.ra.deg}, {center.dec.deg}, {radius.to(u.deg).value})) = 1 ")
+                             f"{center.ra.deg}, {center.dec.deg}, {radius})) = 1 ")
                              for center, radius in zip(center, radius)]
 
             cone_criteria = f" ({'OR '.join(cone_criteria)})"
             instance_criteria.append(cone_criteria)
 
-        if criteria:
-            instance_criteria.append(f"({criteria})")
+            return self._query(top, columns, joins, instance_criteria,
+                               get_query_payload=get_query_payload)
+
+        # for longer centers list, we use a TAP upload
+        upload_centers = Table({"ra": center.ra.deg, "dec": center.dec.deg,
+                                "radius": radius})
+        sub_query = "(SELECT ra, dec, radius FROM TAP_UPLOAD.centers) AS centers"
+        instance_criteria.append("CONTAINS(POINT('ICRS', basic.ra, basic.dec), CIRCLE"
+                                 "('ICRS', centers.ra, centers.dec, centers.radius)) = 1 ")
 
         return self._query(top, columns, joins, instance_criteria,
-                           get_query_payload=get_query_payload)
+                           from_table=f"{sub_query}, basic", async_job=async_job,
+                           get_query_payload=get_query_payload, centers=upload_centers)
 
     @deprecated_renamed_argument(["verbose", "cache"], new_name=[None, None],
                                  since=['0.4.8', '0.4.8'], relax=True)
     def query_catalog(self, catalog, *, criteria=None, get_query_payload=False,
-                      verbose=False, cache=True):
+                      async_job=False, verbose=False, cache=True):
         """Query a whole catalog.
 
         Parameters
@@ -807,9 +883,11 @@ class SimbadClass(BaseVOQuery):
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
             Defaults to `False`.
-        cache : Deprecated since 0.4.8. The cache is now automatically emptied at the
-            end of the python session. It can also be emptied manually with
-            `~astroquery.simbad.SimbadClass.clear_cache` but cannot be deactivated.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
 
         Returns
         -------
@@ -850,12 +928,98 @@ class SimbadClass(BaseVOQuery):
             instance_criteria.append(f"({criteria})")
 
         return self._query(top, columns, joins, instance_criteria,
-                           get_query_payload=get_query_payload)
+                           get_query_payload=get_query_payload, async_job=async_job)
+
+    def query_hierarchy(self, name, hierarchy, *,
+                        detailed_hierarchy=True,
+                        criteria=None, get_query_payload=False, async_job=False):
+        """Query either the parents or the children of the object.
+
+        Parameters
+        ----------
+        name : str
+            name of the object
+        hierarchy : str
+            Can take the values "parents" to return the parents of the object (ex: a
+            galaxy cluster is a parent of a galaxy), the value "children" to return
+            the children of an object (ex: stars can be children of a globular cluster),
+            or the value "siblings" to return the object that share a parent with the
+            given one (ex: the stars of an open cluster are all siblings).
+        detailed_hierarchy : bool
+            Whether to add the two extra columns 'hierarchy_bibcode' that gives the
+            article in which the hierarchy link is mentioned, and
+            'membership_certainty'. membership_certainty is an integer that reflects the
+            certainty of the hierarchy link according to the authors. Ranges between 0
+            and 100 where 100 means that the authors were certain of the classification.
+            Defaults to False.
+        criteria : str
+            Criteria to be applied to the query. These should be written in the ADQL
+            syntax in a single string. See example.
+        get_query_payload : bool, optional
+            When set to `True` the method returns the HTTP request parameters without
+            querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
+            Defaults to `False`.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
+
+        Returns
+        -------
+        table : `~astropy.table.Table`
+            Query results table
+
+        Examples
+        --------
+        >>> from astroquery.simbad import Simbad
+        >>> parent = Simbad.query_hierarchy("2MASS J18511048-0615470",
+        ...                                 detailed_hierarchy=False,
+        ...                                 hierarchy="parents")  # doctest: +REMOTE_DATA
+        >>> parent[["main_id", "ra", "dec"]] # doctest: +REMOTE_DATA
+        <Table length=1>
+         main_id     ra     dec
+                    deg     deg
+          object  float64 float64
+        --------- ------- -------
+        NGC  6705 282.766  -6.272
+        """
+        top, columns, joins, instance_criteria = self._get_query_parameters()
+
+        sub_query = ("(SELECT oidref FROM ident "
+                     f"WHERE id = '{name}') AS name")
+
+        if detailed_hierarchy:
+            columns.append(_Column("h_link", "link_bibcode", "hierarchy_bibcode"))
+            columns.append(_Column("h_link", "membership", "membership_certainty"))
+
+        if hierarchy == "parents":
+            joins += [_Join("h_link", _Column("basic", "oid"), _Column("h_link", "parent"))]
+            instance_criteria.append("h_link.child = name.oidref")
+        elif hierarchy == "children":
+            joins += [_Join("h_link", _Column("basic", "oid"), _Column("h_link", "child"))]
+            instance_criteria.append("h_link.parent = name.oidref")
+        elif hierarchy == "siblings":
+            sub_query = ("(SELECT DISTINCT basic.oid FROM "
+                         f"{sub_query}, basic JOIN h_link ON basic.oid = h_link.parent "
+                         "WHERE h_link.child = name.oidref) AS parents")
+            joins += [_Join("h_link", _Column("basic", "oid"), _Column("h_link", "child"))]
+            instance_criteria.append("h_link.parent = parents.oid")
+        else:
+            raise ValueError("'hierarchy' can only take the values 'parents', "
+                             f"'siblings', or 'children'. Got '{hierarchy}'.")
+
+        if criteria:
+            instance_criteria.append(f"({criteria})")
+
+        return self._query(top, columns, joins, instance_criteria,
+                           from_table=f"{sub_query}, basic", distinct=True,
+                           get_query_payload=get_query_payload, async_job=async_job)
 
     @deprecated_renamed_argument(["verbose"], new_name=[None],
                                  since=['0.4.8'], relax=True)
     def query_bibobj(self, bibcode, *, criteria=None,
-                     get_query_payload=False,
+                     get_query_payload=False, async_job=False,
                      verbose=False):
         """Query all the objects mentioned in an article.
 
@@ -866,6 +1030,11 @@ class SimbadClass(BaseVOQuery):
         get_query_payload : bool, optional
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
+            Defaults to `False`.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
             Defaults to `False`.
 
         Returns
@@ -886,13 +1055,13 @@ class SimbadClass(BaseVOQuery):
             instance_criteria.append(f"({criteria})")
 
         return self._query(top, columns, joins, instance_criteria,
-                           get_query_payload=get_query_payload)
+                           get_query_payload=get_query_payload, async_job=async_job)
 
     @deprecated_renamed_argument(["verbose", "cache"], new_name=[None, None],
                                  since=['0.4.8', '0.4.8'], relax=True)
     def query_bibcode(self, bibcode, *, wildcard=False,
-                      abstract=False, get_query_payload=False, criteria=None,
-                      verbose=None, cache=None, ):
+                      abstract=False, criteria=None, get_query_payload=False,
+                      async_job=False, verbose=None, cache=None, ):
         """Query the references corresponding to a given bibcode.
 
         Wildcards may be used to specify bibcodes.
@@ -914,9 +1083,11 @@ class SimbadClass(BaseVOQuery):
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
             Defaults to `False`.
-        cache : Deprecated since 0.4.8. The cache is now automatically emptied at the
-            end of the python session. It can also be emptied manually with
-            `~astroquery.simbad.SimbadClass.clear_cache` but cannot be deactivated.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
 
         Returns
         -------
@@ -959,12 +1130,13 @@ class SimbadClass(BaseVOQuery):
 
         query += " ORDER BY bibcode"
 
-        return self.query_tap(query, get_query_payload=get_query_payload)
+        return self.query_tap(query, get_query_payload=get_query_payload,
+                              async_job=async_job)
 
     @deprecated_renamed_argument(["verbose", "cache"], new_name=[None, None],
                                  since=['0.4.8', '0.4.8'], relax=True)
-    def query_objectids(self, object_name, *, verbose=None, cache=None,
-                        get_query_payload=False, criteria=None):
+    def query_objectids(self, object_name, *, criteria=None, get_query_payload=False,
+                        async_job=False, verbose=None, cache=None):
         """Query SIMBAD with an object name.
 
         This returns a table of all names associated with that object.
@@ -981,9 +1153,11 @@ class SimbadClass(BaseVOQuery):
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
             Defaults to `False`.
-        cache : Deprecated since 0.4.8. The cache is now automatically emptied at the
-            end of the python session. It can also be emptied manually with
-            `~astroquery.simbad.SimbadClass.clear_cache` but cannot be deactivated.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
+            Defaults to `False`.
 
         Returns
         -------
@@ -1023,7 +1197,8 @@ class SimbadClass(BaseVOQuery):
                  f"WHERE id_typed.id = '{_adql_parameter(object_name)}'")
         if criteria is not None:
             query += f" AND {criteria}"
-        return self.query_tap(query, get_query_payload=get_query_payload)
+        return self.query_tap(query, get_query_payload=get_query_payload,
+                              async_job=async_job)
 
     @deprecated(since="v0.4.8",
                 message=("'query_criteria' is deprecated. It uses the former sim-script "
@@ -1162,37 +1337,37 @@ class SimbadClass(BaseVOQuery):
         >>> from astroquery.simbad import Simbad
         >>> Simbad.list_columns("ids", "ident") # doctest: +REMOTE_DATA
         <Table length=4>
-        table_name column_name datatype ...  unit    ucd
-          object      object    object  ... object  object
-        ---------- ----------- -------- ... ------ -------
-             ident          id  VARCHAR ...        meta.id
-             ident      oidref   BIGINT ...
-               ids         ids  VARCHAR ...        meta.id
-               ids      oidref   BIGINT ...
+        table_name column_name datatype ...  unit      ucd
+          object      object    object  ... object    object
+        ---------- ----------- -------- ... ------ -----------
+             ident          id  VARCHAR ...            meta.id
+             ident      oidref   BIGINT ...        meta.record
+               ids         ids  VARCHAR ...            meta.id
+               ids      oidref   BIGINT ...        meta.record
 
 
         >>> from astroquery.simbad import Simbad
         >>> Simbad.list_columns(keyword="filter") # doctest: +REMOTE_DATA
         <Table length=5>
-         table_name column_name   datatype  ...  unit           ucd
-           object      object      object   ... object         object
-        ----------- ----------- ----------- ... ------ ----------------------
-             filter description UNICODECHAR ...        meta.note;instr.filter
-             filter  filtername     VARCHAR ...                  instr.filter
-             filter        unit     VARCHAR ...                     meta.unit
-               flux      filter     VARCHAR ...                  instr.filter
-        mesDiameter      filter        CHAR ...                  instr.filter
+         table_name column_name   datatype  ...  unit              ucd
+           object      object      object   ... object            object
+        ----------- ----------- ----------- ... ------ ---------------------------
+             filter description UNICODECHAR ...             meta.note;instr.filter
+             filter  filtername     VARCHAR ...        instr.bandpass;instr.filter
+             filter        unit     VARCHAR ...                          meta.unit
+               flux      filter     VARCHAR ...        instr.bandpass;instr.filter
+        mesDiameter      filter        CHAR ...        instr.bandpass;instr.filter
 
         >>> from astroquery.simbad import Simbad
         >>> Simbad.list_columns("basic", keyword="object") # doctest: +REMOTE_DATA
         <Table length=4>
-        table_name column_name datatype ...  unit          ucd
-          object      object    object  ... object        object
-        ---------- ----------- -------- ... ------ -------------------
-             basic     main_id  VARCHAR ...          meta.id;meta.main
-             basic   otype_txt  VARCHAR ...                  src.class
-             basic         oid   BIGINT ...        meta.record;meta.id
-             basic       otype  VARCHAR ...                  src.class
+        table_name column_name datatype ...  unit         ucd
+          object      object    object  ... object       object
+        ---------- ----------- -------- ... ------ -----------------
+             basic     main_id  VARCHAR ...        meta.id;meta.main
+             basic   otype_txt  VARCHAR ...                src.class
+             basic         oid   BIGINT ...              meta.record
+             basic       otype  VARCHAR ...                src.class
         """
         query = ("SELECT table_name, column_name, datatype, description, unit, ucd"
                  " FROM TAP_SCHEMA.columns"
@@ -1251,7 +1426,8 @@ class SimbadClass(BaseVOQuery):
                  f" OR (target_table = '{_adql_parameter(table)}')")
         return self.query_tap(query, get_query_payload=get_query_payload)
 
-    def query_tap(self, query: str, *, maxrec=10000, get_query_payload=False, **uploads):
+    def query_tap(self, query: str, *, maxrec=10000, async_job=False,
+                  get_query_payload=False, **uploads):
         """Query SIMBAD TAP service.
 
         Parameters
@@ -1266,10 +1442,14 @@ class SimbadClass(BaseVOQuery):
             Any number of local tables to be used in the *query*. In the *query*, these tables
             are referred as *TAP_UPLOAD.table_alias* where *TAP_UPLOAD* is imposed and *table_alias*
             is the keyword name you chose. The maximum number of lines for the uploaded tables is 200000.
-        get_query_payload : bool, optional
-            When set to `True` the method returns the HTTP request parameters without
-            querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
             Defaults to `False`.
+        get_query_payload : bool, default=False
+            When set to ``True`` the method returns the HTTP request parameters without
+            querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
 
         Returns
         -------
@@ -1332,7 +1512,7 @@ class SimbadClass(BaseVOQuery):
         ...                  my_table_name=letters_table) # doctest: +REMOTE_DATA
         <Table length=3>
         alphabet
-         object
+          str1
         --------
                a
                b
@@ -1348,9 +1528,14 @@ class SimbadClass(BaseVOQuery):
             return dict(TAPQuery(self.SIMBAD_URL, query, maxrec=maxrec, uploads=uploads))
         # without uploads we call the version with cache
         if uploads == {}:
-            return _cached_query_tap(self.tap, query, maxrec=maxrec)
+            return _cached_query_tap(self.tap, query, maxrec=maxrec,
+                                     async_job=async_job, timeout=self.timeout)
         # with uploads it has to be without cache
-        return self.tap.run_async(query, maxrec=maxrec, uploads=uploads).to_table()
+        if async_job:
+            return self.tap.run_async(query, maxrec=maxrec,
+                                      execution_duration=self.timeout,
+                                      uploads=uploads).to_table()
+        return self.tap.run_sync(query, maxrec=maxrec, uploads=uploads).to_table()
 
     @staticmethod
     def clear_cache():
@@ -1366,8 +1551,8 @@ class SimbadClass(BaseVOQuery):
         """Get the current building blocks of an ADQL query."""
         return tuple(map(copy.deepcopy, (self.ROW_LIMIT, self.columns_in_output, self.joins, self.criteria)))
 
-    def _query(self, top, columns, joins, criteria, from_table="basic",
-               get_query_payload=False, **uploads):
+    def _query(self, top, columns, joins, criteria, from_table="basic", distinct=False,
+               async_job=False, get_query_payload=False, **uploads):
         """Generate an ADQL string from the given query parameters and executes the query.
 
         Parameters
@@ -1383,9 +1568,16 @@ class SimbadClass(BaseVOQuery):
             with an AND clause.
         from_table : str, optional
             The table after 'FROM' in the ADQL string. Defaults to "basic".
+        distinct : bool, optional
+            Whether to add the DISTINCT instruction to the query.
         get_query_payload : bool, optional
             When set to `True` the method returns the HTTP request parameters without
             querying SIMBAD. The ADQL string is in the 'QUERY' key of the payload.
+            Defaults to `False`.
+        async_job: bool, optional
+            When set to `True`, the query will be executed in asynchronous mode. This is
+            better for very long queries, as it prevents transient failures to abort the
+            query execution.
             Defaults to `False`.
         uploads : `~astropy.table.Table`
             Any number of local tables to be used in the *query*. In the *query*, these tables
@@ -1397,6 +1589,7 @@ class SimbadClass(BaseVOQuery):
         `~astropy.table.Table`
             The result of the query to SIMBAD.
         """
+        distinct_results = " DISTINCT" if distinct else ""
         top_part = f" TOP {top}" if top != -1 else ""
 
         # columns
@@ -1415,7 +1608,12 @@ class SimbadClass(BaseVOQuery):
         else:
             unique_joins = []
             [unique_joins.append(join) for join in joins if join not in unique_joins]
-            join = " " + " ".join([(f'{join.join_type} {join.table} ON {join.column_left.table}."'
+            # the joined tables can have an alias. We handle the two cases here
+            join = " " + " ".join([(f'{join.join_type} {join.table} AS {join.alias} '
+                                    f'ON {join.column_left.table}."{join.column_left.name}" = '
+                                    f'{join.alias}."{join.column_right.name}"')
+                                   if join.alias is not None else
+                                   (f'{join.join_type} {join.table} ON {join.column_left.table}."'
                                     f'{join.column_left.name}" = {join.column_right.table}."'
                                     f'{join.column_right.name}"') for join in unique_joins])
 
@@ -1425,10 +1623,10 @@ class SimbadClass(BaseVOQuery):
         else:
             criteria = ""
 
-        query = f"SELECT{top_part}{columns} FROM {from_table}{join}{criteria}"
+        query = f"SELECT{distinct_results}{top_part}{columns} FROM {from_table}{join}{criteria}"
 
         response = self.query_tap(query, get_query_payload=get_query_payload,
-                                  maxrec=self.hardlimit,
+                                  maxrec=self.hardlimit, async_job=async_job,
                                   **uploads)
 
         if len(response) == 0 and top != 0:

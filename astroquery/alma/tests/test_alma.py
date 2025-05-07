@@ -111,7 +111,7 @@ def test_gen_pos_sql():
         "-90.0,4.338888888888889), s_region) = 1)"
     assert _gen_sql({'ra_dec': '!(10..20) >60'}) == common_select + \
         "((INTERSECTS(RANGE_S2D(0.0,10.0,60.0,90.0), s_region) = 1) OR " \
-        "(INTERSECTS(RANGE_S2D(20.0,0.0,60.0,90.0), s_region) = 1))"
+        "(INTERSECTS(RANGE_S2D(20.0,360.0,60.0,90.0), s_region) = 1))"
     assert _gen_sql({'ra_dec': '0..20|40..60 <-50|>50'}) == common_select + \
         "((INTERSECTS(RANGE_S2D(0.0,20.0,-90.0,-50.0), s_region) = 1) OR " \
         "(INTERSECTS(RANGE_S2D(0.0,20.0,50.0,90.0), s_region) = 1) OR " \
@@ -123,18 +123,23 @@ def test_gen_pos_sql():
     assert _gen_sql({'galactic': '1 2, 3'}) == common_select + "(INTERSECTS(" \
         "CIRCLE('ICRS',{},{},3.0), s_region) = 1)".format(
         center.icrs.ra.to(u.deg).value, center.icrs.dec.to(u.deg).value)
-    min_point = coord.SkyCoord('12:13:14.0', '-00:01:02.1', unit=u.deg,
-                               frame='galactic')
-    max_point = coord.SkyCoord('12:14:14.0', '-00:00:02.1', unit=(u.deg, u.deg),
-                               frame='galactic')
+    gal_longitude = ('12:13:14.0', '12:14:14.0')
+    gal_latitude = ('-00:01:02.1', '-00:00:02.1')
+    min_pt = coord.SkyCoord(gal_longitude[0], gal_latitude[0], unit=u.deg)
+    long_min, lat_min = min_pt.ra.value, min_pt.dec.value
+    max_pt = coord.SkyCoord(gal_longitude[1], gal_latitude[1], unit=u.deg)
+    long_max, lat_max = max_pt.ra.value, max_pt.dec.value
     assert _gen_sql(
-        {'galactic': '12:13:14.0..12:14:14.0 -00:01:02.1..-00:00:02.1'}) == \
+        {'galactic': '{}..{} {}..{}'.format(
+            gal_longitude[0], gal_longitude[1], gal_latitude[0], gal_latitude[1])}) == \
         common_select +\
-        "(INTERSECTS(RANGE_S2D({},{},{},{}), s_region) = 1)".format(
-            min_point.icrs.ra.to(u.deg).value,
-            max_point.icrs.ra.to(u.deg).value,
-            min_point.icrs.dec.to(u.deg).value,
-            max_point.icrs.dec.to(u.deg).value)
+        'gal_longitude>={} AND gal_longitude<={} AND gal_latitude>={} AND gal_latitude<={}'.format(
+            long_min, long_max, lat_min, lat_max)
+
+    # test extremities
+    assert _gen_sql({'galactic': '0..360 -90..90'}) == \
+        common_select + ('gal_longitude>=0.0 AND gal_longitude<=360.0 AND '
+                         'gal_latitude>=-90.0 AND gal_latitude<=90.0')
 
     # combination of frames
     center = coord.SkyCoord(1, 2, unit=u.deg, frame='galactic')
@@ -264,7 +269,7 @@ def test_query():
         "select * from ivoa.obscore WHERE "
         "(INTERSECTS(CIRCLE('ICRS',1.0,2.0,1.0), s_region) = 1) "
         "AND science_observation='T' AND data_rights='Public'",
-        language='ADQL', maxrec=None)
+        language='ADQL', maxrec=None, uploads=None)
 
     # one row result
     tap_mock = Mock()
@@ -286,7 +291,7 @@ def test_query():
         "(INTERSECTS(CIRCLE('ICRS',1.0,2.0,0.16666666666666666), s_region) = 1) "
         "AND band_list LIKE '%3%' AND science_observation='T' AND "
         "data_rights='Proprietary'",
-        language='ADQL', maxrec=None)
+        language='ADQL', maxrec=None, uploads=None)
 
     # repeat for legacy columns
     mock_result = Mock()
@@ -308,7 +313,7 @@ def test_query():
         "(INTERSECTS(CIRCLE('ICRS',1.0,2.0,0.16666666666666666), s_region) = 1) "
         "AND band_list LIKE '%3%' AND science_observation='T' AND "
         "data_rights='Proprietary'",
-        language='ADQL', maxrec=None)
+        language='ADQL', maxrec=None, uploads=None)
     row_legacy = result_legacy[0]
     row = result[0]
     for item in _OBSCORE_TO_ALMARESULT.items():
@@ -342,7 +347,7 @@ def test_query():
         "(band_list LIKE '%1%' OR band_list LIKE '%3%') AND "
         "t_min=55197.0 AND pol_states='/XX/YY/' AND s_fov=0.012313 AND "
         "t_exptime=25 AND science_observation='F'",
-        language='ADQL', maxrec=None
+        language='ADQL', maxrec=None, uploads=None
     )
 
     tap_mock.reset()
@@ -356,7 +361,7 @@ def test_query():
         "AND spectral_resolution=2000000 "
         "AND (INTERSECTS(CIRCLE('ICRS',1.0,2.0,1.0), "
         "s_region) = 1) AND science_observation='T' AND data_rights='Public'",
-        language='ADQL', maxrec=None)
+        language='ADQL', maxrec=None, uploads=None)
 
 
 @pytest.mark.filterwarnings("ignore::astropy.utils.exceptions.AstropyUserWarning")
@@ -494,9 +499,14 @@ def test_tap():
     alma._tap = tap_mock
     result = alma.query_tap('select * from ivoa.ObsCore')
     assert len(result.table) == 0
-
     tap_mock.search.assert_called_once_with('select * from ivoa.ObsCore',
-                                            language='ADQL', maxrec=None)
+                                            language='ADQL', maxrec=None, uploads=None)
+
+    tap_mock.search.reset_mock()
+    result = alma.query_tap('select * from ivoa.ObsCore', maxrec=10, uploads={'tmptable': 'votable_file.xml'})
+    assert len(result.table) == 0
+    tap_mock.search.assert_called_once_with(
+        'select * from ivoa.ObsCore', language='ADQL', maxrec=10, uploads={'tmptable': 'votable_file.xml'})
 
 
 @pytest.mark.parametrize('data_archive_url',

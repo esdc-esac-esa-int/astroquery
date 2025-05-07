@@ -14,6 +14,7 @@ import numpy as np
 from astropy.table import Table, MaskedColumn
 from astropy.utils.decorators import deprecated_renamed_argument
 
+from .. import log
 from ..query import BaseQuery
 from ..utils import async_to_sync
 from ..utils.class_or_instance import class_or_instance
@@ -52,14 +53,18 @@ def _json_to_table(json_obj, data_key='data'):
     # for each item in info, type has to be converted from DB data types (SQL server in most cases)
     # from missions_mast search service such as varchar, integer, float, boolean etc
     # to corresponding numpy type
-    for idx, col, col_type, ignore_value in \
-            [(idx, x['name'], x[type_key].lower(), None) for idx, x in enumerate(json_obj['info'])]:
+    for idx, col in enumerate(json_obj['info']):
+
+        # get column name and type
+        col_name = col.get('column_name') or col.get('name')
+        col_type = col[type_key].lower()
+        ignore_value = None
 
         # making type adjustments
         if (col_type == "char" or col_type == "string" or 'varchar' in col_type or col_type == "null"
                 or col_type == 'datetime'):
             col_type = "str"
-            ignore_value = "" if (ignore_value is None) else ignore_value
+            ignore_value = ""
         elif col_type == "boolean" or col_type == "binary":
             col_type = "bool"
         elif col_type == "unsignedbyte":
@@ -68,11 +73,11 @@ def _json_to_table(json_obj, data_key='data'):
                 or col_type == 'integer'):
             # int arrays do not admit Non/nan vals
             col_type = np.int64
-            ignore_value = -999 if (ignore_value is None) else ignore_value
+            ignore_value = -999
         elif col_type == "double" or col_type.lower() == "float" or col_type == "decimal":
             # int arrays do not admit Non/nan vals
             col_type = np.float64
-            ignore_value = -999 if (ignore_value is None) else ignore_value
+            ignore_value = -999
 
         # Make the column list (don't assign final type yet or there will be errors)
         try:
@@ -80,7 +85,12 @@ def _json_to_table(json_obj, data_key='data'):
             col_data = np.array([x[idx] for x in json_obj[data_key]], dtype=object)
         except KeyError:
             # it's not a data array, fall back to using column name as it is array of dictionaries
-            col_data = np.array([x[col] for x in json_obj[data_key]], dtype=object)
+            try:
+                col_data = np.array([x[col_name] for x in json_obj[data_key]], dtype=object)
+            except KeyError:
+                # Skip column names not found in data
+                log.debug('Column %s was not found in data. Skipping...', col_name)
+                continue
         if ignore_value is not None:
             col_data[np.where(np.equal(col_data, None))] = ignore_value
 
@@ -92,7 +102,7 @@ def _json_to_table(json_obj, data_key='data'):
             col_mask = np.equal(col_data, ignore_value)
 
         # add the column
-        data_table.add_column(MaskedColumn(col_data.astype(col_type), name=col, mask=col_mask))
+        data_table.add_column(MaskedColumn(col_data.astype(col_type), name=col_name, mask=col_mask))
 
     return data_table
 
@@ -108,6 +118,8 @@ class ServiceAPI(BaseQuery):
 
     SERVICE_URL = conf.server
     REQUEST_URL = conf.server + "/api/v0.1/"
+    MISSIONS_DOWNLOAD_URL = conf.server + "/search/"
+    MAST_DOWNLOAD_URL = conf.server + "/api/v0.1/Download/file"
     SERVICES = {}
 
     def __init__(self, session=None):
@@ -266,27 +278,28 @@ class ServiceAPI(BaseQuery):
 
         request_url = self.REQUEST_URL + service_url.format(**compiled_service_args)
 
+        # Default headers
         headers = {
             'User-Agent': self._session.headers['User-Agent'],
             'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json'
         }
+
         # Params as a list of tuples to allow for multiple parameters added
         catalogs_request = []
-        if not page:
-            page = params.pop('page', None)
-        if not pagesize:
-            pagesize = params.pop('pagesize', None)
+        page = page or params.pop('page', None)
+        pagesize = pagesize or params.pop('pagesize', None)
 
+        # Add pagination if specified
         if page is not None:
             catalogs_request.append(('page', page))
         if pagesize is not None:
             catalogs_request.append(('pagesize', pagesize))
 
+        # Populate parameters based on `use_json`
         if not use_json:
-            # Decompose filters, sort
-            for prop, value in kwargs.items():
-                params[prop] = value
+            # When not using JSON, merge kwargs into params and build query
+            params.update(kwargs)
             catalogs_request.extend(self._build_catalogs_params(params))
         else:
             headers['Content-Type'] = 'application/json'
@@ -303,15 +316,50 @@ class ServiceAPI(BaseQuery):
                 catalogs_request = params_dict
 
                 # Removing single-element lists. Single values will live on their own (except for `sort_by`)
-                for key in catalogs_request.keys():
-                    if (key != 'sort_by') & (len(catalogs_request[key]) == 1):
-                        catalogs_request[key] = catalogs_request[key][0]
+                catalogs_request = {
+                    k: v if k == 'sort_by' or len(v) > 1 else v[0]
+                    for k, v in params_dict.items()
+                }
 
             # Otherwise, catalogs_request can remain as the original params dict
             else:
                 catalogs_request = params
 
         response = self._request('POST', request_url, data=catalogs_request, headers=headers, use_json=use_json)
+        return response
+
+    @class_or_instance
+    def missions_request_async(self, service, params):
+        """
+        Builds and executes an asynchronous query to the MAST Search API.
+        Parameters
+        ----------
+        service : str
+           The MAST Search API service to query. Should be present in self.SERVICES.
+        params : dict
+           JSON object containing service parameters.
+        Returns
+        -------
+        response : list of `~requests.Response`
+        """
+        service_config = self.SERVICES.get(service.lower())
+        request_url = self.REQUEST_URL + service_config.get('path')
+
+        # Default headers
+        headers = {
+            'User-Agent': self._session.headers['User-Agent'],
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+
+        # make request
+        data, params = (params, None)
+        response = self._request(method='POST',
+                                 url=request_url,
+                                 params=params,
+                                 data=data,
+                                 headers=headers,
+                                 use_json=True)
         return response
 
     def _build_catalogs_params(self, params):
@@ -383,12 +431,6 @@ class ServiceAPI(BaseQuery):
         response : boolean
             Whether the passed dict has at least one criteria parameter
         """
-        criteria_check = False
-        non_criteria_params = ["columns", "sort_by", "page_size", "pagesize", "page"]
-        criteria_keys = criteria.keys()
-        for key in criteria_keys:
-            if key not in non_criteria_params:
-                criteria_check = True
-                break
 
-        return criteria_check
+        non_criteria_params = ["columns", "sort_by", "page_size", "pagesize", "page"]
+        return any(key not in non_criteria_params for key in criteria)

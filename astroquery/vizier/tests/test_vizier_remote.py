@@ -72,6 +72,13 @@ class TestVizierRemote:
         for table in result:
             assert 'Bmag' not in table.columns
 
+    def test_vizier_column_exotic_characters(self):
+        # column names can contain any ascii characters. This checks that they are not
+        # replaced by underscores, see issue #3124
+        result = Vizier(columns=["r'mag"],
+                        row_limit=1).get_catalogs(catalog="II/336/apass9")[0]
+        assert "r'mag" in result.colnames
+
     @pytest.mark.parametrize('all', ('all', '*'))
     def test_alls_withaddition(self, all):
         # Check that all the expected columns are there plus the _r
@@ -131,7 +138,6 @@ class TestVizierRemote:
         assert len(cats) >= 39  # as of 2024
 
     def test_findcatalog_ucd(self):
-        # this fails for VizieR 7.33.3, should work in next releases
         vizier = Vizier()
         ucdresult = vizier(ucd='phys.albedo').find_catalogs('mars', max_catalogs=5000)
         result = vizier.find_catalogs('mars', max_catalogs=5000)
@@ -146,7 +152,7 @@ class TestVizierRemote:
         result = vizier.query_object("HD 226868", catalog=["NOMAD", "UCAC"], return_type='asu-tsv', cache=False)
 
         assert isinstance(result, list)
-        assert len(result) == 3
+        assert len(result) == 2
 
     def test_query_constraints(self):
         vizier = Vizier(row_limit=3)
@@ -154,4 +160,4 @@ class TestVizierRemote:
         # row_limit is taken in account
         assert len(result) == 3
         # the criteria is respected
-        assert np.all(np.isclose(result["mB2"], 14.7, rtol=1e-09, atol=1e-09))
+        assert np.all(np.isclose(result["mB2"].data.data, 14.7, rtol=1e-09, atol=1e-09))

@@ -8,12 +8,14 @@ from astropy.table import Table
 import astropy.units as u
 from astropy.utils.exceptions import AstropyDeprecationWarning
 from pyvo.dal.tap import TAPService
+from pyvo.io.vosi import tapregext
 
 import pytest
 
+from .. import conf
 from ... import simbad
 from .test_simbad_remote import multicoords
-from astroquery.exceptions import LargeQueryWarning, NoResultsWarning
+from astroquery.exceptions import NoResultsWarning
 
 
 GALACTIC_COORDS = SkyCoord(l=-67.02084 * u.deg, b=-29.75447 * u.deg, frame="galactic")
@@ -33,6 +35,7 @@ def _mock_simbad_class(monkeypatch):
     # >>> options = Simbad.list_votable_fields()
     # >>> options.write("simbad_output_options.xml", format="votable")
     monkeypatch.setattr(simbad.SimbadClass, "hardlimit", 2000000)
+    monkeypatch.setattr(simbad.SimbadClass, "uploadlimit", 200000)
     monkeypatch.setattr(simbad.SimbadClass, "list_votable_fields", lambda self: table)
 
 
@@ -151,6 +154,28 @@ def test_mocked_simbad():
     assert len(options) >= 115
     # this mocks the hardlimit
     assert simbad_instance.hardlimit == 2000000
+    # and the uploadlimit
+    assert simbad_instance.uploadlimit == 200000
+
+
+def test_simbad_timeout(monkeypatch):
+    simbad_instance = simbad.Simbad()
+    assert simbad_instance.timeout == conf.timeout  # default value
+
+    class PatchedCapability:
+        @property
+        def executionduration(self):
+            time_limit = tapregext.TimeLimits()
+            time_limit.hard = 2000
+            return time_limit
+
+    monkeypatch.setattr(TAPService, "capabilities", [PatchedCapability()])
+    # good value
+    simbad_instance.timeout = 10
+    assert simbad_instance.timeout == 10
+    # too high
+    with pytest.raises(ValueError, match="'timeout' cannot exceed*"):
+        simbad_instance.timeout = 10000
 
 # ----------------------------
 # Test output options settings
@@ -214,7 +239,7 @@ def test_add_table_to_output(monkeypatch):
     simbad_instance._add_table_to_output("mesDiameter")
     assert simbad.core._Join("mesdiameter",
                              simbad.core._Column("basic", "oid"),
-                             simbad.core._Column("mesdiameter", "oidref")
+                             simbad.core._Column("mesdiameter", "oidref"), "LEFT JOIN"
                              ) in simbad_instance.joins
     assert simbad.core._Column("mesdiameter", "bibcode", "mesdiameter.bibcode"
                                ) in simbad_instance.columns_in_output
@@ -261,15 +286,26 @@ def test_add_votable_fields():
     # a table which name has changed should raise a warning too
     with pytest.warns(DeprecationWarning, match="'distance' has been renamed 'mesdistance'*"):
         simbad_instance.add_votable_fields("distance")
+
+
+@pytest.mark.usefixtures("_mock_simbad_class")
+@pytest.mark.usefixtures("_mock_basic_columns")
+@pytest.mark.usefixtures("_mock_linked_to_basic")
+def test_add_votable_fields_errors():
     # errors are raised for the deprecated fields with options
     simbad_instance = simbad.SimbadClass()
     with pytest.raises(ValueError, match=r"The votable fields \'flux_\*\*\*\(filtername\)\' are removed *"):
         simbad_instance.add_votable_fields("flux_error(u)")
-    with pytest.warns(DeprecationWarning, match=r"The notation \'flux\(U\)\' is deprecated since 0.4.8 *"):
+    with pytest.warns(DeprecationWarning, match=r"The notation \'flux\(u\)\' is deprecated since 0.4.8 *"):
         simbad_instance.add_votable_fields("flux(u)")
         assert "u_" in str(simbad_instance.columns_in_output)
+    # big letter J filter exists, but not small letter j
+    with pytest.raises(ValueError, match="'j' is not one of the accepted options *"):
+        simbad_instance.add_votable_fields("j")
     with pytest.raises(ValueError, match="Coordinates conversion and formatting is no longer supported*"):
-        simbad_instance.add_votable_fields("coo(s)", "dec(d)")
+        simbad_instance.add_votable_fields("coo(s)")
+    with pytest.warns(DeprecationWarning, match=r"\'dec\(d\)\' has been renamed \'dec\'. *"):
+        simbad_instance.add_votable_fields("dec(d)")
     with pytest.raises(ValueError, match="Catalog Ids are no longer supported as an output option.*"):
         simbad_instance.add_votable_fields("ID(Gaia)")
     with pytest.raises(ValueError, match="Selecting a range of years for bibcode is removed.*"):
@@ -281,7 +317,28 @@ def test_add_votable_fields():
     with pytest.raises(ValueError, match="'alltype' is not one of the accepted options which can be "
                        "listed with 'list_votable_fields'. Did you mean 'alltypes' or 'otype' or 'otypes'?"):
         simbad_instance.add_votable_fields("ALLTYPE")
-    # bundles and tables require a connection to the tap_schema and are thus tested in test_simbad_remote
+    # successive positions no longer ins SIMBAD (for years)
+    with pytest.raises(ValueError, match="Successive measurements of the positions *"):
+        simbad_instance.add_votable_fields("pos")
+    # no longer stores sp_nature
+    with pytest.raises(ValueError, match="Spectral nature is no longer stored in SIMBAD. *"):
+        simbad_instance.add_votable_fields("sp_nature")
+    # typed_id had only been added for astroquery's interaction with the old API
+    with pytest.raises(ValueError, match="'typed_id' is no longer a votable field. *"):
+        simbad_instance.add_votable_fields("typed_id")
+    # uvb and others no longer have their table in SIMBAD
+    with pytest.raises(ValueError, match="Magnitudes are now handled very differently in SIMBAD. *"):
+        simbad_instance.add_votable_fields("ubv")
+
+
+@pytest.mark.usefixtures("_mock_simbad_class")
+@pytest.mark.usefixtures("_mock_basic_columns")
+@pytest.mark.usefixtures("_mock_linked_to_basic")
+def test_add_list_of_fluxes():
+    # regression test for https://github.com/astropy/astroquery/issues/3185#issuecomment-2599191953
+    simbad_instance = simbad.Simbad()
+    with pytest.warns(DeprecationWarning, match=r"The notation \'flux\([UJ]\)\' is deprecated since 0.4.8 *"):
+        simbad_instance.add_votable_fields("flux(U)", "flux(J)")
 
 
 def test_list_wildcards(capsys):
@@ -345,6 +402,38 @@ def test_query_catalog():
     assert adql.endswith(where_clause)
 
 
+@pytest.mark.usefixtures("_mock_simbad_class")
+def test_query_hierarchy():
+    simbad_instance = simbad.Simbad()
+    detailed = ('h_link."link_bibcode" AS "hierarchy_bibcode", h_link."membership"'
+                ' AS "membership_certainty"')
+    # the three possible cases
+    adql = simbad_instance.query_hierarchy("test", hierarchy="parents",
+                                           detailed_hierarchy=True,
+                                           get_query_payload=True)["QUERY"]
+    assert "h_link.child = name.oidref" in adql
+    assert detailed in adql
+    adql = simbad_instance.query_hierarchy("test", hierarchy="children",
+                                           criteria="test=test",
+                                           detailed_hierarchy=False,
+                                           get_query_payload=True)["QUERY"]
+    assert "h_link.parent = name.oidref" in adql
+    assert "test=test" in adql
+    assert detailed not in adql
+    adql = simbad_instance.query_hierarchy("test", hierarchy="siblings",
+                                           get_query_payload=True)["QUERY"]
+    assert "h_link.parent = parents.oid" in adql
+    # if the keyword does not correspond
+    with pytest.raises(ValueError, match="'hierarchy' can only take the values "
+                       "'parents', 'siblings', or 'children'. Got 'test'."):
+        simbad_instance.query_hierarchy("object", hierarchy="test",
+                                        get_query_payload=True)
+    # if the people were used to the old votable_fields
+    with pytest.raises(ValueError, match="The hierarchy information is no longer an "
+                       "additional field. *"):
+        simbad_instance.add_votable_fields("membership")
+
+
 @pytest.mark.parametrize(('coordinates', 'radius', 'where'),
                          [(ICRS_COORDS, 2*u.arcmin,
                            r"WHERE CONTAINS\(POINT\('ICRS', basic\.ra, basic\.dec\), "
@@ -384,11 +473,9 @@ def test_query_region_with_criteria():
     adql = simbad.core.Simbad.query_region(ICRS_COORDS, radius="0.1s",
                                            criteria="galdim_majaxis>0.2",
                                            get_query_payload=True)["QUERY"]
-    assert adql.endswith("AND (galdim_majaxis>0.2)")
+    assert "(galdim_majaxis>0.2)" in adql
 
 
-# transform large query warning into error to save execution time
-@pytest.mark.filterwarnings("error:For very large queries")
 @pytest.mark.usefixtures("_mock_simbad_class")
 def test_query_region_errors():
     with pytest.raises(u.UnitsError):
@@ -398,9 +485,24 @@ def test_query_region_errors():
     with pytest.raises(ValueError, match="Mismatch between radii of length 3 "
                        "and center coordinates of length 2."):
         simbad.SimbadClass().query_region(multicoords, radius=[1, 2, 3] * u.deg)
-    centers = SkyCoord([0] * 10001, [0] * 10001, unit="deg", frame="icrs")
-    with pytest.raises(LargeQueryWarning, match="For very large queries, you may receive a timeout error.*"):
-        simbad.core.Simbad.query_region(centers, radius="2m", get_query_payload=True)["QUERY"]
+
+
+@pytest.mark.usefixtures("_mock_simbad_class")
+def test_query_region_error_on_long_list_of_centers(monkeypatch):
+    # initiating a SkyCoord longer than 200000 takes a few seconds
+    monkeypatch.setattr(SkyCoord, "__len__", lambda self: 200001)
+    centers = SkyCoord([0, 0], [0, 0], unit="deg", frame="icrs")
+    with pytest.raises(ValueError, match="'query_region' can process up to 200000 centers.*"):
+        simbad.core.Simbad.query_region(centers, radius="2m")
+
+
+@pytest.mark.usefixtures("_mock_simbad_class")
+def test_query_region_upload():
+    centers = SkyCoord([0] * 301, [0] * 301, unit="deg", frame="icrs")
+    adql = simbad.core.Simbad.query_region(centers, radius=["2m"] * 301,
+                                           get_query_payload=True)["QUERY"]
+    assert adql.endswith("WHERE CONTAINS(POINT('ICRS', basic.ra, basic.dec), CIRCLE"
+                         "('ICRS', centers.ra, centers.dec, centers.radius)) = 1 ")
 
 
 @pytest.mark.usefixtures("_mock_simbad_class")
@@ -408,9 +510,10 @@ def test_query_objects():
     # no wildcard and additional criteria
     adql = simbad.core.Simbad.query_objects(("m1", "m2"), criteria="otype = 'Galaxy..'",
                                             get_query_payload=True)["QUERY"]
-    expected = ('FROM TAP_UPLOAD.script_infos LEFT JOIN ident ON TAP_UPLOAD.script_infos.'
-                '"user_specified_id" = ident."id" LEFT JOIN basic ON basic."oid" = ident."oidref"'
-                ' WHERE (otype = \'Galaxy..\')')
+    expected = ('FROM TAP_UPLOAD.script_infos LEFT JOIN ident AS ident_upload '
+                'ON TAP_UPLOAD.script_infos.'
+                '"user_specified_id" = ident_upload."id" LEFT JOIN basic '
+                'ON basic."oid" = ident_upload."oidref" WHERE (otype = \'Galaxy..\')')
     assert adql.endswith(expected)
     # with wildcard
     adql = simbad.core.Simbad.query_objects(("M *", "NGC *"), wildcard=True, get_query_payload=True)["QUERY"]
@@ -482,14 +585,16 @@ def test_query_tap_errors():
 @pytest.mark.usefixtures("_mock_simbad_class")
 def test_query_tap_cache_call(monkeypatch):
     msg = "called_cached_query_tap"
-    monkeypatch.setattr(simbad.core, "_cached_query_tap", lambda tap, query, maxrec: msg)
+    monkeypatch.setattr(simbad.core, "_cached_query_tap",
+                        lambda tap, query, maxrec, async_job, timeout: msg)
     assert simbad.Simbad.query_tap("select top 1 * from basic") == msg
 
 
 @pytest.mark.usefixtures("_mock_simbad_class")
 def test_empty_response_warns(monkeypatch):
     # return something of length zero
-    monkeypatch.setattr(simbad.core.Simbad, "query_tap", lambda _, get_query_payload, maxrec: [])
+    monkeypatch.setattr(simbad.core.Simbad, "query_tap",
+                        lambda _, get_query_payload, maxrec, async_job: [])
     msg = ("The request executed correctly, but there was no data corresponding to these"
            " criteria in SIMBAD")
     with pytest.warns(NoResultsWarning, match=msg):
