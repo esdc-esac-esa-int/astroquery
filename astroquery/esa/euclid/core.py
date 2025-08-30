@@ -43,7 +43,7 @@ class EuclidClass(TapPlus):
     __VALID_DATALINK_RETRIEVAL_TYPES = conf.VALID_DATALINK_RETRIEVAL_TYPES
 
     def __init__(self, *, environment='PDR', tap_plus_conn_handler=None, datalink_handler=None, cutout_handler=None,
-                 verbose=False, show_server_messages=True):
+                 sia_handler=None, verbose=False, show_server_messages=True):
         """Constructor for EuclidClass.
 
         Parameters
@@ -55,6 +55,8 @@ class EuclidClass(TapPlus):
         datalink_handler : dataliink connection handler object, optional, default None
             HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
         cutout_handler : cutout connection handler object, optional, default None
+            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+        sia_handler : siap connection handler object, optional, default None
             HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
         verbose : bool, optional, default 'True'
             flag to display information about the process
@@ -112,6 +114,20 @@ class EuclidClass(TapPlus):
                                           use_names_over_ids=conf.USE_NAMES_OVER_IDS)
         else:
             self.__euclidcutout = cutout_handler
+
+        if sia_handler is None:
+            self.__euclidsia = TapPlus(url=url_server,
+                                       server_context="sas-sia",
+                                       tap_context="tap-server",
+                                       upload_context="Upload",
+                                       table_edit_context="TableTool",
+                                       data_context="sia2/query",
+                                       datalink_context="datalink",
+                                       verbose=verbose,
+                                       client_id='ASTROQUERY',
+                                       use_names_over_ids=conf.USE_NAMES_OVER_IDS)
+        else:
+            self.__euclidsia = cutout_handler
 
         if show_server_messages:
             self.get_status_messages()
@@ -1258,6 +1274,110 @@ class EuclidClass(TapPlus):
                                  output_file_full_path=output_file_full_path, files=files)
 
         return files
+
+    def get_sia(self, *, search_type='CIRCLE', ra, dec, radius, calibration=None, instrument='ALL', band=None,
+                collection='sedm', dsr_1=None, dsr_2=None, dsr_3=None, output_file=None, verbose=False):
+        """
+        Description
+        -----------
+        Downloads a cutout given its file path, instrument and obs_id, and the cutout region
+
+        Parameters
+        ----------
+        search_type : str, mandatory, default None
+            search region: CIRCLE or BOX
+        ra : float (degrees), str or astropy.coordinate, mandatory
+            right ascension
+        dec : float (degrees), str or astropy.coordinate, mandatory
+            declination
+        radius : float (degrees), str or astropy.coordinate, mandatory
+            search radius of the cutout to generate
+        calibration: str, optional, default None
+            calibration level according to ObsCore VO standard: CALIB_ZERO, CALIB_ONE, CALIB_TWO or CALIB_THREE
+        instrument: str, mandatory, default ALL
+            instrument name: ALL, VIS or NISP
+        band: str, optional, default None
+            filter name only valid if instrument is different from ALL: VIS for instrument VIS or NIR_H, NIR_J, NIR_Y
+            or NISP for instrument NISP
+        collection : str, mandatory, default sedm
+            the name of the data collection
+        dsr_1: str, optional, default None
+            the data set release part 1: for OTF environment, the activity code; for REG and IDR, the target environment
+        dsr_2: str, optional, default None
+            the data set release part 2: for OTF environment, the patch id (a positive integer); for REG and IDR,
+            the activity code
+        dsr_3: str, optional, default None
+            the data set release part 3: for OTF, REG and IDR environment, the version (a integer greater than 1)
+        output_file : string, optional, default None
+            file where the results are saved.
+        verbose : bool, optional, default 'False'
+            flag to display information about the process
+
+        Returns
+        -------
+        A table object
+        """
+
+        valid_search_types = {'CIRCLE', 'BOX'}
+        valid_calibrations = {'CALIB_ZERO', 'CALIB_ONE', 'CALIB_TWO', 'CALIB_THREE'}
+        valid_instruments = {'ALL', 'VIS', 'NISP'}
+        valid_band_vis = {'VIS'}
+        valid_band_nisp = {'NIR_H', 'NIR_J', 'NIR_Y', 'NISP'}
+
+        if search_type not in valid_search_types:
+            raise ValueError(f"Invalid search tyype {search_type}")
+
+        if calibration is not None and calibration not in valid_calibrations:
+            raise ValueError(f"Invalid calibration {calibration}")
+
+        if instrument not in valid_instruments:
+            raise ValueError(f"Invalid instrument {instrument}")
+
+        if instrument == 'ALL' and band is not None:
+            raise ValueError(f"Invalid band {band} for instrument {instrument}")
+
+        if instrument == 'VIS' and band is not None and band not in valid_band_vis:
+            raise ValueError(f"Invalid band {band} for instrument {instrument}")
+
+        if instrument == 'NISP' and band is not None and band not in valid_band_nisp:
+            raise ValueError(f"Invalid band {band} for instrument {instrument}")
+
+        ra_deg = self.coordinates_degrees(ra)
+        dec_deg = self.coordinates_degrees(dec)
+        radius_deg = self.coordinates_degrees(radius)
+
+        params_dict = dict()
+        params_dict['TAPCLIENT'] = 'ASTROQUERY'
+        params_dict[
+            'POS'] = f"{search_type},{ra_deg.to_value(u.deg)},{dec_deg.to_value(u.deg)},{radius_deg.to_value(u.deg)}"
+        params_dict['INSTRUMENT'] = instrument
+        params_dict['COLLECTION'] = collection
+
+        if calibration is not None:
+            params_dict['CALIB'] = calibration
+
+        if instrument != 'ALL' and band is not None:
+            params_dict['BAND'] = band
+
+        if dsr_1 is not None:
+            params_dict['DSP1'] = dsr_1
+
+        if dsr_2 is not None:
+            params_dict['DSP2'] = dsr_2
+
+        if dsr_3 is not None:
+            params_dict['DSP3'] = dsr_3
+
+        return self.__euclidsia.load_data(params_dict=params_dict, output_file=output_file, http_method='GET',
+                                          verbose=verbose)
+
+    def coordinates_degrees(self, coord):
+
+        if not isinstance(coord, units.Quantity):
+            radius_quantity = Quantity(value=coord, unit=u.deg)
+        else:
+            radius_quantity = coord.to(u.deg)
+        return radius_quantity
 
     def get_cutout(self, *, file_path=None, instrument=None, id=None, coordinate, radius, output_file=None,
                    verbose=False):

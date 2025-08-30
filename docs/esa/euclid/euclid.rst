@@ -753,10 +753,33 @@ To download the products for a given EUCLID observation_id (observations) or til
   For big files the download may require a long time.
 
 
-2.3. Cutout search
+2.3. Accessing images through the command line, using the Simple Image Access Protocol (SIAP) and the cutout service
 ^^^^^^^^^^^^^^^^^^
 
-To download a cutout given its file path, instrument and obs_id, and the cutout region, the method downloads the fits file of the cutout and returns a list containing the local path where the cutout is saved:
+Euclid implements VO SIAP v2.0 to access the Euclid Observation Images. This service returns public images from:
+
+1. calibrated and Stacked NISP and VIS images;
+2. MER Mosaics from VIS and NISP.
+3. Level 1 (RAW) images for NISP and VIS
+
+The images can be obtained and downloaded through cutout service. The cutout returns the part of the original
+observation included within a given area in the sky provided by the user.
+
+In the following exeample, we search images around the center (89.0, -66.0) within a radius of 1 degree:
+
+.. Skipping authentication requiring examples
+.. doctest-skip::
+
+  >>> from astroquery.esa.euclid import Euclid
+  >>> table = Euclid.get_sia(ra=89.0, dec=-66.0, radius=1.0)
+  >>> print(table)
+
+The output contains, inside the TABLEDATA block, direct links to the fits files.
+
+To download a cutout given its file path (for exampled, provided by the sia service), instrument and obs_id, and the
+cutout region, the method downloads the fits file of the cutout and returns a list containing the local path where the
+cutout is saved:
+
 
 .. Skipping authentication requiring examples
 .. doctest-skip::
