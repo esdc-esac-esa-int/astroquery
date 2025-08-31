@@ -43,6 +43,8 @@ JOBS_ASYNC_DATA = Path(JOB_ASYNC_FILE_NAME).read_text()
 TABLE_FILE_NAME = get_pkg_data_filename(os.path.join("data", '1714556098855O-result.vot'), package=package)
 TABLE_DATA = Path(TABLE_FILE_NAME).read_text()
 
+TABLE_SIA_FILE_NAME = get_pkg_data_filename(os.path.join("data", 'sia_test.vot'), package=package)
+
 RADIUS = 1 * u.deg
 SKYCOORD = SkyCoord(ra=19 * u.deg, dec=20 * u.deg, frame="icrs")
 
@@ -111,6 +113,7 @@ def mock_querier_async():
     conn_handler = DummyConnHandler()
     tapplus = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     cutout_handler = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
+    sia_handler = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
     jobid = "12345"
 
     launch_response = DummyResponse(303)
@@ -139,7 +142,7 @@ def mock_querier_async():
     conn_handler.set_response("async/1479386030738O/results/result", results_response)
 
     return EuclidClass(tap_plus_conn_handler=conn_handler, datalink_handler=tapplus, cutout_handler=cutout_handler,
-                       show_server_messages=False)
+                       sia_handler=sia_handler, show_server_messages=False)
 
 
 @pytest.fixture(scope="module")
@@ -1414,6 +1417,57 @@ def test_load_async_job(mock_querier_async):
     assert job is not None
 
     assert job.jobid == jobid
+
+
+def test_get_sia(monkeypatch):
+    def load_data_monkeypatched(self, params_dict, output_file, http_method, verbose):
+        return Table.read(TABLE_SIA_FILE_NAME, format='votable')
+
+    monkeypatch.setattr(TapPlus, "load_data", load_data_monkeypatched)
+    euclid = EuclidClass(show_server_messages=False)
+
+    table = euclid.get_sia(ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+    assert isinstance(table, Table)
+    assert table['file_name'][
+               0] == 'EUC_MER_BGSUB-MOSAIC-VIS_TILE101007315-D84386_20230826T000856.482420Z_00.00.fits.gz'
+
+    table = euclid.get_sia(ra=89.0, dec=-66.0, radius=1.0, dsr_part1='CALBLOCK', dsr_part2='PV-023', dsr_part3=1,
+                           verbose=True)
+    assert isinstance(table, Table)
+    assert table['file_name'][
+               0] == 'EUC_MER_BGSUB-MOSAIC-VIS_TILE101007315-D84386_20230826T000856.482420Z_00.00.fits.gz'
+
+
+def test_get_sia_exceptions(monkeypatch):
+    def load_data_monkeypatched(self, params_dict, output_file, http_method, verbose):
+        return Table()
+
+    monkeypatch.setattr(TapPlus, "load_data", load_data_monkeypatched)
+    euclid = EuclidClass(show_server_messages=False)
+
+    error_message = "Invalid search tyype XX"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(search_type='XX', ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+
+    error_message = "Invalid instrument XX"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(instrument='XX', ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+
+    error_message = "For instrument ALL band must be None"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(instrument='ALL', band='XX', ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+
+    error_message = "Invalid band NIR_H for instrument VIS"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(instrument='VIS', band='NIR_H', ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+
+    error_message = "Invalid band VIS for instrument NISP"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(instrument='NISP', band='VIS', ra=89.0, dec=-66.0, radius=1.0, verbose=True)
+
+    error_message = "Invalid calibration 5"
+    with pytest.raises(ValueError, match=error_message):
+        euclid.get_sia(calibration=5, ra=89.0, dec=-66.0, radius=1.0, verbose=True)
 
 
 def remove_temp_dir():

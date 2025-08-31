@@ -11,12 +11,13 @@ import os
 import pprint
 import tarfile
 import zipfile
+from collections.abc import Iterable
+from datetime import datetime
+
 from astropy import units
 from astropy import units as u
 from astropy.coordinates import Angle
 from astropy.units import Quantity
-from collections.abc import Iterable
-from datetime import datetime
 from requests.exceptions import HTTPError
 
 from astroquery import log
@@ -51,13 +52,13 @@ class EuclidClass(TapPlus):
         environment : str, mandatory if no tap, data or cutout hosts is specified, default 'PDR'
             The Euclid Science Archive environment: 'PDR', 'IDR', 'OTF' and 'REG'
         tap_plus_conn_handler : tap connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         datalink_handler : dataliink connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         cutout_handler : cutout connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         sia_handler : siap connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         verbose : bool, optional, default 'True'
             flag to display information about the process
         show_server_messages : bool, optional, default 'True'
@@ -72,6 +73,9 @@ class EuclidClass(TapPlus):
         self.main_table = conf.ENVIRONMENTS[self.environment]['main_table']
         self.main_table_ra = conf.ENVIRONMENTS[self.environment]['main_table_ra_column']
         self.main_table_dec = conf.ENVIRONMENTS[self.environment]['main_table_dec_column']
+        self.dsr_1 = conf.ENVIRONMENTS[self.environment]['data_set_release_part1']
+        self.dsr_2 = conf.ENVIRONMENTS[self.environment]['data_set_release_part2']
+        self.dsr_3 = conf.ENVIRONMENTS[self.environment]['data_set_release_part3']
 
         url_server = conf.ENVIRONMENTS[environment]['url_server']
 
@@ -658,6 +662,8 @@ class EuclidClass(TapPlus):
             self.__eucliddata.login(user=tap_user, password=tap_password, verbose=verbose)
             log.info(f"Login to Euclid cutout service: {self.__euclidcutout._TapPlus__getconnhandler().get_host_url()}")
             self.__euclidcutout.login(user=tap_user, password=tap_password, verbose=verbose)
+            log.info(f"Login to Euclid sia service: {self.__euclidsia._TapPlus__getconnhandler().get_host_url()}")
+            self.__euclidsia.login(user=tap_user, password=tap_password, verbose=verbose)
         except HTTPError as err:
             log.error('Error logging in data or cutout services: %s' % (str(err)))
             log.error("Logging out from TAP server")
@@ -704,6 +710,14 @@ class EuclidClass(TapPlus):
             log.error("Logging out from TAP server")
             TapPlus.logout(self, verbose=verbose)
 
+        try:
+            log.info(f"Login to Euclid sia server: {self.__euclidsia._TapPlus__getconnhandler().get_host_url()}")
+            self.__euclidsia.login(user=tap_user, password=tap_password, verbose=verbose)
+        except HTTPError as err:
+            log.error('Error logging in sia server: %s' % (str(err)))
+            log.error("Logging out from TAP server")
+            TapPlus.logout(self, verbose=verbose)
+
     def logout(self, verbose=False):
         """
         Description
@@ -740,6 +754,12 @@ class EuclidClass(TapPlus):
             log.info("Euclid cutout server logout OK")
         except HTTPError as err:
             log.error('Error logging out cutout server: %s' % (str(err)))
+
+        try:
+            self.__euclidsia.logout(verbose=verbose)
+            log.info("Euclid sia server logout OK")
+        except HTTPError as err:
+            log.error('Error logging out sia server: %s' % (str(err)))
 
     @staticmethod
     def __get_quantity_input(value, msg):
@@ -834,6 +854,7 @@ class EuclidClass(TapPlus):
             # single file: return it
             files.append(output_file_full_path)
             return files
+        return None
 
     def get_observation_products(self, *, id=None, schema="sedm", product_type=None, product_subtype="STK",
                                  filter="VIS", output_file=None, verbose=False):
@@ -891,10 +912,10 @@ class EuclidClass(TapPlus):
             self.__eucliddata.load_data(params_dict=params_dict, output_file=output_file_full_path, verbose=verbose)
         except HTTPError as err:
             log.error(f"Cannot retrieve products for observation {id}. HTTP error: {err}")
-            return
+            return None
         except Exception as exx:
             log.error(f'Cannot retrieve products for observation {id}: {str(exx)}')
-            return
+            return None
 
         files = []
         self.__extract_file(output_file_full_path=output_file_full_path, output_dir=output_dir, files=files)
@@ -1026,7 +1047,7 @@ class EuclidClass(TapPlus):
             observation id for observations. It is not compatible with parameter tile_index.
 
             Searchable products by observation_id: 'dpdVisRawFrame', 'dpdNispRawFrame',
-            ,'DpdVisCalibratedQuadFrame','DpdVisCalibratedFrameCatalog', 'DpdVisStackedFrame',
+            'DpdVisCalibratedQuadFrame','DpdVisCalibratedFrameCatalog', 'DpdVisStackedFrame',
             'DpdVisStackedFrameCatalog',
             'DpdNirCalibratedFrame', 'DpdNirCalibratedFrameCatalog', 'DpdNirStackedFrameCatalog', 'DpdNirStackedFrame',
             'DpdMerSegmentationMap', 'dpdMerFinalCatalog',
@@ -1260,10 +1281,10 @@ class EuclidClass(TapPlus):
         except HTTPError as err:
             log.error(
                 f"Cannot retrieve products for file_name {file_name} or product_id {product_id}. HTTP error: {err}")
-            return
+            return None
         except Exception as exx:
             log.error(f"Cannot retrieve products for file_name {file_name} or product_id {product_id}: {str(exx)}")
-            return
+            return None
 
         files = []
         self.__extract_file(output_file_full_path=output_file_full_path, output_dir=output_dir, files=files)
@@ -1275,12 +1296,14 @@ class EuclidClass(TapPlus):
 
         return files
 
-    def get_sia(self, *, search_type='CIRCLE', ra, dec, radius, calibration=None, instrument='ALL', band=None,
-                collection='sedm', dsr_1=None, dsr_2=None, dsr_3=None, output_file=None, verbose=False):
+    def get_sia(self, *, search_type='CIRCLE', ra, dec, radius, calibration=2, instrument='ALL', band=None,
+                collection='sedm', dsr_part1=None, dsr_part2=None, dsr_part3=None, output_file=None, verbose=False):
         """
         Description
         -----------
-        Downloads a cutout given its file path, instrument and obs_id, and the cutout region
+
+        Access the Euclid Observation Images by VO SIAP v2.0. This service will return public images from Calibrated
+        and Stacked NISP and VIS images, MER Mosaics from VIS and NISP and Level 1 (RAW) images for NISP and VIS
 
         Parameters
         ----------
@@ -1292,8 +1315,9 @@ class EuclidClass(TapPlus):
             declination
         radius : float (degrees), str or astropy.coordinate, mandatory
             search radius of the cutout to generate
-        calibration: str, optional, default None
-            calibration level according to ObsCore VO standard: CALIB_ZERO, CALIB_ONE, CALIB_TWO or CALIB_THREE
+        calibration: int, optional, default 2
+            calibration level according to ObsCore VO standard: 0 (raw instrumental data), 1 (instrumental data in a
+            standard format), 2 (science ready data) or 3 (enhanced data products).
         instrument: str, mandatory, default ALL
             instrument name: ALL, VIS or NISP
         band: str, optional, default None
@@ -1301,13 +1325,13 @@ class EuclidClass(TapPlus):
             or NISP for instrument NISP
         collection : str, mandatory, default sedm
             the name of the data collection
-        dsr_1: str, optional, default None
+        dsr_part1: str, optional, default None
             the data set release part 1: for OTF environment, the activity code; for REG and IDR, the target environment
-        dsr_2: str, optional, default None
+        dsr_part2: str, optional, default None
             the data set release part 2: for OTF environment, the patch id (a positive integer); for REG and IDR,
             the activity code
-        dsr_3: str, optional, default None
-            the data set release part 3: for OTF, REG and IDR environment, the version (a integer greater than 1)
+        dsr_part3: str, optional, default None
+            the data set release part 3: for OTF, REG and IDR environment, the version (an integer greater than 1)
         output_file : string, optional, default None
             file where the results are saved.
         verbose : bool, optional, default 'False'
@@ -1315,11 +1339,11 @@ class EuclidClass(TapPlus):
 
         Returns
         -------
-        A table object
+        A table object or votable file
         """
 
         valid_search_types = {'CIRCLE', 'BOX'}
-        valid_calibrations = {'CALIB_ZERO', 'CALIB_ONE', 'CALIB_TWO', 'CALIB_THREE'}
+        valid_calibrations = {0:'CALIB_ZERO', 1:'CALIB_ONE', 2:'CALIB_TWO', 3:'CALIB_THREE'}
         valid_instruments = {'ALL', 'VIS', 'NISP'}
         valid_band_vis = {'VIS'}
         valid_band_nisp = {'NIR_H', 'NIR_J', 'NIR_Y', 'NISP'}
@@ -1334,7 +1358,7 @@ class EuclidClass(TapPlus):
             raise ValueError(f"Invalid instrument {instrument}")
 
         if instrument == 'ALL' and band is not None:
-            raise ValueError(f"Invalid band {band} for instrument {instrument}")
+            raise ValueError(f"For instrument {instrument} band must be None")
 
         if instrument == 'VIS' and band is not None and band not in valid_band_vis:
             raise ValueError(f"Invalid band {band} for instrument {instrument}")
@@ -1354,19 +1378,19 @@ class EuclidClass(TapPlus):
         params_dict['COLLECTION'] = collection
 
         if calibration is not None:
-            params_dict['CALIB'] = calibration
+            params_dict['CALIB'] = valid_calibrations[calibration]
 
         if instrument != 'ALL' and band is not None:
             params_dict['BAND'] = band
 
-        if dsr_1 is not None:
-            params_dict['DSP1'] = dsr_1
+        if dsr_part1 is not None:
+            params_dict['DSP1'] = dsr_part1
 
-        if dsr_2 is not None:
-            params_dict['DSP2'] = dsr_2
+        if dsr_part2 is not None:
+            params_dict['DSP2'] = dsr_part2
 
-        if dsr_3 is not None:
-            params_dict['DSP3'] = dsr_3
+        if dsr_part3 is not None:
+            params_dict['DSP3'] = dsr_part3
 
         return self.__euclidsia.load_data(params_dict=params_dict, output_file=output_file, http_method='GET',
                                           verbose=verbose)
@@ -1430,12 +1454,12 @@ class EuclidClass(TapPlus):
             log.error(
                 f"Cannot retrieve the product for file_path {file_path}, obsId {id}, and collection {instrument}. "
                 f"HTTP error: {err}")
-            return
+            return None
         except Exception as exx:
             log.error(
                 f"Cannot retrieve the product for file_path {file_path}, obsId {id}, and collection {instrument}: "
                 f"{str(exx)}")
-            return
+            return None
 
         files = []
         self.__extract_file(output_file_full_path=output_file_full_path, output_dir=output_dir, files=files)
@@ -1520,10 +1544,10 @@ class EuclidClass(TapPlus):
             self.__eucliddata.load_data(params_dict=params_dict, output_file=output_file_full_path, verbose=verbose)
         except HTTPError as err:
             log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}. HTTP error: {err}')
-            return
+            return None
         except Exception as exx:
             log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}: {str(exx)}')
-            return
+            return None
 
         files = []
         self.__extract_file(output_file_full_path=output_file_full_path, output_dir=output_dir, files=files)

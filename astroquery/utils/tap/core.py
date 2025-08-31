@@ -4,14 +4,9 @@
 TAP plus
 =============
 
-@author: Juan Carlos Segovia
-@contact: juan.carlos.segovia@sciops.esa.int
-
 European Space Astronomy Centre (ESAC)
 European Space Agency (ESA)
 
-Created on 30 jun. 2016
-Modified on 1 jun. 2021 by mhsarmiento
 """
 import getpass
 import os
@@ -72,7 +67,7 @@ class Tap:
         upload_context : str, optional, default None
             upload context
         table_edit_context : str, mandatory, default None
-            context for all actions to be performed over a existing table
+            context for all actions to be performed over an existing table
         data_context : str, optional, default None
             data context
         datalink_context : str, optional, default None
@@ -84,7 +79,7 @@ class Tap:
         default_protocol_is_https : bool, optional, default False
             Specifies whether the default protocol to be used is HTTPS
         connhandler : connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a
+            HTTP(s) connection handler (creator). If no handler is provided, a
             new one is created.
         use_names_over_ids : When `True` use the ``name`` attributes of columns as the
            names of columns in the `astropy.table.Table` instance.
@@ -524,7 +519,7 @@ class Tap:
         jsp = JobSaxParser(async_job=True)
         job = jsp.parseData(response)[0]
         job.connHandler = self.__connHandler
-        # load resulst
+        # load results
         if load_results:
             job.get_results()
         return job
@@ -621,7 +616,7 @@ class Tap:
             "UPLOAD": "" + str(uploadValue)}
         if maxrec is not None:
             args['MAXREC'] = maxrec
-        if autorun is True:
+        if autorun:
             args['PHASE'] = 'RUN'
         if name is not None:
             args['jobname'] = name
@@ -794,7 +789,7 @@ class TapPlus(Tap):
         upload_context : str, optional, default None
             upload context
         table_edit_context : str, optional, default None
-            context for all actions to be performed over a existing table
+            context for all actions to be performed over an existing table
         data_context : str, optional, default None
             data context
         datalink_context : str, optional, default None
@@ -806,7 +801,7 @@ class TapPlus(Tap):
         default_protocol_is_https : bool, optional, default False
             Specifies whether the default protocol to be used is HTTPS
         connhandler : connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a
+            HTTP(s) connection handler (creator). If no handler is provided, a
             new one is created.
         use_names_over_ids : When `True` use the ``name`` attributes of columns as the
            names of columns in the `astropy.table.Table` instance.
@@ -1169,7 +1164,7 @@ class TapPlus(Tap):
             if str(u.id) == user_id:
                 user_found_in_group = True
                 break
-        if user_found_in_group is True:
+        if user_found_in_group:
             raise ValueError(f"User id '{user_id}' found in group '{group_name}'")
         if self.is_valid_user(user_id=user_id, verbose=verbose) is False:
             raise ValueError(f"User id '{user_id}' not found.")
@@ -1210,7 +1205,7 @@ class TapPlus(Tap):
             if str(u.id) == user_id:
                 user_found_in_group = True
                 break
-        if user_found_in_group is False:
+        if not user_found_in_group:
             raise ValueError(f"User id '{user_id}' not found in group '{group_name}'")
         users = ""
         for u in group.users:
@@ -1687,7 +1682,7 @@ class TapPlus(Tap):
                         if c.name == value:
                             found = True
                             break
-                    if found is False:
+                    if not found:
                         raise ValueError(f"Column name introduced {value} was not found in the table")
                 index = index + 1
 
@@ -1725,7 +1720,7 @@ class TapPlus(Tap):
         for column in columns:
             found_in_changes = False
             for change in list_of_changes:
-                if (str(change[0]) == str(column.name)):
+                if str(change[0]) == str(column.name):
                     found_in_changes = True
                     break
 
