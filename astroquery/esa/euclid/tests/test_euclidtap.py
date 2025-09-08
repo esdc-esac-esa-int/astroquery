@@ -1009,7 +1009,7 @@ def test_get_spectrum(tmp_path_factory):
 
     tap = EuclidClass(tap_plus_conn_handler=conn_handler, datalink_handler=tap_plus, show_server_messages=False)
 
-    result = tap.get_spectrum(source_id='2417660845403252054', schema='sedm_sc8', output_file=None)
+    result = tap.get_spectrum(id='2417660845403252054', schema='sedm_sc8', output_file=None)
 
     assert result is not None
 
@@ -1023,7 +1023,7 @@ def test_get_spectrum(tmp_path_factory):
 
     fits_file = os.path.join(tmp_path_factory.mktemp("euclid_tmp"), 'my_fits_file.fits')
 
-    result = tap.get_spectrum(source_id='2417660845403252054', schema='sedm_sc8', output_file=fits_file)
+    result = tap.get_spectrum(id='2417660845403252054', schema='sedm_sc8', output_file=fits_file)
 
     assert result is not None
 
@@ -1043,7 +1043,7 @@ def test_get_spectrum_exceptions_2(mock_load_data, caplog):
 
     mock_load_data.side_effect = HTTPError("launch_job_async HTTPError")
 
-    tap.get_spectrum(source_id='2417660845403252054', schema='sedm_sc8', output_file=None)
+    tap.get_spectrum(id='2417660845403252054', schema='sedm_sc8', output_file=None)
 
     mssg = ("Cannot retrieve spectrum for source_id 2417660845403252054, schema sedm_sc8. HTTP error: launch_job_async "
             "HTTPError")
@@ -1051,7 +1051,7 @@ def test_get_spectrum_exceptions_2(mock_load_data, caplog):
 
     mock_load_data.side_effect = Exception("launch_job_async Exception")
 
-    tap.get_spectrum(source_id='2417660845403252054', schema='sedm_sc8', output_file=None)
+    tap.get_spectrum(id='2417660845403252054', schema='sedm_sc8', output_file=None)
 
     mssg = "Cannot retrieve spectrum for source_id 2417660845403252054, schema sedm_sc8: launch_job_async Exception"
     assert caplog.records[1].msg == mssg
@@ -1072,15 +1072,19 @@ def test_get_spectrum_exceptions():
     # if source_id is None or schema is None:
 
     with pytest.raises(ValueError, match="Missing required argument"):
-        tap.get_spectrum(source_id=None, schema='sedm_sc8', output_file=None)
+        tap.get_spectrum(id=None, schema='sedm_sc8', output_file=None)
 
     with pytest.raises(ValueError, match="Missing required argument"):
-        tap.get_spectrum(source_id='2417660845403252054', schema=None, output_file=None)
+        tap.get_spectrum(id='2417660845403252054', schema=None, output_file=None)
 
     with pytest.raises(ValueError, match=(
             "Invalid argument value for 'retrieval_type'. Found hola, expected: 'ALL' or any of \\['SPECTRA_BGS', "
             "'SPECTRA_RGS'\\]")):
-        tap.get_spectrum(retrieval_type='hola', source_id='2417660845403252054', schema='schema', output_file=None)
+        tap.get_spectrum(retrieval_type='hola', id='2417660845403252054', schema='schema', output_file=None)
+
+    linking_parameter = 'NOT_VALID'
+    with pytest.raises(ValueError, match=f"^Invalid linking_parameter value '{linking_parameter}' .*"):
+        tap.get_spectrum(retrieval_type='ALL', id='2417660845403252054', schema='schema', linking_parameter=linking_parameter)
 
 
 def test_get_scientific_data_product_list():

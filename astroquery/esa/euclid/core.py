@@ -42,6 +42,7 @@ class EuclidClass(TapPlus):
     ROW_LIMIT = conf.ROW_LIMIT
 
     __VALID_DATALINK_RETRIEVAL_TYPES = conf.VALID_DATALINK_RETRIEVAL_TYPES
+    __VALID_LINKING_PARAMETERS = conf.VALID_LINKING_PARAMETERS
 
     def __init__(self, *, environment='PDR', tap_plus_conn_handler=None, datalink_handler=None, cutout_handler=None,
                  verbose=False, show_server_messages=True):
@@ -1329,7 +1330,7 @@ class EuclidClass(TapPlus):
 
         return files
 
-    def get_spectrum(self, *, source_id, schema='sedm', retrieval_type="ALL", output_file=None, verbose=False):
+    def get_spectrum(self, *, id, schema='sedm', retrieval_type="ALL", linking_parameter='SOURCE_ID', output_file=None, verbose=False):
         """
         Description
         -----------
@@ -1343,13 +1344,15 @@ class EuclidClass(TapPlus):
 
         Parameters
         ----------
-        source_id : str, mandatory, default None
-            source id for the spectrum
+        id : str, mandatory, default None
+            it represents the source id, patch id or sourcepatch_id for the spectrum
         schema : str, mandatory, default 'sedm'
             the data release
         retrieval_type : str, optional, default 'ALL' to retrieve all data from the list of sources
             retrieval type identifier. Possible values are: 'SPECTRA_BGS' for the blue spectrum and 'SPECTRA_RGS' for
             the red one.
+        linking_parameter : str, optional, default SOURCE_ID, valid values: SOURCE_ID, SOURCEPATCH_ID or PATCH_ID
+            By default, all the identifiers are considered as source_id
         output_file : str, optional
             output file name. If no value is provided, a temporary one is created with the name
             "<working directory>/temp_<%Y%m%d_%H%M%S>/<source_id>.fits"
@@ -1364,7 +1367,7 @@ class EuclidClass(TapPlus):
 
         """
 
-        if source_id is None or schema is None:
+        if id is None or schema is None:
             raise ValueError(self.__ERROR_MSG_REQUESTED_GENERIC)
 
         rt = str(retrieval_type).upper()
@@ -1374,14 +1377,22 @@ class EuclidClass(TapPlus):
 
         params_dict = {}
 
-        id_value = """{schema} {source_id}""".format(**{'schema': schema, 'source_id': source_id})
+        id_value = """{schema} {source_id}""".format(**{'schema': schema, 'source_id': id})
         params_dict['ID'] = id_value
         params_dict['SCHEMA'] = schema
         params_dict['RETRIEVAL_TYPE'] = str(retrieval_type)
         params_dict['USE_ZIP_ALWAYS'] = 'true'
         params_dict['TAPCLIENT'] = 'ASTROQUERY'
 
-        fits_file = source_id + '.fits.zip'
+        if linking_parameter not in self.__VALID_LINKING_PARAMETERS:
+            raise ValueError(
+                f"Invalid linking_parameter value '{linking_parameter}' (Valid values: "
+                f"{', '.join(self.__VALID_LINKING_PARAMETERS)})")
+        else:
+            if linking_parameter != 'SOURCE_ID':
+                params_dict['LINKING_PARAMETER'] = linking_parameter
+
+        fits_file = id + '.fits.zip'
 
         if output_file is not None:
             if not output_file.endswith('.zip'):
@@ -1401,10 +1412,10 @@ class EuclidClass(TapPlus):
         try:
             self.__eucliddata.load_data(params_dict=params_dict, output_file=output_file_full_path, verbose=verbose)
         except HTTPError as err:
-            log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}. HTTP error: {err}')
+            log.error(f'Cannot retrieve spectrum for source_id {id}, schema {schema}. HTTP error: {err}')
             return
         except Exception as exx:
-            log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}: {str(exx)}')
+            log.error(f'Cannot retrieve spectrum for source_id {id}, schema {schema}: {str(exx)}')
             return
 
         files = []
