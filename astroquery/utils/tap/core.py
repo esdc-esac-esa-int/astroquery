@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 
 import requests
 from astropy.table.table import Table
+from requests import HTTPError
 
 from astroquery import log
 from astroquery.utils.tap import taputils
@@ -37,6 +38,8 @@ from astroquery.utils.tap.xmlparser.tableSaxParser import TableSaxParser
 __all__ = ['Tap', 'TapPlus']
 
 VERSION = "20200428.1"
+
+TOP_IN_QUERY = 2000
 
 
 class Tap:
@@ -287,11 +290,9 @@ class Tap:
         A Job object
         """
         output_file_updated = taputils.get_suitable_output_file_name_for_current_output_format(
-            output_file,
-            output_format,
-            format_with_results_compressed=format_with_results_compressed)
+            output_file, output_format, format_with_results_compressed=format_with_results_compressed)
 
-        query = taputils.set_top_in_query(query, 2000)
+        query = taputils.set_top_in_query(query, TOP_IN_QUERY)
         if verbose:
             print(f"Launched query: '{query}'")
         if upload_resource is not None:
@@ -330,12 +331,8 @@ class Tap:
                   use_names_over_ids=self.use_names_over_ids)
         is_error = self.__connHandler.check_launch_response_status(response, verbose, 200, raise_exception=False)
         headers = response.getheaders()
-        suitableOutputFile = taputils.get_suitable_output_file(self.__connHandler,
-                                                               False,
-                                                               output_file_updated,
-                                                               headers,
-                                                               is_error,
-                                                               output_format)
+        suitableOutputFile = taputils.get_suitable_output_file(self.__connHandler, False, output_file_updated, headers,
+                                                               is_error, output_format)
 
         job.outputFile = suitableOutputFile
         job.outputFileUser = output_file
@@ -412,9 +409,7 @@ class Tap:
         """
 
         output_file_updated = taputils.get_suitable_output_file_name_for_current_output_format(
-            output_file,
-            output_format,
-            format_with_results_compressed=format_with_results_compressed)
+            output_file, output_format, format_with_results_compressed=format_with_results_compressed)
 
         if verbose:
             print(f"Launched query: '{query}'")
@@ -468,17 +463,22 @@ class Tap:
                 print(f"job {jobid}, at: {location}")
             job.jobid = jobid
             job.remoteLocation = location
-            if autorun is True:
+            if autorun:
                 job.set_phase('EXECUTING')
                 if not background:
                     if verbose:
                         print("Retrieving async. results...")
                     # saveResults or getResults will block (not background)
-                    if dump_to_file:
-                        job.save_results(verbose=verbose)
-                    else:
-                        job.get_results()
-                        log.info("Query finished.")
+                    try:
+                        if dump_to_file:
+                            job.save_results(verbose=verbose)
+                        else:
+                            job.get_results()
+                            log.info("Query finished.")
+                    except HTTPError as err:
+                        log.error(f'Query failed: {query}: HTTP error: {err}')
+                    except Exception as exx:
+                        log.error(f'Query failed: {query}, {str(exx)}')
         return job
 
     def load_async_job(self, *, jobid=None, name=None, verbose=False, load_results=True):
@@ -525,7 +525,7 @@ class Tap:
         job = jsp.parseData(response)[0]
         job.connHandler = self.__connHandler
         # load resulst
-        if load_results:
+        if not (job._phase == 'ERROR' or job._phase == 'ABORTED') and load_results:
             job.get_results()
         return job
 

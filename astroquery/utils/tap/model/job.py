@@ -284,19 +284,17 @@ class Job:
                 if verbose:
                     print(response.status, response.reason)
                     print(response.getheaders())
-                isError = self.connHandler. \
-                    check_launch_response_status(response,
-                                                 verbose,
-                                                 200)
-                if isError:
+                is_error = self.connHandler.check_launch_response_status(response, verbose, 200)
+                if is_error:
                     print(response.reason)
+                    self.failed = True
                     raise Exception(response.reason)
                 if self.outputFileUser is None:
                     # User did not provide an output
                     # The output is a temporary one, analyse header
-                    self.outputFile = taputils.get_suitable_output_file(
-                        self.connHandler, True, None, response.getheaders(),
-                        False, self.parameters['format'])
+                    self.outputFile = taputils.get_suitable_output_file(self.connHandler, True, None,
+                                                                        response.getheaders(), False,
+                                                                        self.parameters['format'])
                     output = self.outputFile
                 else:
                     output = self.outputFileUser
@@ -347,33 +345,30 @@ class Job:
             print(resultsResponse.status, resultsResponse.reason)
             print(resultsResponse.getheaders())
 
-        resultsResponse = self.__handle_redirect_if_required(resultsResponse,
-                                                             verbose=debug)
-        isError = self.connHandler. \
-            check_launch_response_status(resultsResponse,
-                                         debug,
-                                         200)
+        resultsResponse = self.__handle_redirect_if_required(resultsResponse, verbose=debug)
+        isError = self.connHandler.check_launch_response_status(resultsResponse, debug, 200)
         self._phase = phase
         if phase == 'ERROR':
+            self.failed = True
             errMsg = self.get_error(verbose=debug)
             raise SystemError(errMsg)
         else:
             if isError:
+                self.failed = True
                 errMsg = taputils.get_http_response_error(resultsResponse)
                 print(resultsResponse.status, errMsg)
                 raise requests.exceptions.HTTPError(errMsg)
             else:
                 outputFormat = self.parameters['format']
-                results = utils.read_http_response(resultsResponse,
-                                                   outputFormat, use_names_over_ids=self.use_names_over_ids)
+                results = utils.read_http_response(resultsResponse, outputFormat,
+                                                   use_names_over_ids=self.use_names_over_ids)
                 self.set_results(results)
 
     def __handle_redirect_if_required(self, resultsResponse, *, verbose=False):
         # Thanks @emeraldTree24
         numberOfRedirects = 0
-        while ((resultsResponse.status == 303 or resultsResponse.status == 302) and numberOfRedirects < 20):
-            joblocation = self.connHandler. \
-                find_header(resultsResponse.getheaders(), "location")
+        while (resultsResponse.status == 303 or resultsResponse.status == 302) and numberOfRedirects < 20:
+            joblocation = self.connHandler.find_header(resultsResponse.getheaders(), "location")
             if verbose:
                 print(f"Redirecting to: {joblocation}")
             resultsResponse = self.connHandler.execute_tapget(joblocation)
@@ -408,8 +403,7 @@ class Job:
         else:
             if resultsResponse.status == 303 or resultsResponse.status == 302:
                 # get location
-                location = self.connHandler. \
-                    find_header(resultsResponse.getheaders(), "location")
+                location = self.connHandler.find_header(resultsResponse.getheaders(), "location")
                 if location is None:
                     raise requests.exceptions.HTTPError("No location found after redirection was received (303)")
                 if verbose:
@@ -417,12 +411,9 @@ class Job:
                 # load
                 relativeLocation = self.__extract_relative_location(location, self.jobid)
                 relativeLocationSubContext = f"async/{self.jobid}/{relativeLocation}"
-                response = self.connHandler. \
-                    execute_tapget(relativeLocationSubContext)
-                response = self.__handle_redirect_if_required(response,
-                                                              verbose=verbose)
-                isError = self.connHandler. \
-                    check_launch_response_status(response, verbose, 200)
+                response = self.connHandler.execute_tapget(relativeLocationSubContext)
+                response = self.__handle_redirect_if_required(response, verbose=verbose)
+                isError = self.connHandler.check_launch_response_status(response, verbose, 200)
                 if isError:
                     errMsg = taputils.get_http_response_error(resultsResponse)
                     print(resultsResponse.status, errMsg)
@@ -436,7 +427,7 @@ class Job:
         """Returns whether the job is finished (ERROR, ABORTED, COMPLETED) or not
 
         """
-        if (self._phase == 'ERROR' or self._phase == 'ABORTED' or self._phase == 'COMPLETED'):
+        if self._phase == 'ERROR' or self._phase == 'ABORTED' or self._phase == 'COMPLETED':
             return True
         else:
             return False

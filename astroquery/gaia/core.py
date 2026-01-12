@@ -1103,20 +1103,25 @@ class GaiaClass(TapPlus):
         -------
         A Job object
         """
+        try:
+            return TapPlus.launch_job(self, query=query, name=name,
+                                      output_file=output_file,
+                                      output_format=output_format,
+                                      verbose=verbose,
+                                      dump_to_file=dump_to_file,
+                                      upload_resource=upload_resource,
+                                      upload_table_name=upload_table_name,
+                                      format_with_results_compressed=('votable_gzip',))
 
-        return TapPlus.launch_job(self, query=query, name=name,
-                                  output_file=output_file,
-                                  output_format=output_format,
-                                  verbose=verbose,
-                                  dump_to_file=dump_to_file,
-                                  upload_resource=upload_resource,
-                                  upload_table_name=upload_table_name,
-                                  format_with_results_compressed=('votable_gzip',))
+        except HTTPError as err:
+            log.error(f'Query failed: {query}: HTTP error: {err}')
 
-    def launch_job_async(self, query, *, name=None, output_file=None,
-                         output_format="votable_gzip", verbose=False,
-                         dump_to_file=False, background=False,
-                         upload_resource=None, upload_table_name=None,
+        except Exception as exx:
+            log.error(f'Query failed: {query}, {str(exx)}')
+
+
+    def launch_job_async(self, query, *, name=None, output_file=None, output_format="votable_gzip", verbose=False,
+                         dump_to_file=False, background=False, upload_resource=None, upload_table_name=None,
                          autorun=True):
         """Launches an asynchronous job
 

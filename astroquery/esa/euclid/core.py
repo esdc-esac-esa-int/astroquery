@@ -295,20 +295,16 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
-        try:
-            return super().launch_job(query=query, name=name,
-                                      output_file=output_file,
-                                      output_format=output_format,
-                                      verbose=verbose,
-                                      dump_to_file=dump_to_file,
-                                      upload_resource=upload_resource,
-                                      upload_table_name=upload_table_name,
-                                      format_with_results_compressed=('votable_gzip',))
 
-        except HTTPError as err:
-            log.error(f'Query failed: {query}: HTTP error: {err}')
-        except Exception as exx:
-            log.error(f'Query failed: {query}, {str(exx)}')
+        return super().launch_job(query=query, name=name,
+                                  output_file=output_file,
+                                  output_format=output_format,
+                                  verbose=verbose,
+                                  dump_to_file=dump_to_file,
+                                  upload_resource=upload_resource,
+                                  upload_table_name=upload_table_name,
+                                  format_with_results_compressed=('votable_gzip',))
+
 
     def launch_job_async(self, query, *, name=None, dump_to_file=False, output_file=None, output_format="csv",
                          verbose=False, background=False, upload_resource=None, upload_table_name=None, autorun=True):
@@ -345,23 +341,19 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
-        try:
-            return super().launch_job_async(query=query,
-                                            name=name,
-                                            output_file=output_file,
-                                            output_format=output_format,
-                                            verbose=verbose,
-                                            dump_to_file=dump_to_file,
-                                            background=background,
-                                            upload_resource=upload_resource,
-                                            upload_table_name=upload_table_name,
-                                            autorun=autorun,
-                                            format_with_results_compressed=('votable_gzip',))
 
-        except HTTPError as err:
-            log.error(f'Query failed: {query}: HTTP error: {err}')
-        except Exception as exx:
-            log.error(f'Query failed: {query}, {str(exx)}')
+        return super().launch_job_async(query=query,
+                                        name=name,
+                                        output_file=output_file,
+                                        output_format=output_format,
+                                        verbose=verbose,
+                                        dump_to_file=dump_to_file,
+                                        background=background,
+                                        upload_resource=upload_resource,
+                                        upload_table_name=upload_table_name,
+                                        autorun=autorun,
+                                        format_with_results_compressed=('votable_gzip',))
+
 
     def query_object(self, coordinate, *, radius=None, width=None, height=None,
                      async_job=False, verbose=False, columns=None):
