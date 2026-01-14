@@ -51,11 +51,11 @@ class EuclidClass(TapPlus):
         environment : str, mandatory if no tap, data or cutout hosts is specified, default 'PDR'
             The Euclid Science Archive environment: 'PDR', 'IDR', 'OTF' and 'REG'
         tap_plus_conn_handler : tap connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
-        datalink_handler : dataliink connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
+        datalink_handler : datalink connection handler object, optional, default None
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         cutout_handler : cutout connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a new one is created.
+            HTTP(s) connection handler (creator). If no handler is provided, a new one is created.
         verbose : bool, optional, default 'True'
             flag to display information about the process
         show_server_messages : bool, optional, default 'True'
@@ -295,16 +295,20 @@ class EuclidClass(TapPlus):
         -------
         A Job object
         """
+        try:
+            return super().launch_job(query=query, name=name,
+                                      output_file=output_file,
+                                      output_format=output_format,
+                                      verbose=verbose,
+                                      dump_to_file=dump_to_file,
+                                      upload_resource=upload_resource,
+                                      upload_table_name=upload_table_name,
+                                      format_with_results_compressed=('votable_gzip',))
 
-        return super().launch_job(query=query, name=name,
-                                  output_file=output_file,
-                                  output_format=output_format,
-                                  verbose=verbose,
-                                  dump_to_file=dump_to_file,
-                                  upload_resource=upload_resource,
-                                  upload_table_name=upload_table_name,
-                                  format_with_results_compressed=('votable_gzip',))
-
+        except HTTPError as err:
+            log.error(f'Query failed: {query}: HTTP error: {err}')
+        except Exception as exx:
+            log.error(f'Query failed: {query}, {str(exx)}')
 
     def launch_job_async(self, query, *, name=None, dump_to_file=False, output_file=None, output_format="csv",
                          verbose=False, background=False, upload_resource=None, upload_table_name=None, autorun=True):
@@ -352,8 +356,7 @@ class EuclidClass(TapPlus):
                                         upload_resource=upload_resource,
                                         upload_table_name=upload_table_name,
                                         autorun=autorun,
-                                        format_with_results_compressed=('votable_gzip',))
-
+                                        format_with_results_compressed=('votable_gzip',), raise_exception=False)
 
     def query_object(self, coordinate, *, radius=None, width=None, height=None,
                      async_job=False, verbose=False, columns=None):
@@ -403,7 +406,8 @@ class EuclidClass(TapPlus):
                 ORDER BY dist ASC")
 
             if async_job:
-                job = super().launch_job_async(query, verbose=verbose, format_with_results_compressed=('votable_gzip',))
+                job = super().launch_job_async(query, verbose=verbose, format_with_results_compressed=('votable_gzip',),
+                                               raise_exception=False)
             else:
                 job = super().launch_job(query, verbose=verbose, format_with_results_compressed=('votable_gzip',))
         return job.get_results()
@@ -478,7 +482,7 @@ class EuclidClass(TapPlus):
 
         if async_job:
             job = super().launch_job_async(query=query, verbose=verbose,
-                                           format_with_results_compressed=('votable_gzip',))
+                                           format_with_results_compressed=('votable_gzip',), raise_exception=False)
         else:
             job = super().launch_job(query=query, verbose=verbose, format_with_results_compressed=('votable_gzip',))
 
@@ -577,7 +581,8 @@ class EuclidClass(TapPlus):
                                            output_format=output_format,
                                            verbose=verbose,
                                            dump_to_file=dump_to_file,
-                                           background=background, format_with_results_compressed=('votable_gzip',))
+                                           background=background, format_with_results_compressed=('votable_gzip',),
+                                           raise_exception=False)
         else:
             job = super().launch_job(query=query,
                                      output_file=output_file,

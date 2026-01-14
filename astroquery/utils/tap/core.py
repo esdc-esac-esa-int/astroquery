@@ -75,7 +75,7 @@ class Tap:
         upload_context : str, optional, default None
             upload context
         table_edit_context : str, mandatory, default None
-            context for all actions to be performed over a existing table
+            context for all actions to be performed over an existing table
         data_context : str, optional, default None
             data context
         datalink_context : str, optional, default None
@@ -87,7 +87,7 @@ class Tap:
         default_protocol_is_https : bool, optional, default False
             Specifies whether the default protocol to be used is HTTPS
         connhandler : connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a
+            HTTP(s) connection handler (creator). If no handler is provided, a
             new one is created.
         use_names_over_ids : When `True` use the ``name`` attributes of columns as the
            names of columns in the `astropy.table.Table` instance.
@@ -369,7 +369,8 @@ class Tap:
                          output_format="votable", verbose=False,
                          dump_to_file=False, background=False,
                          upload_resource=None, upload_table_name=None,
-                         autorun=True, maxrec=None, format_with_results_compressed=('votable', 'fits', 'ecsv')):
+                         autorun=True, maxrec=None, format_with_results_compressed=('votable', 'fits', 'ecsv'),
+                         raise_exception=True):
         """Launches an asynchronous job
 
         Parameters
@@ -402,7 +403,8 @@ class Tap:
             maximum number of rows to return (TAP ``MAXREC`` parameter)
         format_with_results_compressed: tuple, zipped result formats
             list of result formats that are returned as zipped files
-
+        raise_exception : boolean, optional, default True
+            if 'True' the exception from job.save_results or job.get_results is raised
         Returns
         -------
         A Job object
@@ -416,33 +418,18 @@ class Tap:
         if upload_resource is not None:
             if upload_table_name is None:
                 raise ValueError("Table name is required when a resource is uploaded")
-            response = self.__launchJobMultipart(query,
-                                                 upload_resource,
-                                                 upload_table_name,
-                                                 output_format,
-                                                 "async",
-                                                 verbose,
-                                                 name=name,
-                                                 autorun=autorun,
-                                                 maxrec=maxrec)
+            response = self.__launchJobMultipart(query, upload_resource, upload_table_name, output_format, "async",
+                                                 verbose, name=name, autorun=autorun, maxrec=maxrec)
         else:
-            response = self.__launchJob(query,
-                                        output_format,
-                                        "async",
-                                        verbose,
-                                        name=name,
-                                        autorun=autorun,
+            response = self.__launchJob(query, output_format, "async", verbose, name=name, autorun=autorun,
                                         maxrec=maxrec)
+
         isError = self.__connHandler.check_launch_response_status(response, verbose, 303, raise_exception=False)
         job = Job(async_job=True, query=query, connhandler=self.__connHandler,
                   use_names_over_ids=self.use_names_over_ids)
         headers = response.getheaders()
-        suitableOutputFile = taputils.get_suitable_output_file(self.__connHandler,
-                                                               True,
-                                                               output_file_updated,
-                                                               headers,
-                                                               isError,
-                                                               output_format)
+        suitableOutputFile = taputils.get_suitable_output_file(self.__connHandler, True, output_file_updated, headers,
+                                                               isError, output_format)
         job.outputFile = suitableOutputFile
         job.outputFileUser = output_file
         job.set_response_status(response.status, response.reason)
@@ -476,9 +463,15 @@ class Tap:
                             job.get_results()
                             log.info("Query finished.")
                     except HTTPError as err:
-                        log.error(f'Query failed: {query}: HTTP error: {err}')
+                        if raise_exception:
+                            raise err
+                        else:
+                            log.error(f'Query failed: {query}: HTTP error: {err}')
                     except Exception as exx:
-                        log.error(f'Query failed: {query}, {str(exx)}')
+                        if raise_exception:
+                            raise exx
+                        else:
+                            log.error(f'Query failed: {query}, {str(exx)}')
         return job
 
     def load_async_job(self, *, jobid=None, name=None, verbose=False, load_results=True):
@@ -524,7 +517,7 @@ class Tap:
         jsp = JobSaxParser(async_job=True)
         job = jsp.parseData(response)[0]
         job.connHandler = self.__connHandler
-        # load resulst
+        # load result
         if not (job._phase == 'ERROR' or job._phase == 'ABORTED') and load_results:
             job.get_results()
         return job
@@ -621,7 +614,7 @@ class Tap:
             "UPLOAD": "" + str(uploadValue)}
         if maxrec is not None:
             args['MAXREC'] = maxrec
-        if autorun is True:
+        if autorun:
             args['PHASE'] = 'RUN'
         if name is not None:
             args['jobname'] = name
@@ -656,7 +649,7 @@ class Tap:
             "QUERY": str(query)}
         if maxrec is not None:
             args['MAXREC'] = maxrec
-        if autorun is True:
+        if autorun:
             args['PHASE'] = 'RUN'
         if name is not None:
             args['jobname'] = name
@@ -794,7 +787,7 @@ class TapPlus(Tap):
         upload_context : str, optional, default None
             upload context
         table_edit_context : str, optional, default None
-            context for all actions to be performed over a existing table
+            context for all actions to be performed over an existing table
         data_context : str, optional, default None
             data context
         datalink_context : str, optional, default None
@@ -806,7 +799,7 @@ class TapPlus(Tap):
         default_protocol_is_https : bool, optional, default False
             Specifies whether the default protocol to be used is HTTPS
         connhandler : connection handler object, optional, default None
-            HTTP(s) connection hander (creator). If no handler is provided, a
+            HTTP(s) connection handler (creator). If no handler is provided, a
             new one is created.
         use_names_over_ids : When `True` use the ``name`` attributes of columns as the
            names of columns in the `astropy.table.Table` instance.
@@ -1156,7 +1149,7 @@ class TapPlus(Tap):
             if str(u.id) == user_id:
                 user_found_in_group = True
                 break
-        if user_found_in_group is True:
+        if user_found_in_group:
             raise ValueError(f"User id '{user_id}' found in group '{group_name}'")
         if self.is_valid_user(user_id=user_id, verbose=verbose) is False:
             raise ValueError(f"User id '{user_id}' not found.")
@@ -1197,7 +1190,7 @@ class TapPlus(Tap):
             if str(u.id) == user_id:
                 user_found_in_group = True
                 break
-        if user_found_in_group is False:
+        if not user_found_in_group:
             raise ValueError(f"User id '{user_id}' not found in group '{group_name}'")
         users = ""
         for u in group.users:
@@ -1545,7 +1538,7 @@ class TapPlus(Tap):
                 raise ValueError(f"Invalid table name {table_name}: expected format user_<user_name>.<table_name>")
             full_qualified_table = table_name
 
-        if force_removal is True:
+        if force_removal:
             args = {
                 "TABLE_NAME": str(full_qualified_table),
                 "DELETE": "TRUE",
@@ -1683,7 +1676,7 @@ class TapPlus(Tap):
                         if c.name == value:
                             found = True
                             break
-                    if found is False:
+                    if not found:
                         raise ValueError(f"Column name introduced {value} was not found in the table")
                 index = index + 1
 
@@ -1721,7 +1714,7 @@ class TapPlus(Tap):
         for column in columns:
             found_in_changes = False
             for change in list_of_changes:
-                if (str(change[0]) == str(column.name)):
+                if str(change[0]) == str(column.name):
                     found_in_changes = True
                     break
 
@@ -1870,9 +1863,9 @@ class TapPlus(Tap):
     def login(self, *, user=None, password=None, credentials_file=None, verbose=False):
         """Performs a login.
         User and password arguments can be used or a file that contains
-        user name and password
-        (2 lines: one for user name and the following one for the password).
-        If no arguments are provided, a prompt asking for user name and
+        username and password
+        (2 lines: one for username and the following one for the password).
+        If no arguments are provided, a prompt asking for username and
         password will appear.
 
         Parameters

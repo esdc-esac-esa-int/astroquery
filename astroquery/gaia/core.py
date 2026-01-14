@@ -1169,7 +1169,7 @@ class GaiaClass(TapPlus):
                                         upload_resource=upload_resource,
                                         upload_table_name=upload_table_name,
                                         autorun=autorun,
-                                        format_with_results_compressed=('votable_gzip',))
+                                        format_with_results_compressed=('votable_gzip',), raise_exception=False)
 
     def get_status_messages(self):
         """Retrieve the messages to inform users about

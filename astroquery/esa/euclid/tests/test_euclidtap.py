@@ -377,18 +377,18 @@ def test_launch_sync_job_exception(mock_launch_job, caplog):
     launch_response.set_data(method="POST", body=JOB_DATA)
     conn_handler.set_default_response(launch_response)
 
-    tap = EuclidClass(tap_plus_conn_handler=conn_handler, datalink_handler=tap_plus, show_server_messages=False)
+    euclid = EuclidClass(tap_plus_conn_handler=conn_handler, datalink_handler=tap_plus, show_server_messages=False)
 
     mock_launch_job.side_effect = HTTPError("launch_job HTTPError")
 
-    tap.launch_job(query, output_format="votable")
+    euclid.launch_job(query, output_format="votable")
 
     mssg = "Query failed: select alpha, delta, source_id, table1_oid from caca: HTTP error: launch_job HTTPError"
     assert caplog.records[0].msg == mssg
 
     mock_launch_job.side_effect = Exception("launch_job Exception")
 
-    tap.launch_job(query, output_format="votable")
+    euclid.launch_job(query, output_format="votable")
 
     mssg = "Query failed: select alpha, delta, source_id, table1_oid from caca, launch_job Exception"
     assert caplog.records[1].msg == mssg
@@ -463,29 +463,6 @@ def test_launch_async_job():
 
     assert type(results) is Table
     assert 3 == len(results), len(results)
-
-
-@patch.object(TapPlus, 'launch_job_async')
-def test_launch_async_job_exception(mock_launch_job_async, caplog):
-    conn_handler = DummyConnHandler()
-    tap_plus = TapPlus(url="http://test:1111/tap", connhandler=conn_handler)
-
-    tap = EuclidClass(tap_plus_conn_handler=conn_handler, datalink_handler=tap_plus, show_server_messages=False)
-    query = "select alpha, delta, source_id, table1_oid from caca"
-
-    mock_launch_job_async.side_effect = HTTPError("launch_job_async HTTPError")
-
-    tap.launch_job_async(query, output_format="votable")
-
-    mssg = "Query failed: select alpha, delta, source_id, table1_oid from caca: HTTP error: launch_job_async HTTPError"
-    assert caplog.records[0].msg == mssg
-
-    mock_launch_job_async.side_effect = Exception("launch_job_async Exception")
-
-    tap.launch_job_async(query, output_format="votable")
-
-    mssg = "Query failed: select alpha, delta, source_id, table1_oid from caca, launch_job_async Exception"
-    assert caplog.records[1].msg == mssg
 
 
 def test_list_async_jobs():
