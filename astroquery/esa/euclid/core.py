@@ -9,14 +9,20 @@ European Space Agency (ESA)
 import binascii
 import os
 import pprint
+import re
+import shutil
+import stat
 import tarfile
 import zipfile
 from collections.abc import Iterable
 from datetime import datetime
+from datetime import timezone
 
 from astropy import units
 from astropy import units as u
 from astropy.coordinates import Angle
+from astropy.io import fits
+from astropy.table import Table
 from astropy.units import Quantity
 from requests.exceptions import HTTPError
 
@@ -42,6 +48,8 @@ class EuclidClass(TapPlus):
     ROW_LIMIT = conf.ROW_LIMIT
 
     __VALID_DATALINK_RETRIEVAL_TYPES = conf.VALID_DATALINK_RETRIEVAL_TYPES
+
+    __regex_designation = re.compile(r"\s*(\S+)\s(-?\d+)\s*", flags=re.MULTILINE | re.UNICODE)
 
     def __init__(self, *, environment='PDR', tap_plus_conn_handler=None, datalink_handler=None, cutout_handler=None,
                  verbose=False, show_server_messages=True):
@@ -1453,7 +1461,7 @@ class EuclidClass(TapPlus):
 
         return files
 
-    def get_spectrum(self, *, source_id, schema='sedm', retrieval_type="ALL", output_file=None, verbose=False):
+    def get_spectrum(self, *, ids, schema='sedm', retrieval_type="ALL", output_file=None, verbose=False):
         """
         Downloads a spectrum with datalink.
 
@@ -1465,16 +1473,16 @@ class EuclidClass(TapPlus):
 
         Parameters
         ----------
-        source_id : str, mandatory, default None
-            source id for the spectrum
+        ids :  str, int, str list or int list, mandatory
+            The identifier (<source_id>) or designation (<data-release>+blank+<source_id>)
         schema : str, mandatory, default 'sedm'
             the data release
         retrieval_type : str, optional, default 'ALL' to retrieve all data from the list of sources
             retrieval type identifier. Possible values are: 'SPECTRA_BGS' for the blue spectrum and 'SPECTRA_RGS' for
             the red one.
         output_file : str, optional
-            output file name. If no value is provided, a temporary one is created with the name
-            "<working directory>/temp_<%Y%m%d_%H%M%S>/<source_id>.fits"
+            output file name where the zipped files as saved. If no value is provided, a temporary one is created with
+            the name "<working directory>/temp_<%Y%m%d_%H%M%S>/download_spectra_<%Y%m%d_%H%M%S>.zip"
         verbose : bool, optional, default 'False'
             flag to display information about the process
 
@@ -1486,7 +1494,10 @@ class EuclidClass(TapPlus):
 
         """
 
-        if source_id is None or schema is None:
+        if ids is None:
+            raise ValueError(self.__ERROR_MSG_REQUESTED_GENERIC)
+
+        if isinstance(ids, (list, tuple)) and not ids:
             raise ValueError(self.__ERROR_MSG_REQUESTED_GENERIC)
 
         rt = str(retrieval_type).upper()
@@ -1494,54 +1505,135 @@ class EuclidClass(TapPlus):
             raise ValueError(f"Invalid argument value for 'retrieval_type'. Found {retrieval_type}, "
                              f"expected: 'ALL' or any of {self.__VALID_DATALINK_RETRIEVAL_TYPES}")
 
-        params_dict = {}
+        max_allow_elements = conf.SPECTRA_LIMIT
+        max_elements = 1
+        if isinstance(ids, str):
+            ids_arg = ids
+            if ',' in ids:
+                max_elements = ids.count(',')
+        elif isinstance(ids, int):
+            ids_arg = str(ids)
+        elif isinstance(ids, (list, tuple)):
+            max_elements = len(ids)
+            ids_arg = ','.join(str(item) for item in ids)
+        else:
+            raise ValueError(self.__ERROR_MSG_REQUESTED_GENERIC)
 
-        id_value = """{schema} {source_id}""".format(**{'schema': schema, 'source_id': source_id})
-        params_dict['ID'] = id_value
-        params_dict['SCHEMA'] = schema
+        if not self.__regex_designation.search(ids_arg) and schema is None:
+            raise ValueError(f"Missing data release in: ids = {ids_arg} and schema = {schema} ")
+
+        if max_elements > max_allow_elements:
+            raise ValueError(f"Invalid number of ids:  {max_elements} > {max_allow_elements} ")
+
+        params_dict = {}
+        params_dict['ID'] = ids_arg
+        params_dict['RELEASE'] = schema
         params_dict['RETRIEVAL_TYPE'] = str(retrieval_type)
         params_dict['USE_ZIP_ALWAYS'] = 'true'
         params_dict['TAPCLIENT'] = 'ASTROQUERY'
 
-        fits_file = source_id + '.fits.zip'
+        if output_file is None:
+            now = datetime.now(timezone.utc)
+            now_formatted = now.strftime("%Y%m%d_%H%M%S.%f")
+            path = os.path.join(os.getcwd(), "temp_" + now_formatted)
+            download_name_formatted = "download_spectra_" + now_formatted + '.zip'  # + now_formatted
+            output_file = os.path.join(path, download_name_formatted)
+        else:
+            path = os.path.dirname(output_file)
+            if path == '':
+                path = os.getcwd()
 
-        if output_file is not None:
-            if not output_file.endswith('.zip'):
-                output_file = output_file + '.zip'
+        log.debug(f"tmp directory: {path}")
 
-            if os.path.dirname(output_file) == '':
-                output_file = os.path.join(os.getcwd(), output_file)
-
-            if verbose:
-                print(f"output file: {output_file}")
-
-        output_file_full_path, output_dir = self.__set_dirs(output_file=output_file, observation_id=fits_file)
-
-        if os.listdir(output_dir):
-            raise IOError(f'The directory is not empty: {output_dir}')
-
-        files = []
+        if not os.path.exists(path):
+            try:
+                os.mkdir(path)
+            except FileExistsError:
+                log.debug("Path %s already exist" % path)
+            except OSError:
+                log.error("Creation of the directory %s failed" % path)
 
         try:
-            self.__eucliddata.load_data(params_dict=params_dict, output_file=output_file_full_path, verbose=verbose)
+            self.__eucliddata.load_data(params_dict=params_dict, output_file=output_file, verbose=verbose)
         except HTTPError as err:
-            log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}. HTTP error: {err}')
+            log.error(f'Cannot retrieve spectrum for source_id {ids_arg}, schema {schema}. HTTP error: {err}')
             return None
         except Exception as exx:
-            log.error(f'Cannot retrieve spectrum for source_id {source_id}, schema {schema}: {str(exx)}')
+            log.error(f'Cannot retrieve spectrum for source_id {ids_arg}, schema {schema}: {str(exx)}')
             return None
 
-        self.__extract_file(output_file_full_path=output_file_full_path, output_dir=output_dir, files=files)
+        try:
+            files = EuclidClass.__get_data_files(output_file=output_file, path=path)
+        except Exception as err:
+            raise err
 
-        if files:
-            return files
+        if output_file is None:
+            shutil.rmtree(path, onerror=EuclidClass.__remove_readonly)
 
-        self.__check_file_number(output_dir=output_dir,
-                                 output_file_name=os.path.basename(output_file_full_path),
-                                 output_file_full_path=output_file_full_path,
-                                 files=files)
+        if log.isEnabledFor(20):
+            log.debug("List of products available:")
+            for item in sorted([key for key in files.keys()]):
+                log.debug("Product = " + item)
 
         return files
+
+    @staticmethod
+    def __remove_readonly(func, path, _):
+        "Clear the readonly bit and reattempt the removal"
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+
+    @staticmethod
+    def __get_data_files(output_file, path):
+        files = {}
+        extracted_files = []
+
+        with zipfile.ZipFile(output_file, "r") as zObject:
+            extracted_files.extend(zObject.namelist())
+            zObject.extractall(path)
+
+        # r=root, d=directories, f = files
+        for r, d, f in os.walk(path):
+            for file in f:
+                if file in extracted_files:
+                    files[file] = os.path.join(r, file)
+
+        result = dict()
+        for key, value in files.items():
+            if key.endswith('.fits') and os.path.getsize(value) > 0:
+
+                # if memmap = True, another handle to the FITS file is opened by mmap.
+                # See https://docs.astropy.org/en/latest/io/fits/index.html
+                with fits.open(value, memmap=False) as hduList:
+                    for hdu in hduList:
+                        if hdu.header['NAXIS'] == 0:
+                            continue
+                        table = Table.read(hdu, format='fits')
+                        EuclidClass.correct_table_units(table)
+                        result[str(hdu.header['SOURC_ID']) + '_' + key] = table
+
+        return result
+
+    @staticmethod
+    def correct_table_units(table):
+        """Correct format in the units of the columns
+        TAP & TAP+
+
+        Parameters
+        ----------
+        table : `~astropy.table.Table`, mandatory
+            change the format of the units in the columns of the input table: '.' by ' ' and "'" by ""
+        """
+
+        for cn in table.colnames:
+            col = table[cn]
+            if isinstance(col.unit, u.UnrecognizedUnit):
+                try:
+                    col.unit = u.Unit(col.unit.name.replace(".", " ").replace("'", ""))
+                except Exception:
+                    pass
+            elif isinstance(col.unit, str):
+                col.unit = col.unit.replace(".", " ").replace("'", "")
 
     def get_datalinks(self, ids, *, linking_parameter='SOURCE_ID', extra_options=None, verbose=False):
         """
